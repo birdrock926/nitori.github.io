@@ -20,29 +20,102 @@
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif; line-height: 1.8; margin: 0; padding: 0; }
-      header, main, footer { max-width: 960px; padding: 1.5rem; margin: 0 auto; }
-      header { border-bottom: 1px solid #eee; }
-      footer { border-top: 1px solid #eee; color: #666; font-size: 0.9rem; }
-      a { color: #0366d6; text-decoration: none; }
-      a:hover { text-decoration: underline; }
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #111418;
+        --muted: #606771;
+        --border: #e6e8eb;
+        --link: #2563eb;
+        --link-hover: #1d4ed8;
+        --card: #f7f8fa;
+        --code: #0f172a;
+      }
+      html[data-theme="dark"] {
+        --bg: #0b0f14;
+        --fg: #e5e7eb;
+        --muted: #b3bac3;
+        --border: #1f2937;
+        --link: #93c5fd;
+        --link-hover: #bfdbfe;
+        --card: #111827;
+        --code: #e5e7eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+        line-height: 1.75;
+        background: var(--bg);
+        color: var(--fg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      a { color: var(--link); text-decoration: none; }
+      a:hover { color: var(--link-hover); text-decoration: underline; }
+
+      .container { max-width: 960px; padding: 1.25rem; margin: 0 auto; }
+      .site-header {
+        position: sticky; top: 0; z-index: 50;
+        backdrop-filter: saturate(120%) blur(6px);
+        background: color-mix(in oklab, var(--bg), transparent 10%);
+        border-bottom: 1px solid var(--border);
+      }
+      .nav {
+        display: flex; align-items: center; justify-content: space-between;
+        min-height: 56px;
+      }
+      .brand { font-weight: 700; letter-spacing: -0.01em; }
+      .desc { color: var(--muted); font-size: .95rem; margin: .25rem 0 0; }
+      .skip-link {
+        position: absolute; left: -999px; top: auto; width: 1px; height: 1px; overflow: hidden;
+      }
+      .skip-link:focus { left: 1rem; top: 1rem; width: auto; height: auto; padding: .5rem .75rem; background: var(--card); border-radius: .5rem; border: 1px solid var(--border); }
+
+      .theme-toggle {
+        border: 1px solid var(--border); background: transparent; color: var(--fg);
+        padding: .4rem .65rem; border-radius: .5rem; cursor: pointer; font-size: .95rem;
+      }
+      .theme-toggle:hover { background: var(--card); }
+
+      main.container { padding-top: 1.25rem; }
+      .prose h1, .prose h2, .prose h3 { line-height: 1.3; margin: 1.2rem 0 .6rem; }
+      .prose p { margin: .75rem 0; color: var(--fg); }
+      .prose code { background: var(--card); color: var(--code); padding: .1rem .3rem; border-radius: .25rem; }
+      .prose pre { background: var(--card); padding: 1rem; border-radius: .5rem; overflow: auto; }
+      .divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+      /* Post index cards */
+      .post-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; padding: 0; list-style: none; }
+      @media (min-width: 640px) { .post-grid { grid-template-columns: 1fr 1fr; } }
+      .post-card { display: block; padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--card); text-decoration: none; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+      .post-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px color-mix(in oklab, var(--fg), transparent 92%); border-color: color-mix(in oklab, var(--link), var(--border)); text-decoration: none; }
+      .post-card h3 { margin: 0 0 .25rem; font-size: 1.1rem; }
+      .post-card .meta { font-size: .9rem; color: var(--muted); }
+      .post-card .excerpt { margin: .5rem 0 0; color: var(--fg); opacity: .85; }
+
+      .ad-container { margin-top: 2rem; }
+
+      footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 0.95rem; }
     </style>
   </head>
   <body>
-    <header>
-      <a href="{{ '/' | relative_url }}" style="text-decoration:none;color:inherit;">
-        <h1 style="margin:0;">{{ site.title }}</h1>
-      </a>
+    <a class="skip-link" href="#content">本文へスキップ</a>
+    <header class="site-header">
+      <div class="container nav">
+        <a class="brand" href="{{ '/' | relative_url }}">{{ site.title }}</a>
+        <button class="theme-toggle" id="themeToggle" aria-label="テーマ切替" aria-pressed="false">🌓</button>
+      </div>
       {% if site.description %}
-      <p style="margin:.25rem 0 0;color:#666;">{{ site.description }}</p>
+      <div class="container"><p class="desc">{{ site.description }}</p></div>
       {% endif %}
     </header>
 
-    <main>
+    <main id="content" class="container prose">
       {{ content }}
 
       <!-- レスポンシブ広告ユニット -->
-      <div style="margin-top:2rem;">
+      <div class="ad-container">
         <ins class="adsbygoogle"
              style="display:block"
              data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
@@ -53,11 +126,57 @@
           (adsbygoogle = window.adsbygoogle || []).push({});
         </script>
       </div>
+
+      {% if page.comments != false and page.collection == 'posts' %}
+      <hr class="divider" />
+      <section id="comments" aria-label="コメント" style="margin-top:1.5rem;">
+        <h2 style="font-size:1.2rem; margin:0 0 .75rem;">コメント</h2>
+        <script src="https://utteranc.es/client.js"
+                repo="birdrock926/birdrock926.github.io"
+                issue-term="pathname"
+                label="comments"
+                theme="preferred-color-scheme"
+                crossorigin="anonymous"
+                async>
+        </script>
+        <noscript>コメントを表示するには JavaScript を有効にしてください。</noscript>
+      </section>
+      {% endif %}
     </main>
 
     <footer>
-      <p>&copy; {{ site.time | date: "%Y" }} {{ site.title }}</p>
+      <div class="container">
+        <p>&copy; {{ site.time | date: "%Y" }} {{ site.title }}</p>
+      </div>
     </footer>
+
+    <script>
+      (function themeInit(){
+        const root = document.documentElement;
+        const stored = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = stored || (prefersDark ? 'dark' : 'light');
+        if (theme === 'dark') root.setAttribute('data-theme','dark');
+      })();
+      (function themeToggle(){
+        const btn = document.getElementById('themeToggle');
+        const root = document.documentElement;
+        function current(){ return root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+        function setTheme(t){
+          if (t === 'dark') root.setAttribute('data-theme','dark'); else root.removeAttribute('data-theme');
+          localStorage.setItem('theme', t);
+          // sync utterances theme if present
+          const f = document.querySelector('iframe.utterances-frame');
+          if (f) {
+            f.contentWindow.postMessage({ type: 'set-theme', theme: t === 'dark' ? 'github-dark' : 'github-light' }, 'https://utteranc.es');
+          }
+        }
+        btn?.addEventListener('click', () => {
+          setTheme(current() === 'dark' ? 'light' : 'dark');
+          btn.setAttribute('aria-pressed', current() === 'dark');
+        });
+        btn?.setAttribute('aria-pressed', current() === 'dark');
+      })();
+    </script>
   </body>
 </html>
-
