@@ -1,0 +1,17 @@
+title: "あなたのブログ"
+description: "日々の気づきや学びを綴るブログ"
+url: "https://nitori.blog"
+baseurl: ""
+lang: "ja"
+timezone: "Asia/Tokyo"
+
+plugins:
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+author:
+  name: "あなた"
+
+markdown: kramdown
+permalink: /:categories/:year/:month/:day/:title/
+
