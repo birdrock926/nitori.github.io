@@ -1,0 +1,20 @@
+---
+import type { RankingItem } from '@lib/strapi';
+const { title, items } = Astro.props as { title: string; items: RankingItem[] };
+---
+<section class="card" aria-labelledby={`ranking-${title}`}>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2 id={`ranking-${title}`} style="margin: 0;">{title}</h2>
+  </div>
+  <ol style="list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem;">
+    {items.map((item, index) => (
+      <li style="display: flex; align-items: flex-start; gap: 0.75rem;">
+        <span class="tag-chip" aria-hidden="true">#{index + 1}</span>
+        <div>
+          <a href={`/posts/${item.slug}/`} style="font-weight: 600;">{item.title}</a>
+          <p class="muted" style="margin: 0.25rem 0 0; font-size: 0.85rem;">スコア: {item.score}</p>
+        </div>
+      </li>
+    ))}
+  </ol>
+</section>

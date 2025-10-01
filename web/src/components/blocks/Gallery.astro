@@ -1,0 +1,17 @@
+---
+import type { Media } from '@lib/strapi';
+const { items } = Astro.props as { items: { image: Media; alt: string }[] };
+---
+<section class="card" style="gap: 1rem;">
+  <h3 style="margin: 0;">フォトギャラリー</h3>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+    {items.map((item) => (
+      <img
+        src={item.image.url}
+        alt={item.alt}
+        loading="lazy"
+        style="width: 100%; height: auto; border-radius: 0.75rem;"
+      />
+    ))}
+  </div>
+</section>

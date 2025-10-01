@@ -1,0 +1,40 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PostCard from '@components/PostCard.astro';
+import { getPostsByTag } from '@lib/strapi';
+
+export async function getStaticPaths() {
+  if (!import.meta.env.STRAPI_API_URL) return [];
+  const response = await fetch(
+    `${import.meta.env.STRAPI_API_URL}/api/tags?fields=slug&pagination[pageSize]=100`,
+    {
+      headers: {
+        Authorization: import.meta.env.STRAPI_API_TOKEN
+          ? `Bearer ${import.meta.env.STRAPI_API_TOKEN}`
+          : undefined,
+      },
+    }
+  );
+  if (!response.ok) return [];
+  const data = await response.json();
+  return data.data?.map((tag: any) => ({ params: { slug: tag.attributes.slug } })) ?? [];
+}
+
+const { slug } = Astro.params;
+if (!slug) throw new Error('slug not provided');
+
+const posts = await getPostsByTag(slug);
+---
+<BaseLayout title={`タグ: ${slug}`} description={`タグ「${slug}」の記事一覧`} canonical={Astro.url.href}>
+  <section style="display: grid; gap: 1.5rem;">
+    <header>
+      <h1 style="margin: 0;">タグ: {slug}</h1>
+      <p class="muted">該当する記事は {posts.length} 件です。</p>
+    </header>
+    <div class="grid posts">
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+  </section>
+</BaseLayout>

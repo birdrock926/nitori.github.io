@@ -1,0 +1,144 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import RichText from '@components/blocks/RichText.astro';
+import Figure from '@components/blocks/Figure.astro';
+import Gallery from '@components/blocks/Gallery.astro';
+import YouTubePlayer from '@components/blocks/YouTubePlayer.tsx';
+import TwitchPlayer from '@components/blocks/TwitchPlayer.tsx';
+import InlineAd from '@components/ads/InlineAd.astro';
+import CommentIsland from '@components/comments/CommentIsland.tsx';
+import PostCard from '@components/PostCard.astro';
+import { getPostBySlug, getPostsByTag } from '@lib/strapi';
+import type { DynamicZoneBlock } from '@lib/strapi';
+import { formatDateTime } from '@lib/format';
+import { ADSENSE } from '@config/site';
+
+export async function getStaticPaths() {
+  if (!import.meta.env.STRAPI_API_URL) {
+    return [];
+  }
+  const response = await fetch(
+    `${import.meta.env.STRAPI_API_URL}/api/posts?fields=slug&pagination[pageSize]=100`,
+    {
+      headers: {
+        Authorization: import.meta.env.STRAPI_API_TOKEN
+          ? `Bearer ${import.meta.env.STRAPI_API_TOKEN}`
+          : undefined,
+      },
+    }
+  );
+  if (!response.ok) {
+    return [];
+  }
+  const posts = await response.json();
+  const paths = posts.data?.map((post: any) => ({ params: { slug: post.attributes.slug } })) ?? [];
+  return paths;
+}
+
+const { slug } = Astro.params;
+if (!slug) throw new Error('slug not provided');
+
+const post = await getPostBySlug(slug);
+if (!post) {
+  return Astro.redirect('/404');
+}
+
+const primaryTag = post.tags[0]?.slug;
+const related = primaryTag
+  ? (await getPostsByTag(primaryTag)).filter((item) => item.slug !== post.slug).slice(0, 3)
+  : [];
+
+const toc = post.blocks
+  .filter((block) => block.__component === 'content.rich-text')
+  .flatMap((block) => {
+    const matches = [...(block.body.matchAll(/<h(2|3) id="([^"]+)">([^<]+)<\/h\1>/g) ?? [])];
+    return matches.map((match) => ({
+      level: Number(match[1]),
+      id: match[2],
+      text: match[3],
+    }));
+  });
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'NewsArticle',
+  headline: post.title,
+  datePublished: post.publishedAt,
+  author: post.author ? { '@type': 'Person', name: post.author } : undefined,
+  image: post.cover?.url,
+  mainEntityOfPage: Astro.url.href,
+  publisher: {
+    '@type': 'Organization',
+    name: 'ゲームニュース速報',
+    logo: {
+      '@type': 'ImageObject',
+      url: `${Astro.url.origin}/logo.svg`,
+    },
+  },
+};
+
+---
+<BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href}>
+  <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
+  <article class="card" style="gap: 2rem;">
+    <header>
+      <p class="tag-chip" style="margin-bottom: 1rem;">{post.tags.map((tag) => tag.name).join(' / ')}</p>
+      <h1 style="font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 0.5rem;">{post.title}</h1>
+      <div class="muted" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <time dateTime={post.publishedAt}>{formatDateTime(post.publishedAt)}</time>
+        {post.author && <span>著者: {post.author}</span>}
+        {post.source && (
+          <a href={post.source} target="_blank" rel="noopener" class="tag-chip">
+            出典を見る
+          </a>
+        )}
+      </div>
+    </header>
+    {toc.length > 0 && (
+      <nav aria-label="目次" class="card" style="background: transparent;">
+        <h2 style="margin: 0 0 1rem;">目次</h2>
+        <ol style="margin: 0; padding-left: 1.2rem; display: grid; gap: 0.5rem;">
+          {toc.map((item) => (
+            <li style={{ marginLeft: item.level === 3 ? '1rem' : '0' }}>
+              <a href={`#${item.id}`}>{item.text}</a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    )}
+    <div style="display: grid; gap: 2rem;">
+      {post.blocks.map((block) => {
+        if (block.__component === 'content.rich-text') {
+          return <RichText body={block.body} />;
+        }
+        if (block.__component === 'media.figure') {
+          return <Figure image={block.image} alt={block.alt} caption={block.caption} credit={block.credit} />;
+        }
+        if (block.__component === 'media.gallery') {
+          return <Gallery items={block.items} />;
+        }
+        if (block.__component === 'embed.youtube') {
+          return <YouTubePlayer client:load videoId={block.videoId} title={block.title} />;
+        }
+        if (block.__component === 'embed.twitch-live') {
+          return <TwitchPlayer client:load channel={block.channel} title={block.title} />;
+        }
+        if (block.__component === 'embed.twitch-vod') {
+          return <TwitchPlayer client:load vodId={block.vodId} title={block.title} />;
+        }
+        return null;
+      })}
+    </div>
+  </article>
+  <InlineAd slot={ADSENSE.slots.inArticle} />
+  <section style="margin-top: 3rem; display: grid; gap: 1.5rem;">
+    <h2 style="margin: 0;">関連記事</h2>
+    <div class="grid posts">
+      {related.map((item) => (
+        <PostCard post={item} />
+      ))}
+    </div>
+  </section>
+  <InlineAd slot={ADSENSE.slots.feed} />
+  <CommentIsland client:load postSlug={post.slug} />
+</BaseLayout>

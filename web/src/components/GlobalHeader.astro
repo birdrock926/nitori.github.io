@@ -1,0 +1,22 @@
+---
+import ThemeToggle from '@components/ThemeToggle.tsx';
+import { SITE_TITLE } from '@config/site';
+import { getTags } from '@lib/strapi';
+const tags = await getTags();
+---
+<header style="padding: 1.5rem 0; position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px);">
+  <nav class="card" style="align-items: center; flex-direction: row; gap: 1rem;">
+    <a href="/" aria-label="{SITE_TITLE} トップへ" style="font-weight: 700; font-size: 1.5rem;">
+      {SITE_TITLE}
+    </a>
+    <div style="margin-left: auto; display: flex; gap: 0.75rem; align-items: center;">
+      <a href="/search" class="tag-chip" aria-label="検索ページへ">検索</a>
+      <ThemeToggle client:load />
+    </div>
+  </nav>
+  <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;" aria-label="人気タグ">
+    {tags.slice(0, 10).map((tag) => (
+      <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+    ))}
+  </div>
+</header>

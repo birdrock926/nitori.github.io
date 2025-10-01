@@ -1,0 +1,48 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'web/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: web
+        run: npm install
+      - name: Build
+        working-directory: web
+        env:
+          STRAPI_API_URL: ${{ secrets.STRAPI_API_URL }}
+          STRAPI_API_TOKEN: ${{ secrets.STRAPI_API_TOKEN }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+        run: npm run build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

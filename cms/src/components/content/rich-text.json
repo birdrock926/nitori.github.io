@@ -1,0 +1,14 @@
+{
+  "collectionName": "components_content_rich_texts",
+  "info": {
+    "displayName": "Rich Text",
+    "description": "サニタイズ済み HTML",
+    "icon": "align-left"
+  },
+  "attributes": {
+    "body": {
+      "type": "richtext",
+      "required": true
+    }
+  }
+}

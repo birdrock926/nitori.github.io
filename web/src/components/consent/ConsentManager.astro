@@ -1,0 +1,65 @@
+<div
+  class="card"
+  style="position: fixed; bottom: 1rem; right: 1rem; max-width: 320px; display: none;"
+  id="consent-banner"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="consent-title"
+>
+  <h2 id="consent-title" style="font-size: 1rem; margin: 0 0 0.5rem;">クッキーの利用について</h2>
+  <p class="muted" style="font-size: 0.85rem;">
+    パフォーマンス改善と広告配信のためにクッキーを利用します。設定はいつでも変更できます。
+  </p>
+  <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+    <button id="consent-accept" class="tag-chip" type="button">同意する</button>
+    <button id="consent-deny" class="tag-chip" type="button" style="background: transparent; border: 1px solid var(--color-border);">
+      拒否する
+    </button>
+  </div>
+</div>
+<script is:inline>
+  const banner = document.getElementById('consent-banner');
+  const acceptBtn = document.getElementById('consent-accept');
+  const denyBtn = document.getElementById('consent-deny');
+  const STORAGE_KEY = 'consent-mode';
+
+  const applyConsent = (mode) => {
+    if (!window.gtag) return;
+    window.gtag('consent', 'update', mode);
+  };
+
+  const showBanner = () => {
+    banner?.style.setProperty('display', 'block');
+  };
+
+  const hideBanner = () => {
+    banner?.style.setProperty('display', 'none');
+  };
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    applyConsent(JSON.parse(saved));
+  } else {
+    showBanner();
+  }
+
+  acceptBtn?.addEventListener('click', () => {
+    const consent = {
+      ad_storage: 'granted',
+      analytics_storage: 'granted',
+    };
+    applyConsent(consent);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
+    hideBanner();
+  });
+
+  denyBtn?.addEventListener('click', () => {
+    const consent = {
+      ad_storage: 'denied',
+      analytics_storage: 'denied',
+    };
+    applyConsent(consent);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
+    hideBanner();
+  });
+</script>
