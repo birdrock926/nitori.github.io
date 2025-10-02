@@ -29,9 +29,36 @@
     banner?.style.setProperty('display', 'none');
   };
 
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const loadConsent = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const isValid =
+        parsed &&
+        typeof parsed === 'object' &&
+        ['granted', 'denied'].includes(parsed.ad_storage) &&
+        ['granted', 'denied'].includes(parsed.analytics_storage);
+      if (isValid) {
+        return parsed;
+      }
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    } catch (error) {
+      console.warn('[consent] Failed to parse stored consent, resetting.', error);
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+  };
+
+  const persistConsent = (mode) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(mode));
+  };
+
+  const saved = loadConsent();
   if (saved) {
-    applyConsent(JSON.parse(saved));
+    applyConsent(saved);
+    hideBanner();
   } else {
     showBanner();
   }
@@ -42,7 +69,7 @@
       analytics_storage: 'granted',
     };
     applyConsent(consent);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
+    persistConsent(consent);
     hideBanner();
   });
 
@@ -52,7 +79,7 @@
       analytics_storage: 'denied',
     };
     applyConsent(consent);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(consent));
+    persistConsent(consent);
     hideBanner();
   });
 </script>
