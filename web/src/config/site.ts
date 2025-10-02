@@ -17,6 +17,12 @@ export const GA = {
   measurementId: import.meta.env.GA_MEASUREMENT_ID ?? '',
 };
 
+export const DELETE_REQUEST = {
+  formUrl:
+    import.meta.env.DELETE_REQUEST_FORM_URL ??
+    'https://docs.google.com/forms/d/REPLACE_WITH_FORM_ID/viewform',
+};
+
 const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
   .split(',')
   .map((host) => host.trim())

@@ -11,7 +11,7 @@ import PostCard from '@components/PostCard.astro';
 import { getPostBySlug, getPostsByTag } from '@lib/strapi';
 import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
-import { ADSENSE } from '@config/site';
+import { ADSENSE, DELETE_REQUEST } from '@config/site';
 
 export async function getStaticPaths() {
   if (!import.meta.env.STRAPI_API_URL) {
@@ -81,8 +81,29 @@ const jsonLd = {
 <BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
   <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
   <article class="card" style="gap: 2rem;">
-    <header>
-      <p class="tag-chip" style="margin-bottom: 1rem;">{post.tags.map((tag) => tag.name).join(' / ')}</p>
+    <header class="article-header">
+      <div class="article-header__top">
+        <p class="tag-chip article-header__tags">{post.tags.map((tag) => tag.name).join(' / ')}</p>
+        {DELETE_REQUEST.formUrl && (
+          <a
+            href={DELETE_REQUEST.formUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ghost-button ghost-button--small article-header__delete"
+          >
+            <span class="ghost-button__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18" />
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
+              </svg>
+            </span>
+            <span class="ghost-button__label">記事削除依頼</span>
+          </a>
+        )}
+      </div>
       <h1 style="font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 0.5rem;">{post.title}</h1>
       <div class="muted" style="display: flex; gap: 1rem; flex-wrap: wrap;">
         <time dateTime={post.publishedAt}>{formatDateTime(post.publishedAt)}</time>
