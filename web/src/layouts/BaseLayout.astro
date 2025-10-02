@@ -30,7 +30,7 @@ const measurementJSON = JSON.stringify(measurementId);
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&family=Inter:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
     <meta property="og:type" content="website" />
@@ -80,11 +80,11 @@ const measurementJSON = JSON.stringify(measurementId);
       ></script>
     )}
   </head>
-  <body>
+  <body class="app-shell">
     <a class="skip-link" href="#main">本文へスキップ</a>
     <ConsentManager />
     <GlobalHeader />
-    <main id="main">
+    <main id="main" class="page-content">
       <slot />
     </main>
     <GlobalFooter />

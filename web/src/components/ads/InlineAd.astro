@@ -1,10 +1,11 @@
 ---
 import { ADSENSE } from '@config/site';
+
 const { slot } = Astro.props as { slot: string };
 const clientId = ADSENSE.clientId;
 ---
 {clientId && slot ? (
-  <aside class="card" style="align-items: center;">
+  <aside class="ad-panel card" role="complementary" aria-label="広告">
     <ins
       class="adsbygoogle"
       style="display:block"

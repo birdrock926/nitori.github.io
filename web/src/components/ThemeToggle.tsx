@@ -11,20 +11,17 @@ const ThemeToggle = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  const label = theme === 'light' ? '🌙 ダークに切替' : '🌞 ライトに切替';
+
   return (
     <button
       type="button"
       aria-pressed={theme === 'dark'}
+      aria-label={label}
+      className="ghost-button theme-toggle-button"
       onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
-      style={{
-        background: 'transparent',
-        border: '1px solid var(--color-border)',
-        borderRadius: '999px',
-        padding: '0.35rem 0.9rem',
-        cursor: 'pointer',
-      }}
     >
-      {theme === 'light' ? '🌞 ライト' : '🌙 ダーク'}
+      {theme === 'light' ? '🌙 ダーク' : '🌞 ライト'}
     </button>
   );
 };

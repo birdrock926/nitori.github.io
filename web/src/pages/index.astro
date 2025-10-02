@@ -15,18 +15,30 @@ const ranking = await getRanking();
 ---
 <BaseLayout title="ゲームニュース速報" description="ゲーム最新ニュースと配信まとめを最速でお届け" canonical={Astro.url.href}>
   {featured && secondary.length > 0 && <Hero featured={featured} secondary={secondary} />}
-  <section style="margin-top: 3rem; display: grid; gap: 2rem;">
-    <h2 style="margin: 0;">最新ニュース</h2>
-    <div class="grid posts">
+  <section class="section" aria-labelledby="latest-heading">
+    <header class="section-heading">
+      <span class="section-eyebrow">Latest</span>
+      <div>
+        <h2 id="latest-heading" class="section-title">最新ニュース</h2>
+        <p class="section-subtitle muted">気になる話題をまとめてチェック</p>
+      </div>
+    </header>
+    <div class="post-grid">
       {rest.map((post) => (
         <PostCard post={post} />
       ))}
     </div>
   </section>
   <InlineAd slot={ADSENSE.slots.feed} />
-  <section style="margin-top: 3rem; display: grid; gap: 2rem;">
-    <h2 style="margin: 0;">人気ランキング</h2>
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+  <section class="section" aria-labelledby="ranking-heading">
+    <header class="section-heading">
+      <span class="section-eyebrow">Trending</span>
+      <div>
+        <h2 id="ranking-heading" class="section-title">人気ランキング</h2>
+        <p class="section-subtitle muted">過去24時間と7日間の注目度を比較</p>
+      </div>
+    </header>
+    <div class="ranking-grid">
       <Ranking title="24時間" items={ranking.slice(0, 5)} />
       <Ranking title="7日間" items={ranking.slice(5, 10)} />
     </div>

@@ -1,27 +1,38 @@
 ---
 import type { Post } from '@lib/strapi';
+import { formatDateTime, relative } from '@lib/format';
+
 const { featured, secondary } = Astro.props as { featured: Post; secondary: Post[] };
 ---
-<section class="card" style="display: grid; gap: 2rem;">
-  <div style="display: grid; gap: 1rem;">
-    <p class="tag-chip">注目トピック</p>
-    <h1 style="font-size: clamp(2rem, 4vw, 2.5rem); margin: 0;">{featured.title}</h1>
-    <p class="muted" style="margin: 0;">{featured.summary}</p>
-    <a class="tag-chip" href={`/posts/${featured.slug}/`} aria-label={`記事「${featured.title}」へ移動`}>
-      記事を読む
+<section class="hero-section">
+  <article class="hero-feature card">
+    <p class="hero-eyebrow">注目トピック</p>
+    <h1 id="hero-heading" class="hero-title gradient-text">{featured.title}</h1>
+    <p class="hero-summary muted">{featured.summary}</p>
+    <div class="hero-meta">
+      <time dateTime={featured.publishedAt} class="muted">
+        {formatDateTime(featured.publishedAt)}（{relative(featured.publishedAt)}）
+      </time>
+      {featured.tags.slice(0, 3).map((tag) => (
+        <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+      ))}
+    </div>
+    <a class="button-primary" href={`/posts/${featured.slug}/`} aria-label={`記事「${featured.title}」へ移動`}>
+      続きを読む
     </a>
-  </div>
-  <div class="grid posts" aria-label="セカンドニュース">
+  </article>
+  <aside class="hero-secondary" aria-label="注目のサブトピック">
     {secondary.map((post) => (
-      <article class="card" style="gap: 0.5rem;">
-        <h2 style="font-size: 1.25rem; margin: 0;"><a href={`/posts/${post.slug}/`}>{post.title}</a></h2>
-        <p class="muted" style="margin: 0;">{post.summary}</p>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-          {post.tags.slice(0, 3).map((tag) => (
-            <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
-          ))}
+      <article class="hero-secondary-card card" data-variant="compact">
+        <div class="hero-secondary-meta">
+          <time dateTime={post.publishedAt} class="muted">
+            {formatDateTime(post.publishedAt)}
+          </time>
+          {post.tags[0] && <a class="tag-chip" href={`/tags/${post.tags[0].slug}/`}>{post.tags[0].name}</a>}
         </div>
+        <h2 class="hero-secondary-title"><a href={`/posts/${post.slug}/`}>{post.title}</a></h2>
+        <p class="hero-secondary-summary muted">{post.summary}</p>
       </article>
     ))}
-  </div>
+  </aside>
 </section>
