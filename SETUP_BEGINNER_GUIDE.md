@@ -4,7 +4,7 @@
 
 ## 0. 全体像をつかむ
 - **CMS (/cms)**: Strapi v5 で記事やコメントを管理する管理画面と API。
-- **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、GitHub Pages に配置します。
+- **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
@@ -46,11 +46,11 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | カテゴリ | 変数 | 内容 | 推奨値・例 |
    | --- | --- | --- | --- |
    | 基本 | `PUBLIC_URL` | CMS を公開する URL | `https://cms.example.com` |
-   |  | `PUBLIC_FRONT_ORIGINS` | フロントから API を呼べるオリジン | `https://example.github.io` |
+   |  | `PUBLIC_FRONT_ORIGINS` | フロントから API を呼べるオリジン | `https://example.pages.dev` |
    | CAPTCHA | `CAPTCHA_PROVIDER` | `turnstile` または `recaptcha` | `turnstile` |
    |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
    | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
-   | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → GitHub Actions の連携設定 | `owner=your-org` など |
+   | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    | DB | `DATABASE_CLIENT` | `sqlite`・`postgres` など | 初期は `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci` | 帯域節約には `oci` |
    |  | `OCI_*` 一式 | Object Storage のバケット・キー情報 | OCI コンソールで発行した値 |
@@ -72,12 +72,12 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | `STRAPI_API_URL` | CMS API のベース URL | `https://cms.example.com` |
    | `STRAPI_API_TOKEN` | Strapi で発行した Read-only API トークン | `strapi_pat_xxx` |
    | `STRAPI_MEDIA_URL` | 画像のホスト URL（OCI の公開パス） | `https://objectstorage.ap-tokyo-1.oraclecloud.com/.../o` |
-   | `SITE_URL` | 公開サイトの URL（Pages or 独自ドメイン） | `https://example.github.io` |
+   | `SITE_URL` | 公開サイトの URL（Pages or 独自ドメイン） | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォームへのリンク | Google フォームの「回答を収集」URL |
    | `GA_MEASUREMENT_ID` | GA4 の測定 ID。不要なら空欄 | `G-XXXXXXXXXX` |
    | `ADSENSE_CLIENT_ID` / `ADSENSE_SLOT_*` | AdSense のクライアント / 広告ユニット ID | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意モードの初期判定地域 | `JP` |
-   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り） | `example.github.io,www.example.com` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り） | `example.pages.dev,www.example.com` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
 4. 編集後は `cd ..` でルートに戻ります。
@@ -148,7 +148,7 @@ npm run dev
 2. 初回ログイン後にリージョン（例: `ap-tokyo-1`）を選択し、使用する **Compartment**（論理フォルダ）を把握しておきます。既定の `root` のままでも構いません。
 
 ### 7-2. Object Storage を構築する
-README の「OCI Object Storage の事前準備」を参考に、バケットとアクセスキーを作成します。無料枠では 20GB まで利用でき、GitHub Pages の帯域節約に有効です。
+README の「OCI Object Storage の事前準備」を参考に、バケットとアクセスキーを作成します。無料枠では 20GB まで利用でき、Cloudflare Pages の帯域節約に有効です。
 
 ### 7-3. Compute インスタンスを作成する
 1. コンソールの **Compute → Instances** で `Create Instance` をクリックします。
@@ -211,39 +211,30 @@ docker compose logs -f strapi # 初回起動ログを監視
 - Strapi 管理画面のデフォルトロールを公開 API 用に調整し、Admin ロールには強力なパスワード＋ MFA を設定
 
 ### 7-9. GitHub Actions 連携を有効にする
-Strapi の設定画面で Webhook を作成し、`Publish event` にフックさせて GitHub Actions の `workflow_dispatch` を叩くよう `.env` の `GITHUB_WORKFLOW_*` を設定します。テストとしてダミー記事を公開し、Pages が自動更新されるか確認しましょう。
+Strapi の設定画面で Webhook を作成し、`Publish event` にフックさせて GitHub Actions の `workflow_dispatch` を叩くよう `.env` の `GITHUB_WORKFLOW_*` を設定します。テストとしてダミー記事を公開し、Cloudflare Pages が自動更新されるか確認しましょう。
 
-## 8. GitHub Pages へのデプロイ (概要)
-1. GitHub リポジトリの Settings → Pages で `GitHub Actions` を選択します。
-2. `.github/workflows/deploy-web.yml` が push / workflow_dispatch / schedule トリガで Astro をビルドし、Pages へデプロイします。
-3. Strapi の Webhook から GitHub Actions を呼び出す場合は、`cms/.env` に以下を設定します。
-   - `GITHUB_WORKFLOW_OWNER`
-   - `GITHUB_WORKFLOW_REPO`
-   - `GITHUB_WORKFLOW_ID`
-   - `GITHUB_WORKFLOW_TOKEN`
+## 8. Cloudflare Pages へのデプロイ (概要)
+1. Cloudflare ダッシュボードの **Workers & Pages → Pages** で `Create project` をクリックし、**Direct Upload** を選択してプロジェクト名（例: `game-news-web`）を登録します。初回は手動で ZIP をアップロードする必要はなく、GitHub Actions からのデプロイを待つだけで構いません。
+2. **Profile → API Tokens** から `Create Token` を押し、テンプレート `Cloudflare Pages - Create Deployments` を利用して API トークンを発行します。発行後は一度しか表示されないため、安全な場所に保管してください。
+3. 同じ画面でアカウント ID を確認し、GitHub リポジトリの **Settings → Secrets and variables → Actions** に以下を登録します。
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `CLOUDFLARE_PAGES_PROJECT`（手順1で決めたプロジェクト名）
+   - `CLOUDFLARE_API_TOKEN`（手順2で発行したトークン）
+   - `CLOUDFLARE_PAGES_BRANCH`（任意。省略すると `github.ref_name` が利用されます）
+4. `.github/workflows/deploy-web.yml` は push / workflow_dispatch / schedule をトリガに Astro をビルドし、`cloudflare/pages-action` で `web/dist` をアップロードします。Action 実行後に Cloudflare Pages のダッシュボードで `Production` デプロイが成功しているか確認してください。
+5. Strapi Webhook (`GITHUB_WORKFLOW_*`) が成功すると、Publish → GitHub Actions → Cloudflare Pages 更新の一連の流れが自動化されます。
 
 ### 8-1. 独自ドメインを割り当てる
-GitHub Pages は CNAME レコードと `CNAME` ファイルの組み合わせで独自ドメインを使えます。以下は `news.example.com` を割り当てる手順
-です。
+Cloudflare Pages ではプロジェクト単位でカスタムドメインを追加できます。ここでは `news.example.com` を割り当てる例を示します。
 
-1. お名前.com や Cloudflare など、利用中の DNS 管理画面で `news.example.com` の **CNAME レコード**を作成し、値を `your-account.github.io`
-   （GitHub のユーザー名に合わせて変更）へ向けます。ルートドメインを使いたい場合は DNS プロバイダーの ALIAS / ANAME 機能を利用して
-   ください。
-2. リポジトリで `web/public/CNAME` ファイルを作成し、独自ドメインを 1 行だけ書き込みます。
-   ```bash
-   echo "news.example.com" > web/public/CNAME
-   git add web/public/CNAME
-   git commit -m "chore: add custom domain"
-   git push
-   ```
-3. GitHub リポジトリの **Settings → Pages → Custom domain** に `news.example.com` を入力して保存し、`Enforce HTTPS` にチェックを入れま
-   す。
-4. 数分～24 時間で DNS が伝播すると、`https://news.example.com` でサイトが表示され、GitHub Pages が Let's Encrypt 証明書を発行します。
-5. `.env`（`web/.env`）を更新して `SITE_URL=https://news.example.com`、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追
-   加し、`npm run build` を再実行してリンクや Twitch `parent` パラメータを正しく反映させます。
+1. Cloudflare ダッシュボードの対象プロジェクトで **Custom domains → Set up a custom domain** を開き、`news.example.com` を入力します。
+2. Cloudflare DNS を利用している場合は **Automatic (CNAME)** を選択すると DNS レコードが自動作成されます。外部 DNS の場合は、表示される `CNAME` レコード（値は `<project>.pages.dev`）を手動で登録してください。
+3. ルートドメインを割り当てる場合は Cloudflare の **CNAME Flattening** を有効化するか、外部 DNS の ALIAS / ANAME 機能を利用します。
+4. DNS が伝播すると Cloudflare Pages のダッシュボードで `Active` と表示され、`https://news.example.com` にアクセスすると Cloudflare が発行した証明書で HTTPS 接続できます。
+5. `web/.env` を更新して `SITE_URL=https://news.example.com` とし、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追加したら `npm run build` を再実行します。
 
-> **メモ**: Cloudflare CDN を併用する場合は CNAME を Cloudflare に向け、SSL/TLS モードを `Full (Strict)` に設定します。キャッシュが
-> 古くなる場合は `Purge Cache` を活用しましょう。
+> **メモ**: Cloudflare DNS を利用する場合は SSL/TLS モードを `Full (Strict)`、`Always Use HTTPS` を有効化し、キャッシュが古いときは `Purge Cache` を利用して更新してください。外部 DNS を利用する場合も、Cloudflare Pages 側のステータスが `Active` になっているか必ず確認しましょう。
+
 
 ## 9. トラブルシューティング
 | 症状 | 対処 |

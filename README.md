@@ -6,7 +6,7 @@
 - **Google 広告**と **SEO/ニュース露出**を意識した情報設計で、**収益化の地力**を作る。
 
 ## 成果物（Deliverables）
-- **公開サイト**：GitHub Pages で配信される**静的サイト**（Astro + React Islands）
+- **公開サイト**：Cloudflare Pages で配信される**静的サイト**（Astro + React Islands）
 - **管理システム**：OCI 無料枠上の **Strapi v5**（GUI で記事・画像・ブロック・コメントを管理）
 - **コメント API**：匿名投稿・返信・通報・BAN・シャドウBAN・レート制限を備えた Strapi 拡張
 - **自動公開ライン**：Strapi Publish → Webhook → GitHub Actions → Pages 反映
@@ -24,10 +24,10 @@
   - **コメント島**だけクライアントで API に接続（最小 JS）
 - **CMS（/cms）**：Strapi v5  
   - 記事・タグ・メディア・埋め込み・**匿名コメント/通報/BAN** を GUI で管理  
-  - **Webhook** が GitHub Actions を起動し、サイトを再ビルド
+  - **Webhook** が GitHub Actions を起動し、Cloudflare Pages へ再デプロイ
 - **インフラ**  
   - **OCI Always Free**：Strapi 常駐（Docker Compose）  
-  - **GitHub Pages**：本番ホスティング（Actions でビルド＆デプロイ）
+  - **Cloudflare Pages**：本番ホスティング（GitHub Actions でビルド＆デプロイ）
 
 ## 主要機能
 ### コンテンツ編集（GUI）
@@ -89,7 +89,7 @@
 
 # セットアップガイド
 
-本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および GitHub Pages への静的デプロイに対応しています。
+本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
 ## 事前要件
 - Node.js 20 LTS
@@ -127,14 +127,14 @@
    | 変数名 | 説明 | 例 |
    | --- | --- | --- |
    | `PUBLIC_URL` | CMS を公開する URL。HTTPS で運用します。 | `https://cms.example.com` |
-   | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.github.io,https://preview.example.com` |
+   | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.pages.dev,https://preview.example.com` |
    | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
    | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
    | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
    | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
-   | `GITHUB_WORKFLOW_*` | Strapi Webhook で GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
+   | `GITHUB_WORKFLOW_*` | Strapi Webhook で Cloudflare Pages 用の GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
 
 4. `UPLOAD_PROVIDER=oci` を使う場合は、OCI コンソールで作成したユーザーのアクセスキーとシークレットを `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` に設定し、`OCI_PUBLIC_URL` に公開バケットのベース URL を入力してください。
 5. `.env` を保存したら `cd ..` でプロジェクトルートに戻ります。
@@ -170,15 +170,25 @@
    | `STRAPI_API_URL` | CMS の公開 API エンドポイント。 | `https://cms.example.com` |
    | `STRAPI_API_TOKEN` | Strapi で発行した API Token（Public 読み取り用）。 | `strapi_pat_xxx` |
    | `STRAPI_MEDIA_URL` | 画像配信用のベース URL。OCI Object Storage の公開 URL を指定。 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/n/namespace/b/bucket/o` |
-   | `SITE_URL` | GitHub Pages や独自ドメインの公開 URL。 | `https://example.github.io` |
+   | `SITE_URL` | Cloudflare Pages や独自ドメインの公開 URL。 | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
-   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。 | `example.github.io,www.example.com` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。 | `example.pages.dev,www.example.com` |
    | `GA_MEASUREMENT_ID` | Google Analytics 4 の測定 ID（利用しない場合は空欄可）。 | `G-XXXXXXXXXX` |
    | `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意ステータスの初期値を決める地域コード。 | `JP` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」から `Read-only` で発行し、ヘッダー `Authorization: Bearer <token>` で利用できるものを貼り付けます。
 4. `.env` 保存後は `cd ..` でルートに戻ります。
+
+### GitHub Actions Secrets（Cloudflare Pages デプロイ）
+Cloudflare Pages へ自動デプロイするため、GitHub リポジトリの **Settings → Secrets and variables → Actions** に以下を設定します。
+
+| 名前 | 説明 | 例 |
+| --- | --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID。ダッシュボード右下や API Tokens 画面で確認できます。 | `1234567890abcdef1234567890abcdef` |
+| `CLOUDFLARE_PAGES_PROJECT` | Cloudflare Pages のプロジェクト名。Direct Upload プロジェクト作成時に決めた名称。 | `game-news-web` |
+| `CLOUDFLARE_API_TOKEN` | Pages デプロイ権限を持つ API トークン。テンプレート `Cloudflare Pages - Create Deployments` を利用して発行します。 | `cf-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` |
+| `CLOUDFLARE_PAGES_BRANCH` | （任意）常にデプロイ対象とするブランチ。未設定なら `github.ref_name` が使用されます。 | `main` |
 
 ### OCI Compute（Always Free）に Strapi を配置する手順
 OCI で CMS を常駐させる際は、以下の流れで Compute インスタンスとドメイン周りを整備します。
@@ -222,7 +232,7 @@ OCI で CMS を常駐させる際は、以下の流れで Compute インスタ�
    ```
    Caddy が Let's Encrypt で自動的に証明書を取得し、Strapi への HTTPS 経由アクセスが可能になります。
 9. DNS の A レコードを OCI インスタンスのパブリック IP に向け、ブラウザから `https://cms.example.com/admin` にアクセスして初期ユーザー登録を行います。
-10. Strapi の `Settings → Webhooks` で GitHub Actions を呼び出す Webhook を設定し、実際に Publish → GitHub Pages 更新まで流れるか確認してください。
+10. Strapi の `Settings → Webhooks` で GitHub Actions を呼び出す Webhook を設定し、実際に Publish → Cloudflare Pages まで反映されるか確認してください。
 
 > **Troubleshooting**: OCI インスタンスのファイアウォール (`firewalld`) が有効な場合は `sudo firewall-cmd --add-service=http --add-service=https --permanent && sudo firewall-cmd --reload` で 80/443 を解放してください。
 
@@ -250,16 +260,16 @@ npm install
 npm run build
 npm run preview
 ```
-`npm run preview` でローカル確認後、GitHub Pages へデプロイします。
+`npm run preview` でローカル確認後、Cloudflare Pages へデプロイします。
 
 ---
 
 # 運用ランブック
 
-## Webhook → Pages 自動デプロイ
+## Webhook → Cloudflare Pages 自動デプロイ
 1. Strapi で記事を Publish / Unpublish
 2. Strapi Webhook が GitHub Actions の `workflow_dispatch` を呼び出し
-3. Actions が Astro をビルドし、Pages へデプロイ
+3. Actions が Astro をビルドし、Cloudflare Pages へデプロイ
 
 ## コメントモデレーション
 - 通報が閾値以上で自動非表示 → モデレータが `published` へ戻すか `shadow` に変更
@@ -301,31 +311,22 @@ npm run preview
 # デプロイ手順（本番）
 
 1. OCI インスタンスに `/cms` をデプロイし、`docker-compose -f infrastructure/docker-compose.yml up -d` を実行
-2. GitHub Pages 側でビルドが完了することを確認
+2. GitHub Actions が成功し、Cloudflare Pages の最新ビルドが `Production` ステータスになることを確認
 3. 独自ドメインを利用する場合は次節の手順で DNS / CNAME を設定
-4. Strapi Webhook の Secrets を登録し、Publish → GitHub Pages 更新が自動化されることを確認
+4. Strapi Webhook の Secrets を登録し、Publish → Cloudflare Pages 更新が自動化されることを確認
 
-## GitHub Pages の独自ドメイン設定
+## Cloudflare Pages の独自ドメイン設定
 
-GitHub Pages は DNS で CNAME を向け、リポジトリに `CNAME` ファイルを置くことで独自ドメインを割り当てられます。以下はサブドメイン
-（例: `news.example.com`）を設定するケースの流れです。
+Cloudflare Pages ではプロジェクト設定から独自ドメインを追加し、DNS に `project.pages.dev` への CNAME（または APEX 用の CNAME 記法）を登録します。以下はサブドメイン（例: `news.example.com`）を設定するケースです。
 
-1. ドメイン管理サービスで `news.example.com` の **CNAME レコード**を作成し、値を `your-account.github.io`（GitHub ユーザー名に合わせ
-   て変更）へ向けます。ルートドメインを使う場合は DNS プロバイダーの ALIAS / ANAME 機能を利用してください。
-2. リポジトリの `web/public/CNAME` に独自ドメインを 1 行だけ記述します。静的ビルド時に `dist/CNAME` が生成され、GitHub Pages が認識
-   します。
-   ```bash
-   echo "news.example.com" > web/public/CNAME
-   ```
-3. GitHub リポジトリの **Settings → Pages → Custom domain** に `news.example.com` を入力し、`Enforce HTTPS` にチェックを入れます。
-4. DNS 伝播後（数分〜最大 24 時間）、`https://news.example.com` へアクセスして証明書が GitHub Pages から発行されていることを確認しま
-   す。
-5. Astro 側の `.env` で `SITE_URL=https://news.example.com`、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追加し、再ビ
-   ルドします。必要に応じて `robots.txt` や OGP 設定も更新してください。
+1. Cloudflare ダッシュボードの **Workers & Pages → Pages** で対象プロジェクトを開き、**Custom domains → Set up a custom domain** を押します。
+2. `news.example.com` を入力し、同じアカウントでドメインを管理している場合は **Automatic (CNAME)** を選択して自動追加します。外部 DNS を利用している場合は、表示される `CNAME` レコード（値は `your-project.pages.dev`）を DNS サービスに登録してください。
+3. ルートドメインを割り当てたい場合は Cloudflare の **Flattening**（CNAME の APEX 解決）を有効にするか、外部 DNS の ALIAS / ANAME 機能を利用します。
+4. DNS 伝播後、Cloudflare Pages のダッシュボードで `Active` 表示になることを確認し、ブラウザで `https://news.example.com` にアクセスして Cloudflare の証明書が配信されているかチェックします。
+5. Astro 側の `.env` で `SITE_URL=https://news.example.com`、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追加して再ビルドします。必要に応じて `robots.txt` や OGP 設定も更新してください。
 
-> **Tip**: Cloudflare 等の CDN を併用する場合は、CNAME を CDN の提供するエンドポイントへ向け、Pages 側ではサブドメインを維持した
-> まま HTTPS を有効化します。Cloudflare の場合は SSL/TLS を `Full (Strict)` に設定し、`orange-cloud` を ON にしておくとよいでしょ
-> う。
+> **Tip**: Cloudflare DNS を利用している場合は SSL/TLS を `Full (Strict)`、エッジキャッシュ TTL を適切に設定し、`Always Use HTTPS` を有効化すると運用が簡潔になります。外部 DNS を使う場合も、Cloudflare Pages ダッシュボードでステータスが `Active` になっていることを必ず確認してください。
+
 
 ---
 
