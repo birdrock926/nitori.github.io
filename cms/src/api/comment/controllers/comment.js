@@ -4,7 +4,7 @@ import {
   validateBody,
   hashIp,
   networkHash,
-  generateAlias,
+  resolveAlias,
   createEditKey,
   hashEditKey,
   isBanned,
@@ -34,7 +34,8 @@ const resolveAliasSalt = () => process.env.ALIAS_SALT || 'alias-salt';
 
 export default factories.createCoreController('api::comment.comment', ({ strapi }) => ({
   async submit(ctx) {
-    const { postSlug, parentId, body, captchaToken, honeypot, sentAt } = ctx.request.body || {};
+    const { postSlug, parentId, body, alias: aliasInput, captchaToken, honeypot, sentAt } =
+      ctx.request.body || {};
     if (honeypot) {
       return ctx.badRequest('bot-detected');
     }
@@ -52,7 +53,8 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
     if (!post?.length) {
       return ctx.notFound('記事が見つかりません');
     }
-    const postId = post[0].id;
+    const postEntry = post[0];
+    const postId = postEntry.id;
 
     const sanitizedBody = validateBody(body);
 
@@ -90,7 +92,19 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       }
     }
 
-    const alias = generateAlias(ip, postId, aliasSalt);
+    let aliasData;
+    try {
+      aliasData = resolveAlias({
+        requestedAlias: aliasInput,
+        template: postEntry.commentAliasDefault,
+        ip,
+        postId,
+        aliasSalt,
+      });
+    } catch (error) {
+      return ctx.badRequest(error.message);
+    }
+    const alias = aliasData.alias;
     const editKeyPlain = createEditKey();
     const editKeyHash = hashEditKey(editKeyPlain, pepper);
 
@@ -100,13 +114,19 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
         parent: parent ? parent.id : null,
         body: sanitizedBody,
         alias,
+        isModerator: false,
         ip_hash: ipHash,
         net_hash: netHash,
         edit_key_hash: editKeyHash,
         status: 'pending',
         meta: {
-          ua,
-          submittedAt: dayjs().toISOString(),
+          client: {
+            ua,
+            submittedAt: dayjs().toISOString(),
+          },
+          display: {
+            aliasProvided: aliasData.provided,
+          },
         },
       },
       populate: { parent: true },

@@ -56,6 +56,10 @@
     "source": {
       "type": "string"
     },
+    "commentAliasDefault": {
+      "type": "string",
+      "default": "名無しのプレイヤーさん"
+    },
     "publishedAt": {
       "type": "datetime"
     },

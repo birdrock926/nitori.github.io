@@ -43,6 +43,10 @@
       "type": "string",
       "required": true
     },
+    "isModerator": {
+      "type": "boolean",
+      "default": false
+    },
     "status": {
       "type": "enumeration",
       "enum": ["published", "pending", "hidden", "shadow"],

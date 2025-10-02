@@ -11,6 +11,7 @@ export type SubmitCommentPayload = {
   postSlug: string;
   parentId?: number;
   body: string;
+  alias?: string;
   captchaToken?: string;
   honeypot?: string;
   sentAt?: number;

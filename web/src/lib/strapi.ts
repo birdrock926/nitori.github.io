@@ -67,6 +67,7 @@ export type Post = {
   author?: string;
   source?: string;
   publishedAt: string;
+  commentAliasDefault?: string;
 };
 
 export type RankingItem = {
@@ -212,6 +213,7 @@ export type PostListResponse = {
       publishedAt: string;
       author?: string;
       source?: string;
+      commentAliasDefault?: string;
       cover?: {
         data: { attributes: Media } | null;
       } | null;
@@ -236,8 +238,11 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
     author: attr.author,
     source: attr.source,
     cover,
-    tags: attr.tags.data.map((tag) => ({ id: tag.id, ...tag.attributes })),
+    tags: Array.isArray(attr.tags?.data)
+      ? attr.tags.data.map((tag) => ({ id: tag.id, ...tag.attributes }))
+      : [],
     blocks: Array.isArray(attr.blocks) ? attr.blocks.map(normalizeBlock) : [],
+    commentAliasDefault: attr.commentAliasDefault ?? '名無しのプレイヤーさん',
   } satisfies Post;
 };
 
@@ -303,12 +308,21 @@ export const getRanking = async () => {
   }
 };
 
+export type CommentMeta = {
+  aliasColor?: string;
+  aliasLabel?: string;
+  aliasProvided?: boolean;
+};
+
 export type CommentNode = {
   id: number;
   alias: string;
   body: string;
   status: 'published' | 'pending' | 'hidden' | 'shadow';
   createdAt: string;
+  isModerator?: boolean;
+  meta?: CommentMeta | null;
+  parent?: number | null;
   children: CommentNode[];
 };
 

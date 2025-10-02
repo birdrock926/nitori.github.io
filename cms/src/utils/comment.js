@@ -5,6 +5,8 @@ import dayjs from 'dayjs';
 const URL_REGEX = /(https?:\/\/[\w.-]+(?:\/[\w./?%&=+-]*)?)/gi;
 const BANNED_WORDS = ['死ね', '殺す', '違法', 'スパム'];
 const ALLOWED_HOSTS = ['youtube.com', 'youtu.be', 'twitch.tv', 'www.youtube.com', 'www.twitch.tv'];
+const ALIAS_MIN_LENGTH = 2;
+const ALIAS_MAX_LENGTH = 24;
 
 export const sanitizeBody = (body = '') => body.trim();
 
@@ -69,10 +71,54 @@ export const networkHash = (ip, pepper) => {
   return sha256.hmac(pepper, net);
 };
 
-export const generateAlias = (ip, postId, aliasSalt) => {
+export const sanitizeAliasInput = (alias) => {
+  if (typeof alias !== 'string') {
+    return null;
+  }
+  const trimmed = alias.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.length < ALIAS_MIN_LENGTH) {
+    throw new Error(`表示名は${ALIAS_MIN_LENGTH}文字以上で入力してください`);
+  }
+  if (trimmed.length > ALIAS_MAX_LENGTH) {
+    throw new Error(`表示名は${ALIAS_MAX_LENGTH}文字以内で入力してください`);
+  }
+  for (const banned of BANNED_WORDS) {
+    if (trimmed.includes(banned)) {
+      throw new Error('表示名に禁止語が含まれています');
+    }
+  }
+  return trimmed;
+};
+
+const formatAliasFromTemplate = (template, fragment) => {
+  const safeTemplate = template?.trim() || '名無しのプレイヤーさん';
+  if (safeTemplate.includes('{hash}')) {
+    return safeTemplate.replaceAll('{hash}', fragment);
+  }
+  if (safeTemplate.includes('%s')) {
+    return safeTemplate.replaceAll('%s', fragment);
+  }
+  return safeTemplate;
+};
+
+export const generateAlias = (ip, postId, aliasSalt, template) => {
   const hash = sha256(`${aliasSalt}:${ip}:${postId}:${dayjs().format('YYYYMMDD')}`);
   const aliasFragment = parseInt(hash.slice(0, 8), 16).toString(36).padStart(5, '0').slice(0, 4);
-  return `名無しさん-${aliasFragment}`;
+  return formatAliasFromTemplate(template, aliasFragment);
+};
+
+export const resolveAlias = ({ requestedAlias, template, ip, postId, aliasSalt }) => {
+  const sanitized = sanitizeAliasInput(requestedAlias);
+  if (sanitized) {
+    return { alias: sanitized, provided: true };
+  }
+  return {
+    alias: generateAlias(ip, postId, aliasSalt, template),
+    provided: false,
+  };
 };
 
 export const createEditKey = () => crypto.randomBytes(16).toString('hex');
@@ -142,12 +188,25 @@ export const detectSimilarity = async (strapi, { ipHash, body }) => {
   }
 };
 
+const extractDisplayMeta = (meta) => {
+  if (!meta) return undefined;
+  if (typeof meta !== 'object') return undefined;
+  if (meta.display && typeof meta.display === 'object') {
+    const { aliasColor, aliasLabel, aliasProvided } = meta.display;
+    return { aliasColor, aliasLabel, aliasProvided };
+  }
+  const { aliasColor, aliasLabel, aliasProvided } = meta;
+  return { aliasColor, aliasLabel, aliasProvided };
+};
+
 export const buildCommentResponse = (comment) => ({
   id: comment.id,
   body: comment.body,
   alias: comment.alias,
   status: comment.status,
   createdAt: comment.createdAt,
+  isModerator: Boolean(comment.isModerator),
+  meta: extractDisplayMeta(comment.meta),
   children: comment.children?.map((child) => buildCommentResponse(child)) || [],
 });
 
@@ -164,10 +223,12 @@ export const paginateComments = async (strapi, { postId, limit, cursor }) => {
     filters: where,
     sort: { createdAt: 'desc' },
     limit,
+    fields: ['id', 'body', 'alias', 'status', 'createdAt', 'isModerator', 'meta'],
     populate: {
       children: {
         filters: { status: 'published' },
         sort: { createdAt: 'asc' },
+        fields: ['id', 'body', 'alias', 'status', 'createdAt', 'isModerator', 'meta'],
       },
     },
   });
@@ -184,6 +245,8 @@ export const toPublicComment = (comment) => ({
   body: comment.body,
   status: comment.status,
   createdAt: comment.createdAt,
+  isModerator: Boolean(comment.isModerator),
+  meta: extractDisplayMeta(comment.meta),
   parent: comment.parent ? comment.parent.id : null,
 });
 

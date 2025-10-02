@@ -6,12 +6,24 @@ import { formatDateTime, relative } from '@lib/format';
 
 type Props = {
   postSlug: string;
+  defaultAlias?: string;
 };
 
 type Notification = {
   message: string;
   type: 'success' | 'error';
 };
+
+const normalizeNodes = (nodes: CommentNode[] = []): CommentNode[] =>
+  nodes.map((node) => ({
+    ...node,
+    children: normalizeNodes(node.children ?? []),
+  }));
+
+const normalizeNode = (node: CommentNode): CommentNode => ({
+  ...node,
+  children: normalizeNodes(node.children ?? []),
+});
 
 const appendReply = (nodes: CommentNode[], parentId: number, comment: CommentNode): CommentNode[] =>
   nodes.map((node) => {
@@ -29,17 +41,21 @@ const removeCommentById = (nodes: CommentNode[], id: number): CommentNode[] =>
     .filter((node) => node.id !== id)
     .map((node) => ({ ...node, children: node.children ? removeCommentById(node.children, id) : [] }));
 
-const CommentIsland = ({ postSlug }: Props) => {
+const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [body, setBody] = useState('');
+  const [alias, setAlias] = useState('');
   const [parentId, setParentId] = useState<number | null>(null);
   const [editKeys, setEditKeys] = useState<Record<number, string>>({});
   const [notification, setNotification] = useState<Notification | null>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const [honeypot, setHoneypot] = useState('');
+  const fallbackAlias = defaultAlias?.trim() || '名無しのプレイヤーさん';
+  const aliasInputId = 'comment-alias';
+  const aliasHelpId = 'comment-alias-help';
 
   const announce = (note: Notification) => {
     setNotification(note);
@@ -50,10 +66,11 @@ const CommentIsland = ({ postSlug }: Props) => {
     try {
       setLoading(true);
       const res = await fetchComments(postSlug, cursor ?? undefined);
+      const normalized = normalizeNodes(res.data ?? []);
       if (cursor) {
-        setComments((prev) => [...prev, ...res.data]);
+        setComments((prev) => [...prev, ...normalized]);
       } else {
-        setComments(res.data);
+        setComments(normalized);
       }
       setNextCursor(res.nextCursor);
       setError(null);
@@ -65,6 +82,9 @@ const CommentIsland = ({ postSlug }: Props) => {
   };
 
   useEffect(() => {
+    setAlias('');
+    setBody('');
+    setParentId(null);
     loadComments();
   }, [postSlug]);
 
@@ -75,15 +95,17 @@ const CommentIsland = ({ postSlug }: Props) => {
       return;
     }
     try {
+      const trimmedAlias = alias.trim();
       const res = await submitComment({
         postSlug,
         parentId: parentId ?? undefined,
         body,
+        alias: trimmedAlias ? trimmedAlias : undefined,
         honeypot,
         sentAt: Date.now(),
       });
       const { comment, editKey } = res.data;
-      const normalized: CommentNode = { ...comment, children: comment.children ?? [] };
+      const normalized = normalizeNode({ ...comment, children: comment.children ?? [] });
       setEditKeys((prev) => ({ ...prev, [comment.id]: editKey }));
       if (parentId) {
         setComments((prev) => appendReply(prev, parentId, normalized));
@@ -132,6 +154,28 @@ const CommentIsland = ({ postSlug }: Props) => {
           </p>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '0.75rem' }}>
+          <label htmlFor={aliasInputId}>表示名（任意）</label>
+          <input
+            id={aliasInputId}
+            name="alias"
+            type="text"
+            value={alias}
+            maxLength={24}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder={fallbackAlias}
+            aria-describedby={aliasHelpId}
+            autoComplete="nickname"
+            style={{
+              padding: '0.6rem 0.75rem',
+              borderRadius: '0.75rem',
+              border: '1px solid var(--color-border)',
+              background: 'var(--layer-raised)',
+              color: 'var(--text-primary)',
+            }}
+          />
+          <p id={aliasHelpId} className="muted" style={{ margin: 0 }}>
+            未入力の場合は「{fallbackAlias}」として公開されます。
+          </p>
           <label htmlFor="comment-body">コメント本文</label>
           <textarea
             id="comment-body"
@@ -140,7 +184,13 @@ const CommentIsland = ({ postSlug }: Props) => {
             rows={5}
             value={body}
             onChange={(event) => setBody(event.target.value)}
-            style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid var(--color-border)' }}
+            style={{
+              padding: '0.75rem',
+              borderRadius: '0.75rem',
+              border: '1px solid var(--color-border)',
+              background: 'var(--layer-raised)',
+              color: 'var(--text-primary)',
+            }}
           ></textarea>
           <input
             type="text"
@@ -207,17 +257,29 @@ type ThreadProps = {
 
 const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) => {
   const isPending = comment.status !== 'published';
+  const aliasColor = comment.meta?.aliasColor || (comment.isModerator ? 'var(--accent-strong)' : undefined);
+  const aliasLabel = comment.meta?.aliasLabel || (comment.isModerator ? 'モデレーター' : undefined);
+  const aliasClass = comment.isModerator ? 'comment-alias comment-alias--moderator' : 'comment-alias';
   return (
-    <article className="card" style={{ gap: '0.75rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <strong>{comment.alias}</strong>
+    <article className="card comment-thread" style={{ gap: '0.75rem' }}>
+      <header className="comment-thread__header">
+        <div className="comment-thread__identity">
+          <span className={aliasClass} style={aliasColor ? { color: aliasColor } : undefined}>
+            {comment.alias}
+          </span>
+          {aliasLabel && (
+            <span className="comment-badge" aria-label={aliasLabel}>
+              {aliasLabel}
+            </span>
+          )}
+        </div>
         <time dateTime={comment.createdAt} className="muted">
           {formatDateTime(comment.createdAt)}（{relative(comment.createdAt)}）
         </time>
       </header>
       <p style={{ margin: 0, opacity: isPending ? 0.6 : 1 }}>{comment.body}</p>
       {isPending && <p className="muted" style={{ margin: 0 }}>審査中のため非公開です</p>}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div className="comment-thread__actions">
         <button type="button" className="tag-chip" onClick={() => onReply(comment.id)}>
           返信
         </button>
@@ -229,7 +291,7 @@ const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) =>
         </button>
       </div>
       {comment.children?.length > 0 && (
-        <div style={{ borderLeft: '2px solid var(--color-border)', paddingLeft: '1rem', display: 'grid', gap: '1rem' }}>
+        <div className="comment-thread__children">
           {comment.children.map((child) => (
             <CommentThread
               key={child.id}

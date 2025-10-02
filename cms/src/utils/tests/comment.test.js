@@ -4,6 +4,8 @@ import {
   hashIp,
   networkHash,
   generateAlias,
+  sanitizeAliasInput,
+  resolveAlias,
   enforceRateLimit,
   detectSimilarity,
 } from '../comment.js';
@@ -29,10 +31,26 @@ describe('コメントユーティリティ', () => {
     expect(networkHash('1.1.1.1', 'pepper')).toBe(networkHash('1.1.1.2', 'pepper'));
   });
 
-  test('エイリアス生成は固定長', () => {
-    const alias = generateAlias('1.2.3.4', 1, 'salt');
-    expect(alias.startsWith('名無しさん-')).toBe(true);
-    expect(alias.length).toBeGreaterThan(5);
+  test('エイリアス生成はテンプレートを尊重する', () => {
+    const alias = generateAlias('1.2.3.4', 1, 'salt', '名無しの冒険者さん');
+    expect(alias).toBe('名無しの冒険者さん');
+  });
+
+  test('表示名のサニタイズ', () => {
+    expect(sanitizeAliasInput(' テスト ')).toBe('テスト');
+    expect(() => sanitizeAliasInput('あ')).toThrow('表示名');
+  });
+
+  test('入力があればそのまま利用する', () => {
+    const result = resolveAlias({
+      requestedAlias: 'コアメンバー',
+      template: '名無しのプレイヤーさん',
+      ip: '1.1.1.1',
+      postId: 1,
+      aliasSalt: 'salt',
+    });
+    expect(result.alias).toBe('コアメンバー');
+    expect(result.provided).toBe(true);
   });
 
   test('レート制限', async () => {
