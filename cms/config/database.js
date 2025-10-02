@@ -20,7 +20,8 @@ export default ({ env }) => ({
     pool: env('DATABASE_CLIENT', 'sqlite') === 'sqlite'
       ? {
           min: 0,
-          max: 5,
+          max: 1,
+          acquireTimeoutMillis: 60000,
         }
       : {
           min: 2,
