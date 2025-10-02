@@ -139,25 +139,78 @@ npm run dev
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
-## 7. Docker Compose で本番想定の CMS を立ち上げる (任意)
-OCI Always Free と同等の構成をローカルで試す場合は、`infrastructure/docker-compose.yml` を利用します。
+## 7. OCI Always Free で CMS を公開する
+ここでは、OCI の無料枠を使って Strapi を常駐させるまでの流れを初心者向けに整理します。作業時間は 60〜90 分程度を見込んでください。
 
+### 7-1. アカウントとテナンシを準備する
+1. [OCI サインアップ](https://www.oracle.com/cloud/free/) でアカウントを作成し、クレジットカードと本人確認情報を登録します。無料枠内であれば課金されません。
+2. 初回ログイン後にリージョン（例: `ap-tokyo-1`）を選択し、使用する **Compartment**（論理フォルダ）を把握しておきます。既定の `root` のままでも構いません。
+
+### 7-2. Object Storage を構築する
+README の「OCI Object Storage の事前準備」を参考に、バケットとアクセスキーを作成します。無料枠では 20GB まで利用でき、GitHub Pages の帯域節約に有効です。
+
+### 7-3. Compute インスタンスを作成する
+1. コンソールの **Compute → Instances** で `Create Instance` をクリックします。
+2. `Always Free Eligible` のマシンタイプを選択（ARM の `VM.Standard.A1.Flex` を推奨）。OCPU=1、メモリ=6GB ほどに設定します。
+3. ネットワークは既定の VCN を利用し、`Assign a public IPv4 address` にチェックを入れておきます。
+4. SSH 公開鍵をアップロードまたは貼り付けて `Create` します。完了後に表示されるパブリック IP をメモしておきます。
+
+### 7-4. インスタンスへ接続し必要なソフトを入れる
 ```bash
-cd infrastructure
-cp ../cms/.env .env
-# 本番用の値に書き換える
+ssh -i ~/.ssh/oci-key opc@<public-ip>
 
-# 初回のみビルド (Strapi イメージを取得)
-docker compose pull
+# システム更新
+sudo dnf update -y    # Ubuntu の場合は apt update && apt upgrade -y
 
-# 起動
-docker compose up -d
+# Node.js / Git / Docker を導入
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs git docker docker-compose-plugin
 
-# ログ確認
-docker compose logs -f strapi
+# Docker を起動し、現在のユーザーを docker グループに追加
+sudo systemctl enable --now docker
+sudo usermod -aG docker opc
+exit
+
+# 権限反映のため再接続
+ssh -i ~/.ssh/oci-key opc@<public-ip>
 ```
 
-停止する際は `docker compose down` を実行します。
+### 7-5. プロジェクトを配置し `.env` を設定する
+```bash
+git clone https://github.com/your-account/birdrock926.github.io.git
+cd birdrock926.github.io
+cp cms/.env.sample cms/.env
+# `nano` や `vim` で cms/.env を開き、本番用の値 (ドメインや OCI_* など) を貼り付ける
+```
+
+### 7-6. Docker Compose で Strapi を起動する
+```bash
+cd infrastructure
+cp ../cms/.env .env  # docker-compose からも読み込めるようコピー
+
+docker compose pull           # 依存イメージ取得
+docker compose up -d          # バックグラウンド起動
+
+docker compose logs -f strapi # 初回起動ログを監視
+```
+起動後、ブラウザで `http://<public-ip>:1337/admin` にアクセスして管理ユーザーを作成できます。Caddy を同梱の設定ファイルで有効化すると HTTPS で公開可能です。
+
+### 7-7. ドメインと HTTPS を整える
+1. 独自ドメインの DNS で A レコードを OCI インスタンスのパブリック IP に向けます。
+2. `infrastructure/Caddyfile` の `cms.example.com` を使用するドメインに置き換え、以下で適用します。
+   ```bash
+   sudo cp Caddyfile /etc/caddy/Caddyfile
+   sudo systemctl enable --now caddy
+   ```
+3. 数分後に `https://cms.example.com/admin` が開ければ成功です。Caddy が自動で Let's Encrypt 証明書を取得します。
+
+### 7-8. セキュリティの最終確認
+- OCI のセキュリティリスト／NSG に 80/443/1337 の受信ルールがあるか確認
+- `sudo firewall-cmd --add-service=http --add-service=https --permanent && sudo firewall-cmd --reload`
+- Strapi 管理画面のデフォルトロールを公開 API 用に調整し、Admin ロールには強力なパスワード＋ MFA を設定
+
+### 7-9. GitHub Actions 連携を有効にする
+Strapi の設定画面で Webhook を作成し、`Publish event` にフックさせて GitHub Actions の `workflow_dispatch` を叩くよう `.env` の `GITHUB_WORKFLOW_*` を設定します。テストとしてダミー記事を公開し、Pages が自動更新されるか確認しましょう。
 
 ## 8. GitHub Pages へのデプロイ (概要)
 1. GitHub リポジトリの Settings → Pages で `GitHub Actions` を選択します。

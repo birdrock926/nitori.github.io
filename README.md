@@ -138,6 +138,24 @@
 4. `UPLOAD_PROVIDER=oci` を使う場合は、OCI コンソールで作成したユーザーのアクセスキーとシークレットを `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` に設定し、`OCI_PUBLIC_URL` に公開バケットのベース URL を入力してください。
 5. `.env` を保存したら `cd ..` でプロジェクトルートに戻ります。
 
+#### OCI Object Storage の事前準備（初回のみ）
+帯域の節約と画像配信の安定化を目的として、Strapi のアップロード先を OCI Object Storage に切り替える場合は以下の手順でバケットと認証情報を用意します。
+
+1. [OCI コンソール](https://cloud.oracle.com/) にログインし、左上のハンバーガーメニューから **Object Storage** → **Buckets** を開きます。
+2. `Always Free` リージョン（例: `ap-tokyo-1`）と対象の **Compartment** を選択し、`Create Bucket` をクリックします。
+3. バケット名（例: `game-news-media`）を入力し、ストレージクラスは `Standard` のまま作成します。`Public access type` は `Public` を選択し、**`Enable Object Listing`** にチェックを入れておきます。
+4. バケット画面右上の `Bucket Information` から `Namespace` と `Object Storage URL` を控えます。これが `.env` の `OCI_NAMESPACE` と `OCI_PUBLIC_URL` の基礎となります。
+5. メニューの **Identity & Security → Users** でメディア配信用の専用ユーザーを作成し、`Auth Tokens` タブから `Generate Token` をクリックしてアクセスキー（`OCI_ACCESS_KEY`）とシークレット（`OCI_SECRET_KEY`）を発行します。表示は一度きりなので安全な場所に保存してください。
+6. 同じ画面の **Groups** で新しいグループ（例: `StrapiUploaders`）を作成し、先ほどのユーザーを所属させます。
+7. **Policies** で次のようなポリシーを追加し、バケットへの読み書き権限を付与します。
+   ```
+   Allow group StrapiUploaders to manage objects in compartment <COMPARTMENT_NAME> where target.bucket.name='<BUCKET_NAME>'
+   ```
+8. `.env` の `OCI_REGION`, `OCI_NAMESPACE`, `OCI_BUCKET`, `OCI_PUBLIC_URL`, `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` を上記の値に更新します。`OCI_PUBLIC_URL` は `https://objectstorage.<region>.oraclecloud.com/n/<namespace>/b/<bucket>/o` の形式です。
+9. 画像配信に利用するドメインを `PUBLIC_FRONT_ORIGINS` と `CORS_ALLOWED_ORIGINS` に追加し、Strapi からの配信が許可されていることを確認します。
+
+> **Tip**: バケットを `Public` にしたくない場合は、OCI の CDN または Cloudflare R2 + Signed URL などの代替構成を検討してください。その場合は Strapi のカスタムアップローダーを拡張する必要があります。
+
 ### /web 用 `.env`
 1. サンプルをコピーします。
    ```bash
@@ -160,6 +178,52 @@
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」から `Read-only` で発行し、ヘッダー `Authorization: Bearer <token>` で利用できるものを貼り付けます。
 4. `.env` 保存後は `cd ..` でルートに戻ります。
+
+### OCI Compute（Always Free）に Strapi を配置する手順
+OCI で CMS を常駐させる際は、以下の流れで Compute インスタンスとドメイン周りを整備します。
+
+1. OCI コンソールの **Compute → Instances** で `Create Instance` をクリックし、`Always Free Eligible` の `VM.Standard.A1.Flex`（ARM）または `VM.Standard.E2.1.Micro`（x86）を選びます。
+2. OS イメージは `Oracle Linux 9` か `Ubuntu Server 22.04` を推奨します。**SSH 公開鍵**を登録し、後でインスタンスに接続できるようローカルの秘密鍵を保管してください。
+3. 作成後、`VCN`（仮想クラウドネットワーク）のセキュリティリストまたはネットワークセキュリティグループ (NSG) に以下の受信ルールを追加します。
+   - TCP 80 (HTTP)
+   - TCP 443 (HTTPS)
+   - TCP 1337 (Strapi 管理画面にローカルからアクセスする場合のみ)
+4. SSH でインスタンスに接続します。
+   ```bash
+   ssh -i ~/.ssh/oci-key opc@<public-ip>
+   ```
+5. Node.js と Docker Compose を利用する場合は以下のセットアップを実行します。
+   ```bash
+   sudo dnf update -y          # Ubuntu の場合は apt update
+   curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+   sudo dnf install -y nodejs git docker docker-compose-plugin
+   sudo systemctl enable --now docker
+   sudo usermod -aG docker opc  # `opc` を docker グループへ
+   exit && ssh -i ~/.ssh/oci-key opc@<public-ip>  # 権限更新のため再ログイン
+   ```
+6. リポジトリをクローンし、Strapi の `.env` を配置します。
+   ```bash
+   git clone https://github.com/your-account/birdrock926.github.io.git
+   cd birdrock926.github.io
+   cp cms/.env.sample cms/.env
+   # 本番値に書き換えた `.env` を `vim` などで編集
+   ```
+7. `infrastructure/docker-compose.yml` を使って Strapi を起動します。
+   ```bash
+   cd infrastructure
+   docker compose pull
+   docker compose up -d
+   ```
+8. Caddy をリバースプロキシとして利用する場合は `infrastructure/Caddyfile` を `/etc/caddy/Caddyfile` に配置し、以下で有効化します。
+   ```bash
+   sudo cp Caddyfile /etc/caddy/Caddyfile
+   sudo systemctl enable --now caddy
+   ```
+   Caddy が Let's Encrypt で自動的に証明書を取得し、Strapi への HTTPS 経由アクセスが可能になります。
+9. DNS の A レコードを OCI インスタンスのパブリック IP に向け、ブラウザから `https://cms.example.com/admin` にアクセスして初期ユーザー登録を行います。
+10. Strapi の `Settings → Webhooks` で GitHub Actions を呼び出す Webhook を設定し、実際に Publish → GitHub Pages 更新まで流れるか確認してください。
+
+> **Troubleshooting**: OCI インスタンスのファイアウォール (`firewalld`) が有効な場合は `sudo firewall-cmd --add-service=http --add-service=https --permanent && sudo firewall-cmd --reload` で 80/443 を解放してください。
 
 > **セキュリティメモ**: `.env` ファイルは Git にコミットしないよう `.gitignore` 済みです。必要に応じて 1Password や Vault などのシークレットストアで共有し、平文でのやり取りは避けてください。
 
