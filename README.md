@@ -116,6 +116,7 @@
    cd cms
    cp .env.sample .env
    ```
+   > **Memo**: `.env` を作成していなくても `npm run develop` を実行すると、`scripts/ensure-env.mjs` が開発用のダミー値を自動生成して `.env` に書き出します。生成値はローカル動作確認専用なので、本番環境にデプロイする前に必ず置き換えてください。
 2. `node` コマンドで乱数を生成し、シークレットに設定します。
    ```bash
    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"

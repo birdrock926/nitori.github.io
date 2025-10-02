@@ -35,6 +35,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    cd cms
    cp .env.sample .env
    ```
+   - まだ `.env` を作成していない状態で `npm run develop` を実行すると、自動的に `scripts/ensure-env.mjs` が開発用のダミー値を生成して `.env` を作成します。まずは動作確認を優先したい場合に便利ですが、本番や共有環境にデプロイする前に必ず安全なシークレットへ置き換えてください。
 2. シークレット値を生成
    ```bash
    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
