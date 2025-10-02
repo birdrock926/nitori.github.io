@@ -183,24 +183,35 @@ const createUrl = (path: string, searchParams?: Record<string, string | number |
   return url;
 };
 
+const emptyResponseFor = <T>(path: string) => {
+  if (path.includes('/comments')) {
+    return { data: [], nextCursor: null } as T;
+  }
+  return { data: [] } as T;
+};
+
 export const fetchJSON = async <T>(path: string, params?: Record<string, string | number | undefined>) => {
   const url = createUrl(path, params);
   if (!url) {
-    if (path.includes('/comments')) {
-      return { data: [], nextCursor: null } as T;
+    return emptyResponseFor<T>(path);
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...defaultHeaders,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Strapi API error: ${response.status}`);
     }
-    return { data: [] } as T;
+    return (await response.json()) as T;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[strapi] Falling back to empty response for ${url}: ${reason}`);
+    return emptyResponseFor<T>(path);
   }
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...defaultHeaders,
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Strapi API error: ${response.status}`);
-  }
-  return (await response.json()) as T;
 };
 
 export type PostListResponse = {
