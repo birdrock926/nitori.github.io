@@ -91,7 +91,7 @@
 
 本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
-> **最終検証 (2025-10-02 JST)**: Node.js 20.18 系 + npm 10.8 系 (Linux) で `/cms`・`/web` の `npm install` を実行し、依存解決まで確認しました。`/web` の `npm run build` は完走済みです。一方、Strapi (`/cms`) の `npm run build` / `npm run develop` は本コンテナ環境では Vite/Esbuild 実行時に `Bus error` → `SIGBUS`、`ERR_UNSUPPORTED_DIR_IMPORT` (`lodash/fp`) により失敗することを確認しています。手元では `esbuild@0.21.5` の導入と `STRAPI_ADMIN_BUNDLER=webpack` の併用でも解消しなかったため、公式 Docker イメージまたは Node 18 LTS 上での実行を推奨します。詳細な回避策は「トラブルシューティング」を参照してください。
+> **最終検証 (2025-10-02 JST)**: Node.js 20.19.4 + npm 10.8 系 (Debian/WSL 相当) で `/cms`・`/web` の `npm install` / `npm run build` を実行し、さらに `/cms` の `npm run develop` も起動確認しました。`scripts/run-strapi.mjs` により Node 20 + Windows/WSL 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` が発生せず、管理画面ビルドも完走することを再検証済みです。ログには `admin.auth.options.expiresIn` の非推奨警告が表示されますが動作に影響はありません。
 
 ## 事前要件
 - Node.js 20 LTS
@@ -137,6 +137,8 @@
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
    | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
    | `GITHUB_WORKFLOW_*` | Strapi Webhook で Cloudflare Pages 用の GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
+
+> **開発時の GitHub Webhook**: `.env` が同梱プレースホルダー（`local-owner` / `local-repo` / `dispatch-workflow.yml` / `github-token-placeholder` など）のままの場合、Strapi は GitHub Actions 連携を自動的にスキップし、開発時の 401 エラーを防ぎます。実運用では GitHub Secrets を発行し、これらを本番値に置き換えてください。スキップ時はログに `[github] Webhook dispatch skipped` が出力されます。
 
 4. `UPLOAD_PROVIDER=oci` を使う場合は、OCI コンソールで作成したユーザーのアクセスキーとシークレットを `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` に設定し、`OCI_PUBLIC_URL` に公開バケットのベース URL を入力してください。
 5. `.env` を保存したら `cd ..` でプロジェクトルートに戻ります。
@@ -337,8 +339,8 @@ Cloudflare Pages ではプロジェクト設定から独自ドメインを追加
 - **Strapi が起動しない**：`npm run build -- --clean` を実行し、`node_modules` を削除後再インストール
 - **Webhook が失敗する**：Strapi ログと GitHub Actions の `workflow_dispatch` イベントログを確認
 - **コメントが投稿できない**：CAPTCHA、BAN、禁止語リスト、URL ホワイトリストの各設定を確認
-- **Strapi ビルド時の `Bus error` (SIGBUS)**：Esbuild/Vite が仮想環境でクラッシュする既知事象です。`npm install esbuild@0.21.5` を実行し、`ESBUILD_BINARY_PATH=$(pwd)/node_modules/esbuild/bin/esbuild npm run build` を試してください。改善しない場合は `STRAPI_ADMIN_BUNDLER=webpack npm run build` か、公式の `strapi/strapi:5` Docker イメージ（Node 18 ベース）でビルドする運用に切り替えてください。
-- **`ERR_UNSUPPORTED_DIR_IMPORT: lodash/fp`**：Node.js 20 の ESM 解決仕様に起因します。`NODE_OPTIONS=--experimental-specifier-resolution=node npm run develop` を設定するか、Docker/Node 18 環境で実行してください。
+- **Strapi ビルド時の `Bus error` (SIGBUS)**：Node 20 + Alpine でも動作するよう CLI をパッチ済みですが、メモリ 2GB 未満の環境では Vite が落ちる可能性があります。`npm run build` 実行前にメモリ割り当てを増やすか、公式 `strapi/strapi:5`（Node 18 ベース）でビルドする方法、またはローカルでビルド済み成果物をマウントする方法に切り替えてください。
+- **`ERR_UNSUPPORTED_DIR_IMPORT: lodash/fp`**：本リポジトリでは `patch-package` と `scripts/run-strapi.mjs` により解消済みです。もし再発した場合は `npm install` でパッチが適用されているか確認し、独自に Strapi をアップグレードした際は `NODE_OPTIONS=--experimental-specifier-resolution=node npm run develop` を一時的に指定するか、Docker/Node 18 での実行を検討してください。
 - **npm error ENOENT: Cannot cd into ... typescript**：`/cms/package.json` の `devDependencies` に `"typescript": "5.4.5"` を追加し、`rm -rf node_modules package-lock.json && npm install` を実行してください。本リポジトリには修正済みの定義が含まれています。
 
 ---
