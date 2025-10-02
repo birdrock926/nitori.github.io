@@ -3,10 +3,10 @@ import type { RankingItem } from '@lib/strapi';
 
 const { title, items } = Astro.props as { title: string; items: RankingItem[] };
 ---
-<section class="ranking-card card" aria-labelledby={`ranking-${title}`}>
+<section class="ranking-card" aria-labelledby={`ranking-${title}`}>
   <header class="ranking-header">
     <h2 id={`ranking-${title}`} class="section-title">{title}</h2>
-    <p class="ranking-subtitle muted">トレンド計測スコア</p>
+    <p class="ranking-subtitle muted">直近の閲覧・クリック・シェアをもとにしたランキング</p>
   </header>
   <ol class="ranking-list">
     {items.map((item, index) => (
@@ -14,7 +14,7 @@ const { title, items } = Astro.props as { title: string; items: RankingItem[] };
         <span class="ranking-index" aria-hidden="true">{index + 1}</span>
         <div class="ranking-content">
           <a class="ranking-title" href={`/posts/${item.slug}/`}>{item.title}</a>
-          <span class="ranking-score muted">Score {item.score}</span>
+          <span class="ranking-score muted">トレンドスコア {item.score}</span>
         </div>
       </li>
     ))}

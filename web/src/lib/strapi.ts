@@ -154,6 +154,16 @@ export const getLatestPosts = async (limit = 12) => {
   return data.data.map(mapPost);
 };
 
+export const getAllPosts = async () => {
+  const data = await fetchJSON<PostListResponse>('/api/posts', {
+    sort: 'publishedAt:desc',
+    populate: 'cover,tags,blocks',
+    'filters[publishedAt][$notNull]': 'true',
+    'pagination[pageSize]': 100,
+  });
+  return data.data.map(mapPost);
+};
+
 export const getPostBySlug = async (slug: string) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
     'filters[slug][$eq]': slug,
