@@ -1,20 +1,11 @@
-<div
-  class="card"
-  style="position: fixed; bottom: 1rem; right: 1rem; max-width: 320px; display: none;"
-  id="consent-banner"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="consent-title"
->
-  <h2 id="consent-title" style="font-size: 1rem; margin: 0 0 0.5rem;">クッキーの利用について</h2>
-  <p class="muted" style="font-size: 0.85rem;">
+<div class="card consent-banner" id="consent-banner" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+  <h2 id="consent-title" class="consent-banner__title">クッキーの利用について</h2>
+  <p class="muted consent-banner__description">
     パフォーマンス改善と広告配信のためにクッキーを利用します。設定はいつでも変更できます。
   </p>
-  <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-    <button id="consent-accept" class="tag-chip" type="button">同意する</button>
-    <button id="consent-deny" class="tag-chip" type="button" style="background: transparent; border: 1px solid var(--color-border);">
-      拒否する
-    </button>
+  <div class="consent-banner__actions">
+    <button id="consent-accept" class="consent-button consent-button--primary" type="button">同意する</button>
+    <button id="consent-deny" class="consent-button" type="button">拒否する</button>
   </div>
 </div>
 <script is:inline>
@@ -29,7 +20,7 @@
   };
 
   const showBanner = () => {
-    banner?.style.setProperty('display', 'block');
+    banner?.style.setProperty('display', 'grid');
   };
 
   const hideBanner = () => {
