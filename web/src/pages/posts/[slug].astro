@@ -8,31 +8,14 @@ import TwitchPlayer from '@components/blocks/TwitchPlayer.tsx';
 import InlineAd from '@components/ads/InlineAd.astro';
 import CommentIsland from '@components/comments/CommentIsland.tsx';
 import PostCard from '@components/PostCard.astro';
-import { getPostBySlug, getPostsByTag } from '@lib/strapi';
+import { getAllPosts, getPostBySlug, getPostsByTag } from '@lib/strapi';
 import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
 import { ADSENSE, DELETE_REQUEST } from '@config/site';
 
 export async function getStaticPaths() {
-  if (!import.meta.env.STRAPI_API_URL) {
-    return [];
-  }
-  const response = await fetch(
-    `${import.meta.env.STRAPI_API_URL}/api/posts?fields=slug&pagination[pageSize]=100`,
-    {
-      headers: {
-        Authorization: import.meta.env.STRAPI_API_TOKEN
-          ? `Bearer ${import.meta.env.STRAPI_API_TOKEN}`
-          : undefined,
-      },
-    }
-  );
-  if (!response.ok) {
-    return [];
-  }
-  const posts = await response.json();
-  const paths = posts.data?.map((post: any) => ({ params: { slug: post.attributes.slug } })) ?? [];
-  return paths;
+  const posts = await getAllPosts();
+  return posts.map((post) => ({ params: { slug: post.slug } }));
 }
 
 const { slug } = Astro.params;

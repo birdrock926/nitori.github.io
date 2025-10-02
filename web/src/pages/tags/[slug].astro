@@ -1,23 +1,11 @@
 ---
 import BaseLayout from '@layouts/BaseLayout.astro';
 import PostCard from '@components/PostCard.astro';
-import { getPostsByTag } from '@lib/strapi';
+import { getPostsByTag, getTags } from '@lib/strapi';
 
 export async function getStaticPaths() {
-  if (!import.meta.env.STRAPI_API_URL) return [];
-  const response = await fetch(
-    `${import.meta.env.STRAPI_API_URL}/api/tags?fields=slug&pagination[pageSize]=100`,
-    {
-      headers: {
-        Authorization: import.meta.env.STRAPI_API_TOKEN
-          ? `Bearer ${import.meta.env.STRAPI_API_TOKEN}`
-          : undefined,
-      },
-    }
-  );
-  if (!response.ok) return [];
-  const data = await response.json();
-  return data.data?.map((tag: any) => ({ params: { slug: tag.attributes.slug } })) ?? [];
+  const tags = await getTags();
+  return tags.map((tag) => ({ params: { slug: tag.slug } }));
 }
 
 const { slug } = Astro.params;
