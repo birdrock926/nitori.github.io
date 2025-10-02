@@ -221,6 +221,29 @@ Strapi の設定画面で Webhook を作成し、`Publish event` にフックさ
    - `GITHUB_WORKFLOW_ID`
    - `GITHUB_WORKFLOW_TOKEN`
 
+### 8-1. 独自ドメインを割り当てる
+GitHub Pages は CNAME レコードと `CNAME` ファイルの組み合わせで独自ドメインを使えます。以下は `news.example.com` を割り当てる手順
+です。
+
+1. お名前.com や Cloudflare など、利用中の DNS 管理画面で `news.example.com` の **CNAME レコード**を作成し、値を `your-account.github.io`
+   （GitHub のユーザー名に合わせて変更）へ向けます。ルートドメインを使いたい場合は DNS プロバイダーの ALIAS / ANAME 機能を利用して
+   ください。
+2. リポジトリで `web/public/CNAME` ファイルを作成し、独自ドメインを 1 行だけ書き込みます。
+   ```bash
+   echo "news.example.com" > web/public/CNAME
+   git add web/public/CNAME
+   git commit -m "chore: add custom domain"
+   git push
+   ```
+3. GitHub リポジトリの **Settings → Pages → Custom domain** に `news.example.com` を入力して保存し、`Enforce HTTPS` にチェックを入れま
+   す。
+4. 数分～24 時間で DNS が伝播すると、`https://news.example.com` でサイトが表示され、GitHub Pages が Let's Encrypt 証明書を発行します。
+5. `.env`（`web/.env`）を更新して `SITE_URL=https://news.example.com`、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追
+   加し、`npm run build` を再実行してリンクや Twitch `parent` パラメータを正しく反映させます。
+
+> **メモ**: Cloudflare CDN を併用する場合は CNAME を Cloudflare に向け、SSL/TLS モードを `Full (Strict)` に設定します。キャッシュが
+> 古くなる場合は `Purge Cache` を活用しましょう。
+
 ## 9. トラブルシューティング
 | 症状 | 対処 |
 | --- | --- |

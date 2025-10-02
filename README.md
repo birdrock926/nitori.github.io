@@ -300,9 +300,31 @@ npm run preview
 # デプロイ手順（本番）
 
 1. OCI インスタンスに `/cms` をデプロイし、`docker-compose -f infrastructure/docker-compose.yml up -d` を実行
-2. DNS を GitHub Pages に向ける（CNAME 設定）
-3. GitHub Actions Secrets を設定し、Strapi Webhook からのトリガーを許可
-4. 管理画面から記事を Publish し、GitHub Pages が更新されることを確認
+2. GitHub Pages 側でビルドが完了することを確認
+3. 独自ドメインを利用する場合は次節の手順で DNS / CNAME を設定
+4. Strapi Webhook の Secrets を登録し、Publish → GitHub Pages 更新が自動化されることを確認
+
+## GitHub Pages の独自ドメイン設定
+
+GitHub Pages は DNS で CNAME を向け、リポジトリに `CNAME` ファイルを置くことで独自ドメインを割り当てられます。以下はサブドメイン
+（例: `news.example.com`）を設定するケースの流れです。
+
+1. ドメイン管理サービスで `news.example.com` の **CNAME レコード**を作成し、値を `your-account.github.io`（GitHub ユーザー名に合わせ
+   て変更）へ向けます。ルートドメインを使う場合は DNS プロバイダーの ALIAS / ANAME 機能を利用してください。
+2. リポジトリの `web/public/CNAME` に独自ドメインを 1 行だけ記述します。静的ビルド時に `dist/CNAME` が生成され、GitHub Pages が認識
+   します。
+   ```bash
+   echo "news.example.com" > web/public/CNAME
+   ```
+3. GitHub リポジトリの **Settings → Pages → Custom domain** に `news.example.com` を入力し、`Enforce HTTPS` にチェックを入れます。
+4. DNS 伝播後（数分〜最大 24 時間）、`https://news.example.com` へアクセスして証明書が GitHub Pages から発行されていることを確認しま
+   す。
+5. Astro 側の `.env` で `SITE_URL=https://news.example.com`、`PUBLIC_TWITCH_PARENT_HOSTS` に `news.example.com` を追加し、再ビ
+   ルドします。必要に応じて `robots.txt` や OGP 設定も更新してください。
+
+> **Tip**: Cloudflare 等の CDN を併用する場合は、CNAME を CDN の提供するエンドポイントへ向け、Pages 側ではサブドメインを維持した
+> まま HTTPS を有効化します。Cloudflare の場合は SSL/TLS を `Full (Strict)` に設定し、`orange-cloud` を ON にしておくとよいでしょ
+> う。
 
 ---
 
