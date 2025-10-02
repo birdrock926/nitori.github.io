@@ -91,6 +91,8 @@
 
 本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
+> **最終検証 (2025-10-02 JST)**: Node.js 20.18 系 + npm 10.8 系 (Linux) で `/cms`・`/web` の `npm install` を実行し、依存解決まで確認しました。`/web` の `npm run build` は完走済みです。一方、Strapi (`/cms`) の `npm run build` / `npm run develop` は本コンテナ環境では Vite/Esbuild 実行時に `Bus error` → `SIGBUS`、`ERR_UNSUPPORTED_DIR_IMPORT` (`lodash/fp`) により失敗することを確認しています。手元では `esbuild@0.21.5` の導入と `STRAPI_ADMIN_BUNDLER=webpack` の併用でも解消しなかったため、公式 Docker イメージまたは Node 18 LTS 上での実行を推奨します。詳細な回避策は「トラブルシューティング」を参照してください。
+
 ## 事前要件
 - Node.js 20 LTS
 - npm 10 以上
@@ -335,6 +337,9 @@ Cloudflare Pages ではプロジェクト設定から独自ドメインを追加
 - **Strapi が起動しない**：`npm run build -- --clean` を実行し、`node_modules` を削除後再インストール
 - **Webhook が失敗する**：Strapi ログと GitHub Actions の `workflow_dispatch` イベントログを確認
 - **コメントが投稿できない**：CAPTCHA、BAN、禁止語リスト、URL ホワイトリストの各設定を確認
+- **Strapi ビルド時の `Bus error` (SIGBUS)**：Esbuild/Vite が仮想環境でクラッシュする既知事象です。`npm install esbuild@0.21.5` を実行し、`ESBUILD_BINARY_PATH=$(pwd)/node_modules/esbuild/bin/esbuild npm run build` を試してください。改善しない場合は `STRAPI_ADMIN_BUNDLER=webpack npm run build` か、公式の `strapi/strapi:5` Docker イメージ（Node 18 ベース）でビルドする運用に切り替えてください。
+- **`ERR_UNSUPPORTED_DIR_IMPORT: lodash/fp`**：Node.js 20 の ESM 解決仕様に起因します。`NODE_OPTIONS=--experimental-specifier-resolution=node npm run develop` を設定するか、Docker/Node 18 環境で実行してください。
+- **npm error ENOENT: Cannot cd into ... typescript**：`/cms/package.json` の `devDependencies` に `"typescript": "5.4.5"` を追加し、`rm -rf node_modules package-lock.json && npm install` を実行してください。本リポジトリには修正済みの定義が含まれています。
 
 ---
 

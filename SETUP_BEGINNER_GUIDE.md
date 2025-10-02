@@ -85,7 +85,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
 > `.env` はチーム共有時に漏洩しないよう、1Password・Vault 等のシークレットマネージャーで管理しましょう。メールやチャットに平文で貼り付けるのは避けてください。
 
 ## 4. 依存パッケージをインストールする
-プロジェクト直下で以下のコマンドを実行すると、CMS と Web の依存が順番にインストールできます。初回は数分かかることがあります。
+プロジェクト直下で以下のコマンドを実行すると、CMS と Web の依存が順番にインストールできます。初回は数分かかることがあります。`/cms` 側では `typescript@5.4.5` を devDependencies に含めており、`ENOENT: Cannot cd into ... /node_modules/typescript` エラーを防いでいます。
 
 ```bash
 # CMS の依存をインストール
@@ -116,7 +116,7 @@ npm run build
 cd ..
 ```
 
-いずれのコマンドもエラーが表示されなければ成功です。
+`/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` は本ドキュメント執筆時点のコンテナ環境では Vite/Esbuild が `Bus error` (SIGBUS) を発生させる既知問題があり、公式の `strapi/strapi:5` Docker イメージ（Node 18 ベース）やホストマシン上の Node 18 LTS で実行すると安定します。Node 20 でどうしてもローカルビルドしたい場合は `npm install esbuild@0.21.5` 実行後に `ESBUILD_BINARY_PATH=$(pwd)/node_modules/esbuild/bin/esbuild npm run build`、あるいは `STRAPI_ADMIN_BUNDLER=webpack npm run build` を試してみてください。
 
 ## 6. 開発サーバーを立ち上げて確認する
 ### 6-1. Strapi CMS
