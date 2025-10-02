@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getTwitchParentHosts } from '@lib/strapi';
 
 type Props = {
   channel?: string;
@@ -13,14 +14,17 @@ const TwitchPlayer = ({ channel, vodId, title }: Props) => {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      });
-    }, { threshold: 0.25 });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setVisible(true);
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.25 }
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -28,22 +32,29 @@ const TwitchPlayer = ({ channel, vodId, title }: Props) => {
   const src = useMemo(() => {
     if (typeof window === 'undefined') return '';
     const params = new URLSearchParams({
-      parent: window.location.hostname,
       autoplay: 'false',
       muted: 'true',
     });
+    const parents = getTwitchParentHosts();
+    parents.forEach((host) => params.append('parent', host));
     if (channel) params.set('channel', channel);
     if (vodId) params.set('video', vodId);
     return `https://player.twitch.tv/?${params.toString()}`;
   }, [channel, vodId]);
 
   return (
-    <div ref={ref} style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '1rem', overflow: 'hidden' }}>
+    <div
+      ref={ref}
+      style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '1rem', overflow: 'hidden' }}
+      aria-live="polite"
+    >
       {isVisible && src ? (
         <iframe
           src={src}
-          title={title ?? 'Twitch Player'}
+          title={title ?? 'Twitchプレイヤー'}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
           allowFullScreen
+          loading="lazy"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: '0' }}
         />
       ) : (
@@ -58,7 +69,7 @@ const TwitchPlayer = ({ channel, vodId, title }: Props) => {
             color: 'var(--color-muted)',
           }}
         >
-          読み込み中…
+          Twitchプレイヤーを読み込み中…
         </div>
       )}
     </div>

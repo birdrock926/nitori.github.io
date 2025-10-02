@@ -17,9 +17,19 @@ export const GA = {
   measurementId: import.meta.env.GA_MEASUREMENT_ID ?? '',
 };
 
+const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim())
+  .filter(Boolean);
+
 export const STRAPI = {
   url: import.meta.env.STRAPI_API_URL ?? '',
   token: import.meta.env.STRAPI_API_TOKEN ?? '',
+  mediaUrl: import.meta.env.STRAPI_MEDIA_URL ?? import.meta.env.STRAPI_API_URL ?? '',
+};
+
+export const TWITCH = {
+  parentHosts: twitchHosts,
 };
 
 export const CONSENT_DEFAULT_REGION = import.meta.env.CONSENT_DEFAULT_REGION ?? 'JP';

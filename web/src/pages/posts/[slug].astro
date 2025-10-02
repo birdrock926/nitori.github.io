@@ -65,7 +65,7 @@ const jsonLd = {
   headline: post.title,
   datePublished: post.publishedAt,
   author: post.author ? { '@type': 'Person', name: post.author } : undefined,
-  image: post.cover?.url,
+  image: post.cover?.url ? [post.cover.url] : undefined,
   mainEntityOfPage: Astro.url.href,
   publisher: {
     '@type': 'Organization',
@@ -78,7 +78,7 @@ const jsonLd = {
 };
 
 ---
-<BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href}>
+<BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
   <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
   <article class="card" style="gap: 2rem;">
     <header>

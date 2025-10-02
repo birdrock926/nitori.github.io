@@ -1,8 +1,13 @@
-import { STRAPI } from '@config/site';
+import { STRAPI, TWITCH } from '@config/site';
 
-const defaultHeaders: Record<string, string> = STRAPI.token
-  ? { Authorization: `Bearer ${STRAPI.token}` }
-  : {};
+export type MediaFormat = {
+  url: string;
+  width?: number;
+  height?: number;
+  size?: number;
+  mime?: string;
+  ext?: string;
+};
 
 export type Media = {
   url: string;
@@ -10,7 +15,7 @@ export type Media = {
   caption?: string;
   width?: number;
   height?: number;
-  formats?: Record<string, { url: string }>;
+  formats?: Record<string, MediaFormat>;
 };
 
 export type Tag = {
@@ -73,7 +78,99 @@ export type RankingItem = {
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
+const ensureAbsoluteUrl = (input?: string | null) => {
+  if (!input) return undefined;
+  if (/^https?:\/\//i.test(input)) {
+    return input;
+  }
+  const base = STRAPI.mediaUrl?.replace(/\/$/, '') || STRAPI.url?.replace(/\/$/, '');
+  if (!base) return input;
+  return `${base}${input.startsWith('/') ? '' : '/'}${input}`;
+};
+
+const parseMedia = (value: any): Media | undefined => {
+  if (!value) return undefined;
+  if (value.data?.attributes) {
+    return value.data.attributes as Media;
+  }
+  if (value.attributes) {
+    return value.attributes as Media;
+  }
+  return value as Media;
+};
+
+const normalizeMedia = (media: Media | undefined) => {
+  if (!media) return undefined;
+  const normalizedFormats = media.formats
+    ? Object.fromEntries(
+        Object.entries(media.formats)
+          .filter(([, format]) => Boolean(format?.url))
+          .map(([key, format]) => [
+            key,
+            {
+              ...format,
+              url: ensureAbsoluteUrl(format?.url) ?? format?.url ?? '',
+            },
+          ])
+      )
+    : undefined;
+
+  return {
+    ...media,
+    url: ensureAbsoluteUrl(media.url) ?? media.url,
+    formats: normalizedFormats,
+  } satisfies Media;
+};
+
+const normalizeBlock = (block: any): DynamicZoneBlock => {
+  if (!block || !block.__component) {
+    return block;
+  }
+
+  if (block.__component === 'media.figure') {
+    const media = normalizeMedia(parseMedia(block.image));
+    if (!media) {
+      return block;
+    }
+    return {
+      __component: 'media.figure',
+      image: media,
+      alt: block.alt ?? media.alternativeText ?? '',
+      caption: block.caption ?? media.caption,
+      credit: block.credit,
+    };
+  }
+
+  if (block.__component === 'media.gallery') {
+    const items = Array.isArray(block.items)
+      ? block.items
+          .map((item: any) => {
+            const media = normalizeMedia(parseMedia(item.image));
+            if (!media) return undefined;
+            return {
+              image: media,
+              alt: item.alt ?? media.alternativeText ?? '',
+            };
+          })
+          .filter(Boolean)
+      : [];
+    return {
+      __component: 'media.gallery',
+      items: items as { image: Media; alt: string }[],
+    };
+  }
+
+  return block as DynamicZoneBlock;
+};
+
+const defaultHeaders: Record<string, string> = STRAPI.token
+  ? { Authorization: `Bearer ${STRAPI.token}` }
+  : {};
+
 const createUrl = (path: string, searchParams?: Record<string, string | number | undefined>) => {
+  if (!apiUrl) {
+    return undefined;
+  }
   const url = new URL(`${apiUrl}${path}`);
   if (searchParams) {
     Object.entries(searchParams).forEach(([key, value]) => {
@@ -86,13 +183,13 @@ const createUrl = (path: string, searchParams?: Record<string, string | number |
 };
 
 export const fetchJSON = async <T>(path: string, params?: Record<string, string | number | undefined>) => {
-  if (!apiUrl) {
+  const url = createUrl(path, params);
+  if (!url) {
     if (path.includes('/comments')) {
       return { data: [], nextCursor: null } as T;
     }
     return { data: [] } as T;
   }
-  const url = createUrl(path, params);
   const response = await fetch(url, {
     headers: {
       'Content-Type': 'application/json',
@@ -116,20 +213,20 @@ export type PostListResponse = {
       author?: string;
       source?: string;
       cover?: {
-        data: {
-          attributes: Media;
-        } | null;
+        data: { attributes: Media } | null;
       } | null;
       tags: {
         data: { id: number; attributes: { name: string; slug: string } }[];
       };
-      blocks: DynamicZoneBlock[];
+      blocks: any[];
     };
   }[];
 };
 
-const mapPost = (apiPost: PostListResponse['data'][0]) => {
+const mapPost = (apiPost: PostListResponse['data'][number]) => {
   const attr = apiPost.attributes;
+  const cover = normalizeMedia(parseMedia(attr.cover?.data));
+
   return {
     id: apiPost.id,
     title: attr.title,
@@ -138,37 +235,40 @@ const mapPost = (apiPost: PostListResponse['data'][0]) => {
     publishedAt: attr.publishedAt,
     author: attr.author,
     source: attr.source,
-    cover: attr.cover?.data?.attributes,
+    cover,
     tags: attr.tags.data.map((tag) => ({ id: tag.id, ...tag.attributes })),
-    blocks: attr.blocks,
+    blocks: Array.isArray(attr.blocks) ? attr.blocks.map(normalizeBlock) : [],
   } satisfies Post;
 };
 
+const defaultPostParams = {
+  populate: 'deep',
+  'filters[publishedAt][$notNull]': 'true',
+} as const;
+
 export const getLatestPosts = async (limit = 12) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
+    ...defaultPostParams,
     'pagination[pageSize]': limit,
     sort: 'publishedAt:desc',
-    populate: 'cover,tags,blocks',
-    'filters[publishedAt][$notNull]': 'true',
   });
   return data.data.map(mapPost);
 };
 
 export const getAllPosts = async () => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
-    sort: 'publishedAt:desc',
-    populate: 'cover,tags,blocks',
-    'filters[publishedAt][$notNull]': 'true',
+    ...defaultPostParams,
     'pagination[pageSize]': 100,
+    sort: 'publishedAt:desc',
   });
   return data.data.map(mapPost);
 };
 
 export const getPostBySlug = async (slug: string) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
+    ...defaultPostParams,
     'filters[slug][$eq]': slug,
-    'filters[publishedAt][$notNull]': 'true',
-    populate: 'cover,tags,blocks',
+    sort: 'publishedAt:desc',
   });
   const post = data.data.map(mapPost)[0];
   return post;
@@ -185,9 +285,8 @@ export const getTags = async () => {
 
 export const getPostsByTag = async (slug: string) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
+    ...defaultPostParams,
     'filters[tags][slug][$eq]': slug,
-    'filters[publishedAt][$notNull]': 'true',
-    populate: 'cover,tags,blocks',
     sort: 'publishedAt:desc',
   });
   return data.data.map(mapPost);
@@ -214,9 +313,22 @@ export type CommentNode = {
 };
 
 export const fetchComments = async (postSlug: string, cursor?: string) => {
-  const data = await fetchJSON<{ data: CommentNode[]; nextCursor: string | null }>('/api/comments/list', {
-    postSlug,
-    cursor,
-  });
+  const data = await fetchJSON<{ data: CommentNode[]; nextCursor: string | null }>(
+    '/api/comments/list',
+    {
+      postSlug,
+      cursor,
+    }
+  );
   return data;
+};
+
+export const getTwitchParentHosts = () => {
+  const fallback = typeof window !== 'undefined' ? window.location.hostname : undefined;
+  const hosts = new Set<string>();
+  TWITCH.parentHosts.forEach((host) => hosts.add(host));
+  if (fallback) {
+    hosts.add(fallback);
+  }
+  return Array.from(hosts).filter(Boolean);
 };

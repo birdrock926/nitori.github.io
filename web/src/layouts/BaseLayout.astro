@@ -7,15 +7,43 @@ import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI } from '@config/site'
 
 const { title = SITE_TITLE, description = SITE_DESCRIPTION, image, canonical, region = 'JP' } = Astro.props;
 const pageTitle = title === SITE_TITLE ? title : `${title} | ${SITE_TITLE}`;
+
+const parseOrigin = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    return new URL(value).origin;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const apiOrigin = parseOrigin(STRAPI.url);
+const mediaOrigin = parseOrigin(STRAPI.mediaUrl);
+
 const connectSrc = [
   "'self'",
-  STRAPI.url,
+  apiOrigin,
+  mediaOrigin,
   'https://www.google-analytics.com',
   'https://pagead2.googlesyndication.com',
 ]
   .filter(Boolean)
   .join(' ');
-const csp = `default-src 'self'; img-src 'self' data: https://www.google-analytics.com https://pagead2.googlesyndication.com; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://pagead2.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://www.youtube.com https://player.twitch.tv https://www.google.com https://ads.google.com https://googleads.g.doubleclick.net; connect-src ${connectSrc};`;
+
+const imgSrc = [
+  "'self'",
+  'data:',
+  'https://www.google-analytics.com',
+  'https://pagead2.googlesyndication.com',
+  'https://i.ytimg.com',
+  'https://static-cdn.jtvnw.net',
+  apiOrigin,
+  mediaOrigin,
+]
+  .filter(Boolean)
+  .join(' ');
+
+const csp = `default-src 'self'; img-src ${imgSrc}; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://pagead2.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://www.youtube.com https://player.twitch.tv https://www.google.com https://ads.google.com https://googleads.g.doubleclick.net; connect-src ${connectSrc};`;
 const regionJSON = JSON.stringify(region);
 const measurementId = GA.measurementId;
 const measurementJSON = JSON.stringify(measurementId);
