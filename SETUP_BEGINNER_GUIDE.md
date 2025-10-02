@@ -27,28 +27,61 @@ cd birdrock926.github.io
 ```
 
 ## 3. 環境変数ファイルを整える
-Strapi と Astro では `.env` に接続情報やシークレットを保存します。まずはサンプルをコピーしてから中身を編集しましょう。
+Strapi と Astro では `.env` に接続情報やシークレットを保存します。まずはサンプルをコピーし、各変数の意味を理解したうえで編集しましょう。
 
-```bash
-# CMS 用
-cd cms
-cp .env.sample .env
-# 必要な値 (APP_KEYS や JWT_SECRET など) をエディタで設定
-# 作業が終わったらプロジェクトのルートに戻る
-cd ..
+### 3-1. CMS (/cms) の `.env`
+1. サンプルをコピー
+   ```bash
+   cd cms
+   cp .env.sample .env
+   ```
+2. シークレット値を生成
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+   ```
+   出力された値を `APP_KEYS`（4 個分をカンマで連結）、`API_TOKEN_SALT`、`ADMIN_JWT_SECRET`、`JWT_SECRET`、`HASH_PEPPER`、`ALIAS_SALT` に貼り付けます。
+3. 主要項目のチェック
 
-# Web 用
-cd web
-cp .env.sample .env
-# STRAPI_API_URL などをエディタで設定
-cd ..
-```
+   | カテゴリ | 変数 | 内容 | 推奨値・例 |
+   | --- | --- | --- | --- |
+   | 基本 | `PUBLIC_URL` | CMS を公開する URL | `https://cms.example.com` |
+   |  | `PUBLIC_FRONT_ORIGINS` | フロントから API を呼べるオリジン | `https://example.github.io` |
+   | CAPTCHA | `CAPTCHA_PROVIDER` | `turnstile` または `recaptcha` | `turnstile` |
+   |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
+   | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
+   | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → GitHub Actions の連携設定 | `owner=your-org` など |
+   | DB | `DATABASE_CLIENT` | `sqlite`・`postgres` など | 初期は `sqlite` |
+   | アップロード | `UPLOAD_PROVIDER` | `local` or `oci` | 帯域節約には `oci` |
+   |  | `OCI_*` 一式 | Object Storage のバケット・キー情報 | OCI コンソールで発行した値 |
+   | メール | `SMTP_*` | 通知メール設定 | Gmail や SendGrid 等 |
 
-`.env` に設定する主な値:
-- `STRAPI_API_URL`: 例) `https://cms.example.com`
-- `STRAPI_MEDIA_URL`: OCI Object Storage で公開したバケット URL
-- `DELETE_REQUEST_FORM_URL`: Google フォームの共有リンク
-- CMS 側は `APP_KEYS` や `API_TOKEN_SALT` など Strapi が求める値を乱数で生成してください。
+4. OCI Object Storage を利用する場合は `UPLOAD_PROVIDER=oci` とし、`OCI_PUBLIC_URL` には公開バケットのパス（末尾は `/o`）を入力します。
+5. 編集が終わったら `cd ..` でプロジェクトルートに戻ります。
+
+### 3-2. Web (/web) の `.env`
+1. サンプルをコピー
+   ```bash
+   cd web
+   cp .env.sample .env
+   ```
+2. 主要項目の確認
+
+   | 変数 | 内容 | 推奨値・例 |
+   | --- | --- | --- |
+   | `STRAPI_API_URL` | CMS API のベース URL | `https://cms.example.com` |
+   | `STRAPI_API_TOKEN` | Strapi で発行した Read-only API トークン | `strapi_pat_xxx` |
+   | `STRAPI_MEDIA_URL` | 画像のホスト URL（OCI の公開パス） | `https://objectstorage.ap-tokyo-1.oraclecloud.com/.../o` |
+   | `SITE_URL` | 公開サイトの URL（Pages or 独自ドメイン） | `https://example.github.io` |
+   | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォームへのリンク | Google フォームの「回答を収集」URL |
+   | `GA_MEASUREMENT_ID` | GA4 の測定 ID。不要なら空欄 | `G-XXXXXXXXXX` |
+   | `ADSENSE_CLIENT_ID` / `ADSENSE_SLOT_*` | AdSense のクライアント / 広告ユニット ID | `ca-pub-...` |
+   | `CONSENT_DEFAULT_REGION` | 同意モードの初期判定地域 | `JP` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り） | `example.github.io,www.example.com` |
+
+3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
+4. 編集後は `cd ..` でルートに戻ります。
+
+> `.env` はチーム共有時に漏洩しないよう、1Password・Vault 等のシークレットマネージャーで管理しましょう。メールやチャットに平文で貼り付けるのは避けてください。
 
 ## 4. 依存パッケージをインストールする
 プロジェクト直下で以下のコマンドを実行すると、CMS と Web の依存が順番にインストールできます。初回は数分かかることがあります。

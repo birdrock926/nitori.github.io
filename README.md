@@ -108,7 +108,60 @@
 
 # 環境変数
 
-各パッケージ直下に `.env.sample` を用意しています。必要な値を `.env` に複製し、値を設定してください。
+各パッケージ直下に `.env.sample` を用意しています。必要な値を `.env` に複製し、値を設定してください。以下に、プロジェクトで利用する主な環境変数と推奨する設定手順をまとめます。
+
+### /cms 用 `.env`
+1. サンプルをコピーします。
+   ```bash
+   cd cms
+   cp .env.sample .env
+   ```
+2. `node` コマンドで乱数を生成し、シークレットに設定します。
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+   ```
+   出力された 96 桁の 16 進文字列を `APP_KEYS`（4 個ぶんをカンマ区切り）、`API_TOKEN_SALT`、`ADMIN_JWT_SECRET`、`JWT_SECRET`、`HASH_PEPPER`、`ALIAS_SALT` に割り当ててください。
+3. 代表的なキーの説明:
+
+   | 変数名 | 説明 | 例 |
+   | --- | --- | --- |
+   | `PUBLIC_URL` | CMS を公開する URL。HTTPS で運用します。 | `https://cms.example.com` |
+   | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.github.io,https://preview.example.com` |
+   | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
+   | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
+   | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
+   | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
+   | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
+   | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
+   | `GITHUB_WORKFLOW_*` | Strapi Webhook で GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
+
+4. `UPLOAD_PROVIDER=oci` を使う場合は、OCI コンソールで作成したユーザーのアクセスキーとシークレットを `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` に設定し、`OCI_PUBLIC_URL` に公開バケットのベース URL を入力してください。
+5. `.env` を保存したら `cd ..` でプロジェクトルートに戻ります。
+
+### /web 用 `.env`
+1. サンプルをコピーします。
+   ```bash
+   cd web
+   cp .env.sample .env
+   ```
+2. 主要なキーの説明:
+
+   | 変数名 | 説明 | 例 |
+   | --- | --- | --- |
+   | `STRAPI_API_URL` | CMS の公開 API エンドポイント。 | `https://cms.example.com` |
+   | `STRAPI_API_TOKEN` | Strapi で発行した API Token（Public 読み取り用）。 | `strapi_pat_xxx` |
+   | `STRAPI_MEDIA_URL` | 画像配信用のベース URL。OCI Object Storage の公開 URL を指定。 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/n/namespace/b/bucket/o` |
+   | `SITE_URL` | GitHub Pages や独自ドメインの公開 URL。 | `https://example.github.io` |
+   | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。 | `example.github.io,www.example.com` |
+   | `GA_MEASUREMENT_ID` | Google Analytics 4 の測定 ID（利用しない場合は空欄可）。 | `G-XXXXXXXXXX` |
+   | `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
+   | `CONSENT_DEFAULT_REGION` | 同意ステータスの初期値を決める地域コード。 | `JP` |
+
+3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」から `Read-only` で発行し、ヘッダー `Authorization: Bearer <token>` で利用できるものを貼り付けます。
+4. `.env` 保存後は `cd ..` でルートに戻ります。
+
+> **セキュリティメモ**: `.env` ファイルは Git にコミットしないよう `.gitignore` 済みです。必要に応じて 1Password や Vault などのシークレットストアで共有し、平文でのやり取りは避けてください。
 
 ---
 
