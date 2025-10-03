@@ -28,10 +28,13 @@ const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
   .map((host) => host.trim())
   .filter(Boolean);
 
+const fallbackStrapiUrl =
+  import.meta.env.STRAPI_API_URL || (import.meta.env.DEV ? 'http://localhost:1337' : '');
+
 export const STRAPI = {
-  url: import.meta.env.STRAPI_API_URL ?? '',
+  url: fallbackStrapiUrl,
   token: import.meta.env.STRAPI_API_TOKEN ?? '',
-  mediaUrl: import.meta.env.STRAPI_MEDIA_URL ?? import.meta.env.STRAPI_API_URL ?? '',
+  mediaUrl: import.meta.env.STRAPI_MEDIA_URL ?? fallbackStrapiUrl,
 };
 
 export const TWITCH = {

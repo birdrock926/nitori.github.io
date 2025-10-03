@@ -52,7 +52,11 @@
   };
 
   const persistConsent = (mode) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(mode));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mode));
+    } catch (error) {
+      console.warn('[consent] Failed to persist decision, continuing without storage.', error);
+    }
   };
 
   const saved = loadConsent();
@@ -63,14 +67,18 @@
     showBanner();
   }
 
+  const finalize = (consent) => {
+    applyConsent(consent);
+    persistConsent(consent);
+    hideBanner();
+  };
+
   acceptBtn?.addEventListener('click', () => {
     const consent = {
       ad_storage: 'granted',
       analytics_storage: 'granted',
     };
-    applyConsent(consent);
-    persistConsent(consent);
-    hideBanner();
+    finalize(consent);
   });
 
   denyBtn?.addEventListener('click', () => {
@@ -78,8 +86,6 @@
       ad_storage: 'denied',
       analytics_storage: 'denied',
     };
-    applyConsent(consent);
-    persistConsent(consent);
-    hideBanner();
+    finalize(consent);
   });
 </script>
