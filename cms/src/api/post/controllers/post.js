@@ -10,13 +10,21 @@ export default factories.createCoreController('api::post.post', () => ({
       },
     };
 
-    const populate = ctx.query?.populate ?? {
-      cover: true,
+    const defaultPopulate = {
+      cover: {
+        populate: '*',
+      },
       tags: true,
       blocks: {
         populate: '*',
       },
     };
+
+    const incomingPopulate = ctx.query?.populate;
+    const populate =
+      !incomingPopulate || incomingPopulate === 'deep' || incomingPopulate === '*'
+        ? defaultPopulate
+        : incomingPopulate;
 
     ctx.query = {
       ...ctx.query,

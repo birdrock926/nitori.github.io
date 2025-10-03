@@ -258,7 +258,6 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
 };
 
 const defaultPostParams = {
-  populate: 'deep',
   'filters[publishedAt][$notNull]': 'true',
 } as const;
 
