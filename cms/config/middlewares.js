@@ -1,4 +1,13 @@
-export default [
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const publicDir = resolve(currentDir, '../public');
+const faviconRelativePath = './public/favicon.ico';
+const hasFavicon = existsSync(resolve(publicDir, 'favicon.ico'));
+
+const middlewares = [
   'strapi::errors',
   {
     name: 'strapi::security',
@@ -28,6 +37,15 @@ export default [
   'strapi::query',
   'strapi::body',
   'strapi::session',
-  'strapi::favicon',
+  hasFavicon
+    ? {
+        name: 'strapi::favicon',
+        config: {
+          path: faviconRelativePath,
+        },
+      }
+    : null,
   'strapi::public',
-];
+].filter(Boolean);
+
+export default middlewares;
