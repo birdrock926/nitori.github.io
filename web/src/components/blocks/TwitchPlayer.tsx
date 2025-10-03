@@ -49,7 +49,7 @@ const TwitchPlayer = ({ channel, vodId, title }: Props) => {
         style={{
           position: 'relative',
           aspectRatio: '16 / 9',
-          width: 'min(100%, 640px)',
+          width: 'min(100%, 560px)',
           borderRadius: '1rem',
           overflow: 'hidden',
           boxShadow: '0 20px 45px rgba(15, 23, 42, 0.18)',

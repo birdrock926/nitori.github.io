@@ -518,7 +518,7 @@ export const getAllPosts = async () => {
 
 export const getPostBySlug = async (slug: string) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'filters[slug][$eq]': slug,
+    'filters[slug][$eqi]': slug,
     sort: 'publishedAt:desc',
   });
   const items = ensureArray<PostListResponse['data'][number]>(data?.data);
@@ -540,7 +540,7 @@ export const getTags = async () => {
 
 export const getPostsByTag = async (slug: string) => {
   const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'filters[tags][slug][$eq]': slug,
+    'filters[tags][slug][$eqi]': slug,
     sort: 'publishedAt:desc',
   });
   const items = ensureArray<PostListResponse['data'][number]>(data?.data);

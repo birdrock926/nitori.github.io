@@ -70,7 +70,11 @@ const jsonLd = {
   <article class="card" style="gap: 2rem;">
     <header class="article-header">
       <div class="article-header__top">
-        <p class="tag-chip article-header__tags">{post.tags.map((tag) => tag.name).join(' / ')}</p>
+        <div class="article-header__tags" aria-label="記事のタグ">
+          {post.tags.map((tag) => (
+            <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+          ))}
+        </div>
         {DELETE_REQUEST.formUrl && (
           <a
             href={DELETE_REQUEST.formUrl}

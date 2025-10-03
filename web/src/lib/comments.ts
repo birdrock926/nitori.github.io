@@ -31,7 +31,14 @@ export const submitComment = async (payload: SubmitCommentPayload) => {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || '投稿に失敗しました');
+    let message: string | undefined;
+    try {
+      const parsed = JSON.parse(text);
+      message = parsed?.error?.message || parsed?.message;
+    } catch (error) {
+      // ignore parse error and fall back to raw text
+    }
+    throw new Error(message || text || '投稿に失敗しました');
   }
   return (await response.json()) as { data: { comment: SubmittedComment; editKey: string } };
 };

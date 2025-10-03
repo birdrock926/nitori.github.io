@@ -8,13 +8,15 @@ import { getLatestPosts, getRanking } from '@lib/strapi';
 import { ADSENSE } from '@config/site';
 
 const posts = await getLatestPosts(12);
-const featured = posts[0];
-const secondary = posts.slice(1, 3);
-const rest = posts.slice(3);
+const heroCandidates = posts.slice(0, 3);
+const showHero = heroCandidates.length >= 2;
+const featured = showHero ? heroCandidates[0] : null;
+const secondary = showHero ? heroCandidates.slice(1) : [];
+const listing = showHero ? posts.slice(3) : posts;
 const ranking = await getRanking();
 ---
 <BaseLayout title="ゲームニュース速報" description="ゲーム最新ニュースと配信まとめを最速でお届け" canonical={Astro.url.href}>
-  {featured && secondary.length > 0 && <Hero featured={featured} secondary={secondary} />}
+  {showHero && featured && secondary.length > 0 && <Hero featured={featured} secondary={secondary} />}
   <section class="section" aria-labelledby="latest-heading">
     <header class="section-heading">
       <span class="section-eyebrow">Latest</span>
@@ -24,7 +26,7 @@ const ranking = await getRanking();
       </div>
     </header>
     <div class="post-grid">
-      {rest.map((post) => (
+      {listing.map((post) => (
         <PostCard post={post} />
       ))}
     </div>

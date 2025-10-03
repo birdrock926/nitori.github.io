@@ -54,6 +54,8 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [notification, setNotification] = useState<Notification | null>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const [honeypot, setHoneypot] = useState('');
+  const formStartRef = useRef<number>(Date.now());
+  const hasInteractedRef = useRef(false);
   const fallbackAlias = defaultAlias?.trim() || '名無しのプレイヤーさん';
   const aliasInputId = 'comment-alias';
   const aliasHelpId = 'comment-alias-help';
@@ -86,8 +88,17 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
     setAlias('');
     setBody('');
     setParentId(null);
+    formStartRef.current = Date.now();
+    hasInteractedRef.current = false;
     loadComments();
   }, [postSlug]);
+
+  const markInteraction = () => {
+    if (!hasInteractedRef.current) {
+      hasInteractedRef.current = true;
+      formStartRef.current = Date.now();
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -103,7 +114,7 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
         body,
         alias: trimmedAlias ? trimmedAlias : undefined,
         honeypot,
-        sentAt: Date.now(),
+        sentAt: formStartRef.current,
       });
       const { comment, editKey } = res.data;
       const normalized = normalizeNode({ ...comment, children: comment.children ?? [] });
@@ -115,7 +126,13 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
       }
       setBody('');
       setParentId(null);
-      announce({ message: 'コメントを受け付けました。モデレーションをお待ちください。', type: 'success' });
+      formStartRef.current = Date.now();
+      hasInteractedRef.current = false;
+      const successMessage =
+        comment.status === 'published'
+          ? 'コメントを公開しました'
+          : 'コメントを受け付けました。モデレーションをお待ちください。';
+      announce({ message: successMessage, type: 'success' });
     } catch (err: any) {
       announce({ message: err.message ?? '投稿に失敗しました', type: 'error' });
     }
@@ -162,7 +179,11 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             type="text"
             value={alias}
             maxLength={24}
-            onChange={(event) => setAlias(event.target.value)}
+            onFocus={markInteraction}
+            onChange={(event) => {
+              markInteraction();
+              setAlias(event.target.value);
+            }}
             placeholder={fallbackAlias}
             aria-describedby={aliasHelpId}
             autoComplete="nickname"
@@ -184,7 +205,11 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             required
             rows={5}
             value={body}
-            onChange={(event) => setBody(event.target.value)}
+            onFocus={markInteraction}
+            onChange={(event) => {
+              markInteraction();
+              setBody(event.target.value);
+            }}
             style={{
               padding: '0.75rem',
               borderRadius: '0.75rem',

@@ -1,6 +1,6 @@
 ---
 import type { Post } from '@lib/strapi';
-import { formatDateTime, relative } from '@lib/format';
+import { formatDateTime, relative, toMultilineHtml } from '@lib/format';
 
 const { featured, secondary } = Astro.props as { featured: Post; secondary: Post[] };
 ---
@@ -8,12 +8,12 @@ const { featured, secondary } = Astro.props as { featured: Post; secondary: Post
   <article class="hero-feature card">
     <p class="hero-eyebrow">注目トピック</p>
     <h1 id="hero-heading" class="hero-title gradient-text">{featured.title}</h1>
-    <p class="hero-summary muted">{featured.summary}</p>
+    <p class="hero-summary muted" set:html={toMultilineHtml(featured.summary)}></p>
     <div class="hero-meta">
       <time dateTime={featured.publishedAt} class="muted">
         {formatDateTime(featured.publishedAt)}（{relative(featured.publishedAt)}）
       </time>
-      {featured.tags.slice(0, 3).map((tag) => (
+      {featured.tags.map((tag) => (
         <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
       ))}
     </div>
@@ -31,7 +31,7 @@ const { featured, secondary } = Astro.props as { featured: Post; secondary: Post
           {post.tags[0] && <a class="tag-chip" href={`/tags/${post.tags[0].slug}/`}>{post.tags[0].name}</a>}
         </div>
         <h2 class="hero-secondary-title"><a href={`/posts/${post.slug}/`}>{post.title}</a></h2>
-        <p class="hero-secondary-summary muted">{post.summary}</p>
+        <p class="hero-secondary-summary muted" set:html={toMultilineHtml(post.summary)}></p>
       </article>
     ))}
   </aside>
