@@ -1,0 +1,38 @@
+{
+  "roles": [
+    {
+      "name": "Public",
+      "description": "Default role given to unauthenticated user.",
+      "type": "public",
+      "permissions": {
+        "api::post": {
+          "controllers": {
+            "post": {
+              "actions": ["find", "findOne"]
+            }
+          }
+        },
+        "api::comment": {
+          "controllers": {
+            "comment": {
+              "actions": ["list", "submit", "report", "deleteOwn"]
+            }
+          }
+        },
+        "api::tag": {
+          "controllers": {
+            "tag": {
+              "actions": ["find", "findOne"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Authenticated",
+      "description": "Default role given to authenticated user.",
+      "type": "authenticated",
+      "permissions": {}
+    }
+  ]
+}
