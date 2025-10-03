@@ -161,7 +161,9 @@ npm run dev
 - Strapi のサイドバー「Content Manager → Comments」を開くと、最新投稿が `status` 列付きで表示されます。初期状態は `pending` なので、内容を確認して問題なければ `published` に更新してください。
 - 投稿者本人のみに見せたい場合は `shadow`、完全に非表示にしたい場合は `hidden` を選択します。変更すると API レスポンスに即時反映されます。
 - 公式アカウントとして返信する際はコメント編集画面で `isModerator` をオンにすると、Web 側でバッジとカラーが付いた「モデレーター」表示になります。必要に応じて `alias` を編集して署名を入れてください。
+- コメント詳細の JSON 表示にある `meta.client.ip` と `meta.client.ua` で送信元 IP / User-Agent を確認できます。API から取得したい場合は管理者トークン付きで `GET /api/mod/comments/:id/meta` を叩くと同じ情報を得られます。
 - 悪質な送信元を遮断するには「Content Manager → Bans」で `ip_hash`（単一 IP）または `net_hash`（/24）を入力したレコードを追加します。`expiresAt` を設定すると期限付き BAN、空欄なら恒久 BAN です。
+- もしくは `POST /api/mod/comments/:id/ban` を呼ぶと、対象コメントの `ip_hash` / `net_hash` を自動取得して BAN を登録し、既定で過去コメントを一括削除します。履歴を残したいときはリクエストボディに `{ "purge": false }` を含めてください。
 - コメント詳細画面では `reports` リレーションから通報履歴を確認できます。閾値（既定 3 件）を超えると自動的に `hidden` へ切り替わるため、内容を確認して必要に応じて `published` へ戻してください。
 
 ## 7. OCI Always Free で CMS を公開する

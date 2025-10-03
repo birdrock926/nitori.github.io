@@ -8,7 +8,7 @@ const resolvePepper = (strapi) => {
 
 export default factories.createCoreController('api::ban.ban', ({ strapi }) => ({
   async createBan(ctx) {
-    const { ip, net, reason, expiresAt } = ctx.request.body || {};
+    const { ip, net, reason, expiresAt, purge = true } = ctx.request.body || {};
     if (!ip && !net) {
       return ctx.badRequest('IP またはネットワークを指定してください');
     }
@@ -27,7 +27,21 @@ export default factories.createCoreController('api::ban.ban', ({ strapi }) => ({
       data.expiresAt = expiresAt;
     }
     const record = await strapi.entityService.create('api::ban.ban', { data });
-    return { data: record };
+
+    let removedCount = 0;
+    if (purge) {
+      const conditions = [];
+      if (data.ip_hash) conditions.push({ ip_hash: data.ip_hash });
+      if (data.net_hash) conditions.push({ net_hash: data.net_hash });
+      if (conditions.length) {
+        const { count } = await strapi.db.query('api::comment.comment').deleteMany({
+          where: { $or: conditions },
+        });
+        removedCount = count || 0;
+      }
+    }
+
+    return { data: { ban: record, removedCount } };
   },
 
   async deleteBan(ctx) {

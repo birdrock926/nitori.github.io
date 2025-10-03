@@ -64,5 +64,21 @@ export default {
         policies: ['admin::isAuthenticatedAdmin'],
       },
     },
+    {
+      method: 'GET',
+      path: '/mod/comments/:id/meta',
+      handler: 'comment.moderatorMeta',
+      config: {
+        policies: ['admin::isAuthenticatedAdmin'],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/mod/comments/:id/ban',
+      handler: 'comment.banFromComment',
+      config: {
+        policies: ['admin::isAuthenticatedAdmin'],
+      },
+    },
   ],
 };

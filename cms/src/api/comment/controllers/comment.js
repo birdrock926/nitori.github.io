@@ -119,6 +119,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
         meta: {
           client: {
             ua,
+            ip,
             submittedAt: dayjs().toISOString(),
           },
           display: {
@@ -162,6 +163,111 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       limit: Math.min(Number(limit) || 20, 50),
     });
     return { data, nextCursor };
+  },
+
+  async moderatorMeta(ctx) {
+    const { id } = ctx.params;
+    if (!id) {
+      return ctx.badRequest('ID が必要です');
+    }
+    const comment = await strapi.entityService.findOne('api::comment.comment', id, {
+      populate: { post: { fields: ['id', 'title', 'slug'] } },
+    });
+    if (!comment) {
+      return ctx.notFound('コメントが見つかりません');
+    }
+
+    const clientMeta =
+      typeof comment.meta === 'object' && comment.meta?.client && typeof comment.meta.client === 'object'
+        ? comment.meta.client
+        : {};
+
+    return {
+      data: {
+        id: comment.id,
+        body: comment.body,
+        alias: comment.alias,
+        status: comment.status,
+        createdAt: comment.createdAt,
+        ip: clientMeta.ip || null,
+        ipHash: comment.ip_hash || null,
+        netHash: comment.net_hash || null,
+        userAgent: clientMeta.ua || null,
+        submittedAt: clientMeta.submittedAt || comment.createdAt,
+        post: comment.post
+          ? { id: comment.post.id, title: comment.post.title, slug: comment.post.slug }
+          : null,
+      },
+    };
+  },
+
+  async banFromComment(ctx) {
+    const { id } = ctx.params;
+    if (!id) {
+      return ctx.badRequest('ID が必要です');
+    }
+    const { reason, expiresAt, scope = 'both', purge = true } = ctx.request.body || {};
+    const normalizedScope = String(scope || 'both').toLowerCase();
+
+    const comment = await strapi.entityService.findOne('api::comment.comment', id, {
+      populate: { post: true },
+    });
+
+    if (!comment) {
+      return ctx.notFound('コメントが見つかりません');
+    }
+
+    const filters = [];
+    const banData = {
+      reason: reason || 'モデレーターによる BAN',
+    };
+
+    if ((normalizedScope === 'both' || normalizedScope === 'ip') && comment.ip_hash) {
+      banData.ip_hash = comment.ip_hash;
+      filters.push({ ip_hash: comment.ip_hash });
+    }
+
+    if ((normalizedScope === 'both' || normalizedScope === 'net') && comment.net_hash) {
+      banData.net_hash = comment.net_hash;
+      filters.push({ net_hash: comment.net_hash });
+    }
+
+    if (!filters.length) {
+      return ctx.badRequest('BAN に必要な情報が不足しています');
+    }
+
+    if (expiresAt) {
+      banData.expiresAt = expiresAt;
+    }
+
+    const existing = await strapi.entityService.findMany('api::ban.ban', {
+      filters: {
+        $or: filters,
+      },
+      limit: 1,
+    });
+
+    let banRecord;
+    if (existing.length) {
+      banRecord = await strapi.entityService.update('api::ban.ban', existing[0].id, { data: banData });
+    } else {
+      banRecord = await strapi.entityService.create('api::ban.ban', { data: banData });
+    }
+
+    let removedCount = 0;
+    if (purge) {
+      const { count } = await strapi.db.query('api::comment.comment').deleteMany({
+        where: { $or: filters },
+      });
+      removedCount = count || 0;
+    }
+
+    return {
+      data: {
+        ban: banRecord,
+        removedCount,
+      },
+    };
   },
 
   async report(ctx) {
