@@ -8,6 +8,8 @@ import {
   resolveAlias,
   enforceRateLimit,
   detectSimilarity,
+  encryptClientPayload,
+  decryptClientPayload,
 } from '../comment.js';
 
 describe('コメントユーティリティ', () => {
@@ -82,5 +84,18 @@ describe('コメントユーティリティ', () => {
     await expect(
       detectSimilarity(strapi, { ipHash: 'abc', body: 'これはテストコメントです' })
     ).rejects.toThrow('類似した投稿');
+  });
+
+  test('クライアントメタの暗号化と復号', () => {
+    const payload = encryptClientPayload({
+      ip: '203.0.113.5',
+      ua: 'jest',
+      submittedAt: '2025-10-04T00:00:00.000Z',
+    });
+    expect(typeof payload.encrypted).toBe('string');
+    const restored = decryptClientPayload(payload);
+    expect(restored.ip).toBe('203.0.113.5');
+    expect(restored.ua).toBe('jest');
+    expect(restored.submittedAt).toBe('2025-10-04T00:00:00.000Z');
   });
 });

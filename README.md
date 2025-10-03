@@ -132,10 +132,11 @@
    | --- | --- | --- |
    | `PUBLIC_URL` | CMS を公開する URL。HTTPS で運用します。 | `https://cms.example.com` |
    | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.pages.dev,https://preview.example.com` |
-   | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
-   | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
+  | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
+  | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
   | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
-   | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
+  | `COMMENT_IP_SECRET` | コメント送信者の IP/UA 情報を暗号化するための 32〜64 文字程度のシークレット。未指定時は `HASH_PEPPER` を利用。 | `replace-with-ip-secret` |
+  | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
    | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
@@ -284,8 +285,13 @@ npm run preview
    - 問題がなければ `status` を `published` に更新。非表示にしたい場合は `hidden`、投稿者のみに見せたい場合は `shadow` を選択します。
    - モデレーターとして公式返信する際は同画面でコメントを開き、`isModerator` をチェックするとフロントでバッジ表示されます。
 2. **投稿者情報の確認**
-   - コメント詳細の `meta.client` に送信元 IP・UA・送信時刻が保存されます。管理画面の JSON 表示から直接参照可能です。
-   - もしくは管理者トークンで `GET /api/mod/comments/:id/meta` を叩くと、IP・ハッシュ値・紐付く記事情報を JSON で取得できます。
+   - コメント詳細画面右上の「︙」メニューから **JSON を表示** を選ぶと、`meta.client.encrypted`（AES-256-GCM で暗号化済みの IP/UA）と `submittedAt` を確認できます。
+   - 実際の IP アドレス・UA を確認する際は、管理者トークンで `GET /api/mod/comments/:id/meta` を呼び出してください。レスポンスには平文 IP、ハッシュ、ネットワークハッシュ、関連記事情報が含まれます。
+   - API 呼び出し例（管理者 API トークンを使用）
+     ```bash
+     curl -H "Authorization: Bearer <ADMIN_API_TOKEN>" \
+       https://cms.example.com/api/mod/comments/123/meta | jq
+     ```
 3. **IP / ネットワーク BAN**
    - 悪質な送信元は「Content Manager → Bans」で新規エントリを作成するか、コメント詳細ページの ID を使って `POST /api/mod/comments/:id/ban` を呼び出すとハッシュが自動入力されます。
    - どちらの API でも既定で過去コメントを一括削除（`purge`）。履歴を残したい場合のみ `purge=false` を指定してください。

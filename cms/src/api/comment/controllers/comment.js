@@ -12,6 +12,8 @@ import {
   detectSimilarity,
   paginateComments,
   toPublicComment,
+  encryptClientPayload,
+  decryptClientPayload,
 } from '../../../utils/comment.js';
 import { verifyCaptcha } from '../../../utils/captcha.js';
 
@@ -30,6 +32,51 @@ const resolvePepper = (strapi) => {
 
 const resolveAliasSalt = () => process.env.ALIAS_SALT || 'alias-salt';
 
+const sanitizeSlug = (value = '') =>
+  value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-]+|[-]+$/g, '');
+
+const collectSlugCandidates = (slug) => {
+  const raw = slug ? slug.toString().trim() : '';
+  if (!raw) return [];
+  const lower = raw.toLowerCase();
+  const sanitized = sanitizeSlug(raw);
+  return Array.from(new Set([raw, lower, sanitized].filter(Boolean)));
+};
+
+const findPublishedPostBySlug = async (strapi, slug) => {
+  const candidates = collectSlugCandidates(slug);
+  if (!candidates.length) {
+    return null;
+  }
+
+  const slugFilter =
+    candidates.length === 1
+      ? candidates[0]
+      : {
+          $in: candidates,
+        };
+
+  const results = await strapi.entityService.findMany('api::post.post', {
+    filters: {
+      slug: slugFilter,
+      publishedAt: { $notNull: true },
+    },
+    limit: 1,
+  });
+
+  if (!Array.isArray(results) || !results.length) {
+    return null;
+  }
+
+  return results[0];
+};
+
 export default factories.createCoreController('api::comment.comment', ({ strapi }) => ({
   async submit(ctx) {
     const { postSlug, parentId, body, alias: aliasInput, captchaToken, honeypot } =
@@ -40,20 +87,17 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
     if (!postSlug) {
       return ctx.badRequest('記事が指定されていません');
     }
-    const post = await strapi.entityService.findMany('api::post.post', {
-      filters: { slug: postSlug, publishedAt: { $notNull: true } },
-      limit: 1,
-    });
-    if (!post?.length) {
+    const postEntry = await findPublishedPostBySlug(strapi, postSlug);
+    if (!postEntry) {
       return ctx.notFound('記事が見つかりません');
     }
-    const postEntry = post[0];
     const postId = postEntry.id;
 
     const sanitizedBody = validateBody(body);
 
     const ip = getClientIp(ctx) || '0.0.0.0';
     const ua = getUserAgent(ctx);
+    const submittedAtIso = dayjs().toISOString();
     const pepper = resolvePepper(strapi);
     const aliasSalt = resolveAliasSalt();
     const ipHash = hashIp(ip, pepper);
@@ -117,11 +161,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
         edit_key_hash: editKeyHash,
         status: shouldAutoPublish ? 'published' : 'pending',
         meta: {
-          client: {
-            ua,
-            ip,
-            submittedAt: dayjs().toISOString(),
-          },
+          client: encryptClientPayload({ ip, ua, submittedAt: submittedAtIso }),
           display: {
             aliasProvided: aliasData.provided,
           },
@@ -149,14 +189,11 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
     if (!postSlug) {
       return ctx.badRequest('記事が指定されていません');
     }
-    const post = await strapi.entityService.findMany('api::post.post', {
-      filters: { slug: postSlug, publishedAt: { $notNull: true } },
-      limit: 1,
-    });
-    if (!post?.length) {
+    const post = await findPublishedPostBySlug(strapi, postSlug);
+    if (!post) {
       return ctx.notFound('記事が見つかりません');
     }
-    const postId = post[0].id;
+    const postId = post.id;
     const { data, nextCursor } = await paginateComments(strapi, {
       postId,
       cursor,
@@ -177,10 +214,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       return ctx.notFound('コメントが見つかりません');
     }
 
-    const clientMeta =
-      typeof comment.meta === 'object' && comment.meta?.client && typeof comment.meta.client === 'object'
-        ? comment.meta.client
-        : {};
+    const clientMeta = decryptClientPayload(comment.meta?.client);
 
     return {
       data: {
@@ -194,6 +228,9 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
         netHash: comment.net_hash || null,
         userAgent: clientMeta.ua || null,
         submittedAt: clientMeta.submittedAt || comment.createdAt,
+        encryptedClient: typeof comment.meta?.client?.encrypted === 'string'
+          ? comment.meta.client.encrypted
+          : null,
         post: comment.post
           ? { id: comment.post.id, title: comment.post.title, slug: comment.post.slug }
           : null,
