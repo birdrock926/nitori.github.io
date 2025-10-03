@@ -1,0 +1,24 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+---
+<BaseLayout title="プライバシーポリシー" description="プライバシー保護方針" canonical={Astro.url.href}>
+  <article class="card" style="gap: 1.5rem;">
+    <h1 style="margin: 0;">プライバシーポリシー</h1>
+    <section>
+      <h2>1. 収集する情報</h2>
+      <p>当サイトはアクセス解析および広告配信のために Cookie や同等の技術を利用します。</p>
+    </section>
+    <section>
+      <h2>2. コメント投稿</h2>
+      <p>匿名コメント時にはスパム対策のため IP ハッシュやブラウザ情報を保持します。</p>
+    </section>
+    <section>
+      <h2>3. お問い合わせ</h2>
+      <p>いただいた内容は回答に必要な範囲でのみ利用し、第三者に提供しません。</p>
+    </section>
+    <section>
+      <h2>4. 改定</h2>
+      <p>本ポリシーは必要に応じて改定されます。改定後は本ページで告知します。</p>
+    </section>
+  </article>
+</BaseLayout>
