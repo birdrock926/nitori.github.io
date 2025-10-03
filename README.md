@@ -135,14 +135,15 @@
   | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
   | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
   | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
-  | `COMMENT_IP_SECRET` | コメント送信者の IP/UA 情報を暗号化するための 32〜64 文字程度のシークレット。未指定時は `HASH_PEPPER` を利用。 | `replace-with-ip-secret` |
   | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
    | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
-   | `GITHUB_WORKFLOW_*` | Strapi Webhook で Cloudflare Pages 用の GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
+  | `GITHUB_WORKFLOW_*` | Strapi Webhook で Cloudflare Pages 用の GitHub Actions を呼び出すための設定。 | `OWNER=your-account` 等 |
 
 > **開発時の GitHub Webhook**: `.env` が同梱プレースホルダー（`local-owner` / `local-repo` / `dispatch-workflow.yml` / `github-token-placeholder` など）のままの場合、Strapi は GitHub Actions 連携を自動的にスキップし、開発時の 401 エラーを防ぎます。実運用では GitHub Secrets を発行し、これらを本番値に置き換えてください。スキップ時はログに `[github] Webhook dispatch skipped` が出力されます。
+
+> **IP 取扱いメモ**: コメント送信時のクライアント情報は `meta.client` に平文で保存されます（例: `ip`, `maskedIp`, `ua`, `submittedAt`）。公開 API ではこの情報は返却されず、Strapi 管理画面またはモデレーター向け API (`GET /api/mod/comments/:id/meta`) からのみ確認できます。
 
 4. `UPLOAD_PROVIDER=oci` を使う場合は、OCI コンソールで作成したユーザーのアクセスキーとシークレットを `OCI_ACCESS_KEY`, `OCI_SECRET_KEY` に設定し、`OCI_PUBLIC_URL` に公開バケットのベース URL を入力してください。
 5. `.env` を保存したら `cd ..` でプロジェクトルートに戻ります。
@@ -285,8 +286,8 @@ npm run preview
    - 問題がなければ `status` を `published` に更新。非表示にしたい場合は `hidden`、投稿者のみに見せたい場合は `shadow` を選択します。
    - モデレーターとして公式返信する際は同画面でコメントを開き、`isModerator` をチェックするとフロントでバッジ表示されます。
 2. **投稿者情報の確認**
-   - コメント詳細画面右上の「︙」メニューから **JSON を表示** を選ぶと、`meta.client.encrypted`（AES-256-GCM で暗号化済みの IP/UA）と `submittedAt` を確認できます。
-   - 実際の IP アドレス・UA を確認する際は、管理者トークンで `GET /api/mod/comments/:id/meta` を呼び出してください。レスポンスには平文 IP、ハッシュ、ネットワークハッシュ、関連記事情報が含まれます。
+   - コメント詳細画面右上の「︙」メニューから **JSON を表示** を選ぶと、`meta.client.ip`（平文 IP）と `maskedIp`、`ua`、`submittedAt` を確認できます。管理画面から直接コピーできるので、複雑な復号手順は不要です。
+   - API ベースで確認したい場合は管理者トークンで `GET /api/mod/comments/:id/meta` を呼び出してください。レスポンスには平文 IP、ハッシュ、ネットワークハッシュ、関連記事情報が含まれます。
    - API 呼び出し例（管理者 API トークンを使用）
      ```bash
      curl -H "Authorization: Bearer <ADMIN_API_TOKEN>" \

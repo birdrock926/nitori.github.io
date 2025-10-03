@@ -51,9 +51,10 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
    | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
    | コメント即時公開 | `COMMENTS_AUTO_PUBLISH` | `true` にすると投稿直後から公開。開発は `true`、本番は `false` 推奨。 | `false` |
-   | セキュリティ | `COMMENT_IP_SECRET` | コメント送信者の IP/UA を AES-256-GCM で暗号化するシークレット。未設定なら `HASH_PEPPER` を使用。 | `replace-with-ip-secret` |
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
+
+   > **コメント送信者の IP について**: 投稿時の IP と UA は `meta.client.ip` / `meta.client.ua` に平文で格納されます。公開 API には含まれず、管理画面の **JSON を表示** か管理者 API (`GET /api/mod/comments/:id/meta`) からのみ確認できます。
    | DB | `DATABASE_CLIENT` | `sqlite`・`postgres` など | 初期は `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci` | 帯域節約には `oci` |
    |  | `OCI_*` 一式 | Object Storage のバケット・キー情報 | OCI コンソールで発行した値 |
@@ -162,7 +163,7 @@ npm run dev
 - Strapi のサイドバー「Content Manager → Comments」を開くと、最新投稿が `status` 列付きで表示されます。初期状態は `pending` なので、内容を確認して問題なければ `published` に更新してください。
 - 投稿者本人のみに見せたい場合は `shadow`、完全に非表示にしたい場合は `hidden` を選択します。変更すると API レスポンスに即時反映されます。
 - 公式アカウントとして返信する際はコメント編集画面で `isModerator` をオンにすると、Web 側でバッジとカラーが付いた「モデレーター」表示になります。必要に応じて `alias` を編集して署名を入れてください。
-- コメント詳細画面右上の「︙」→ **JSON を表示** を開くと、`meta.client.encrypted`（暗号化済みの IP/UA）と `submittedAt` を確認できます。実際の IP / User-Agent を見る必要がある場合は、管理者トークンを付与して `GET /api/mod/comments/:id/meta` を呼び出してください。
+- コメント詳細画面右上の「︙」→ **JSON を表示** を開くと、`meta.client.ip` と `maskedIp`、`ua`、`submittedAt` をそのまま確認できます。API で確認したい場合は管理者トークンを付与して `GET /api/mod/comments/:id/meta` を呼び出してください。
 - API の呼び出し例
   ```bash
   curl -H "Authorization: Bearer <ADMIN_API_TOKEN>" \

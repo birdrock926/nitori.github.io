@@ -8,8 +8,8 @@ import {
   resolveAlias,
   enforceRateLimit,
   detectSimilarity,
-  encryptClientPayload,
-  decryptClientPayload,
+  createClientMeta,
+  readClientMeta,
 } from '../comment.js';
 
 describe('コメントユーティリティ', () => {
@@ -86,16 +86,18 @@ describe('コメントユーティリティ', () => {
     ).rejects.toThrow('類似した投稿');
   });
 
-  test('クライアントメタの暗号化と復号', () => {
-    const payload = encryptClientPayload({
+  test('クライアントメタの生成と参照', () => {
+    const payload = createClientMeta({
       ip: '203.0.113.5',
-      ua: 'jest',
+      ua: 'jest-agent',
       submittedAt: '2025-10-04T00:00:00.000Z',
     });
-    expect(typeof payload.encrypted).toBe('string');
-    const restored = decryptClientPayload(payload);
+    expect(payload.ip).toBe('203.0.113.5');
+    expect(payload.maskedIp).toBe('203.0.113.xxx');
+    const restored = readClientMeta(payload);
     expect(restored.ip).toBe('203.0.113.5');
-    expect(restored.ua).toBe('jest');
+    expect(restored.maskedIp).toBe('203.0.113.xxx');
+    expect(restored.ua).toBe('jest-agent');
     expect(restored.submittedAt).toBe('2025-10-04T00:00:00.000Z');
   });
 });

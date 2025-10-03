@@ -8,83 +8,54 @@ const ALLOWED_HOSTS = ['youtube.com', 'youtu.be', 'twitch.tv', 'www.youtube.com'
 const ALIAS_MIN_LENGTH = 2;
 const ALIAS_MAX_LENGTH = 24;
 
-const DEFAULT_CLIENT_SECRET = 'comment-ip-secret';
-
-const resolveClientSecret = () => {
-  if (process.env.COMMENT_IP_SECRET) {
-    return process.env.COMMENT_IP_SECRET;
+const maskIp = (ip) => {
+  if (!ip || typeof ip !== 'string') {
+    return null;
   }
-  if (process.env.HASH_PEPPER) {
-    return process.env.HASH_PEPPER;
-  }
-  if (process.env.APP_KEYS) {
-    try {
-      const parsed = JSON.parse(process.env.APP_KEYS);
-      if (Array.isArray(parsed) && parsed[0]) {
-        return parsed[0];
-      }
-    } catch (error) {
-      // ignore malformed JSON, fall through to default
+  if (ip.includes(':')) {
+    const segments = ip.split(':');
+    if (segments.length <= 2) {
+      return ip;
     }
+    return `${segments.slice(0, segments.length - 2).join(':')}::`; // mask last part of IPv6
   }
-  return DEFAULT_CLIENT_SECRET;
+  const parts = ip.split('.');
+  if (parts.length !== 4) {
+    return ip;
+  }
+  return `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
 };
 
-const deriveCipherKey = (secret) =>
-  crypto
-    .createHash('sha256')
-    .update(secret)
-    .digest()
-    .subarray(0, 32);
-
-export const encryptClientPayload = ({ ip, ua, submittedAt }) => {
-  const secret = resolveClientSecret();
-  const key = deriveCipherKey(secret);
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const payload = JSON.stringify({ ip, ua, submittedAt });
-  const encrypted = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return {
-    encrypted: `${iv.toString('base64')}.${authTag.toString('base64')}.${encrypted.toString('base64')}`,
-    submittedAt,
-  };
+const clampLength = (value, max = 512) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return value.length > max ? value.slice(0, max) : value;
 };
 
-export const decryptClientPayload = (meta) => {
+export const createClientMeta = ({ ip, ua, submittedAt }) => ({
+  ip: clampLength(ip, 128),
+  maskedIp: maskIp(ip),
+  ua: clampLength(ua),
+  submittedAt: submittedAt || new Date().toISOString(),
+});
+
+export const readClientMeta = (meta) => {
   if (!meta) {
     return {};
   }
-
-  const encoded =
-    typeof meta === 'string'
-      ? meta
-      : typeof meta === 'object' && typeof meta.encrypted === 'string'
-      ? meta.encrypted
-      : null;
-
-  if (!encoded) {
-    return typeof meta === 'object' ? meta : {};
+  if (typeof meta === 'object' && (meta.ip || meta.ua || meta.maskedIp)) {
+    return {
+      ip: meta.ip || null,
+      maskedIp: meta.maskedIp || maskIp(meta.ip),
+      ua: meta.ua || null,
+      submittedAt: meta.submittedAt || null,
+    };
   }
-
-  try {
-    const [ivEncoded, tagEncoded, dataEncoded] = encoded.split('.');
-    if (!ivEncoded || !tagEncoded || !dataEncoded) {
-      return {};
-    }
-    const secret = resolveClientSecret();
-    const key = deriveCipherKey(secret);
-    const iv = Buffer.from(ivEncoded, 'base64');
-    const authTag = Buffer.from(tagEncoded, 'base64');
-    const encrypted = Buffer.from(dataEncoded, 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-    const parsed = JSON.parse(decrypted);
-    return typeof parsed === 'object' ? parsed : {};
-  } catch (error) {
-    return {};
+  if (typeof meta === 'object' && meta.client) {
+    return readClientMeta(meta.client);
   }
+  return {};
 };
 
 export const sanitizeBody = (body = '') => body.trim();

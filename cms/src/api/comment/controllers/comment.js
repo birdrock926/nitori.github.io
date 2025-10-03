@@ -12,8 +12,8 @@ import {
   detectSimilarity,
   paginateComments,
   toPublicComment,
-  encryptClientPayload,
-  decryptClientPayload,
+  createClientMeta,
+  readClientMeta,
 } from '../../../utils/comment.js';
 import { verifyCaptcha } from '../../../utils/captcha.js';
 
@@ -161,7 +161,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
         edit_key_hash: editKeyHash,
         status: shouldAutoPublish ? 'published' : 'pending',
         meta: {
-          client: encryptClientPayload({ ip, ua, submittedAt: submittedAtIso }),
+          client: createClientMeta({ ip, ua, submittedAt: submittedAtIso }),
           display: {
             aliasProvided: aliasData.provided,
           },
@@ -214,7 +214,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       return ctx.notFound('コメントが見つかりません');
     }
 
-    const clientMeta = decryptClientPayload(comment.meta?.client);
+    const clientMeta = readClientMeta(comment.meta?.client);
 
     return {
       data: {
