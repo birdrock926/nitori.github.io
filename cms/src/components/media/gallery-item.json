@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_media_gallery_items",
+  "info": {
+    "displayName": "Gallery Item",
+    "icon": "images"
+  },
+  "attributes": {
+    "image": {
+      "type": "media",
+      "required": true
+    },
+    "alt": {
+      "type": "string",
+      "required": true
+    }
+  }
+}
