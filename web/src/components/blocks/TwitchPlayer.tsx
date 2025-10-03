@@ -43,35 +43,45 @@ const TwitchPlayer = ({ channel, vodId, title }: Props) => {
   }, [channel, vodId]);
 
   return (
-    <div
-      ref={ref}
-      style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '1rem', overflow: 'hidden' }}
-      aria-live="polite"
-    >
-      {isVisible && src ? (
-        <iframe
-          src={src}
-          title={title ?? 'Twitchプレイヤー'}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: '0' }}
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.1)',
-            display: 'grid',
-            placeItems: 'center',
-            color: 'var(--color-muted)',
-          }}
-        >
-          Twitchプレイヤーを読み込み中…
-        </div>
-      )}
+    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+      <div
+        ref={ref}
+        style={{
+          position: 'relative',
+          paddingTop: '56.25%',
+          width: '100%',
+          maxWidth: '720px',
+          borderRadius: '1rem',
+          overflow: 'hidden',
+          boxShadow: '0 20px 45px rgba(15, 23, 42, 0.18)',
+        }}
+        aria-live="polite"
+      >
+        {isVisible && src ? (
+          <iframe
+            src={src}
+            title={title ?? 'Twitchプレイヤー'}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: '0' }}
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.1)',
+              display: 'grid',
+              placeItems: 'center',
+              color: 'var(--color-muted)',
+            }}
+          >
+            Twitchプレイヤーを読み込み中…
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -15,7 +15,7 @@ const ensurePublishedFilter = (filters = {}) => {
 
 const DEFAULT_POPULATE = {
   cover: { populate: '*' },
-  tags: true,
+  tags: { populate: '*' },
   blocks: { populate: '*' },
 };
 
@@ -23,6 +23,18 @@ const resolvePopulate = (incoming) => {
   if (!incoming || incoming === 'deep' || incoming === '*') {
     return DEFAULT_POPULATE;
   }
+
+  if (Array.isArray(incoming)) {
+    return Array.from(new Set([...incoming, ...Object.keys(DEFAULT_POPULATE)]));
+  }
+
+  if (typeof incoming === 'object') {
+    return {
+      ...DEFAULT_POPULATE,
+      ...incoming,
+    };
+  }
+
   return incoming;
 };
 

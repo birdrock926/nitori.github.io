@@ -118,6 +118,32 @@ const ensureAbsoluteUrl = (input?: string | null) => {
   return `${base}${input.startsWith('/') ? '' : '/'}${input}`;
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const convertPlainTextToHtml = (value: string) => {
+  const normalized = value.replace(/\r\n?/g, '\n').trim();
+  if (!normalized) return '';
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`);
+  return paragraphs.join('\n');
+};
+
+const normalizeRichMarkup = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/<[a-z][^>]*>/i.test(trimmed)) {
+    return trimmed;
+  }
+  return convertPlainTextToHtml(trimmed);
+};
+
 const parseMedia = (value: any): Media | undefined => {
   if (!value) return undefined;
   if (value.data?.attributes) {
@@ -155,7 +181,7 @@ const normalizeMedia = (media: Media | undefined) => {
 const extractRichBody = (value: any): string => {
   if (!value) return '';
   if (typeof value === 'string') {
-    return value;
+    return normalizeRichMarkup(value);
   }
   if (Array.isArray(value)) {
     return extractRichBody(value[0]);
@@ -170,13 +196,40 @@ const extractRichBody = (value: any): string => {
       (value.attributes && typeof value.attributes.body === 'string' ? value.attributes.body : undefined) ??
       (value.data && typeof value.data.attributes?.body === 'string' ? value.data.attributes.body : undefined);
     if (candidate) {
-      return candidate;
+      return normalizeRichMarkup(candidate);
     }
   }
   return '';
 };
 
 const toObject = (value: any) => (value && typeof value === 'object' ? value : {});
+
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9faf]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+
+const parseTag = (tag: any): Tag | null => {
+  const base = toObject(tag);
+  const attr = toObject(base.attributes ?? base);
+  const name = typeof attr.name === 'string' && attr.name.trim() ? attr.name.trim() : undefined;
+  if (!name) {
+    return null;
+  }
+  const slug =
+    (typeof attr.slug === 'string' && attr.slug.trim()) ||
+    slugify(name) ||
+    name.trim();
+  const id = Number.isFinite(Number(base.id)) ? Number(base.id) : undefined;
+  return {
+    id: id ?? Math.abs(slug.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)),
+    name,
+    slug,
+  };
+};
 
 const normalizeBlock = (block: any): DynamicZoneBlock => {
   if (!block || !block.__component) {
@@ -410,10 +463,9 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
     const coverSource = attr.cover ?? base.cover;
     const coverRelation = asObject(coverSource);
     const cover = normalizeMedia(parseMedia(coverRelation.data ?? coverSource));
-    const tagsArray = extractArray<any>(attr.tags ?? base.tags).map((tag) => ({
-      id: tag?.id ?? 0,
-      ...(asObject(tag.attributes ?? tag) as { name?: string; slug?: string }),
-    }));
+    const tagsArray = extractArray<any>(attr.tags ?? base.tags)
+      .map(parseTag)
+      .filter((tag): tag is Tag => Boolean(tag));
     const blockSource = attr.blocks ?? base.blocks;
     const rawBlocks = Array.isArray(blockSource) ? blockSource : [];
     const defaults = fallbackPost();
@@ -428,7 +480,7 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       author: typeof attr.author === 'string' ? attr.author : undefined,
       source: typeof attr.source === 'string' ? attr.source : undefined,
       cover,
-      tags: tagsArray.filter((tag) => Boolean(tag.name && tag.slug)),
+      tags: tagsArray,
       blocks: rawBlocks.map(normalizeBlock),
       commentAliasDefault:
         typeof attr.commentAliasDefault === 'string' && attr.commentAliasDefault.trim()
@@ -478,7 +530,9 @@ export const getTags = async () => {
     sort: 'name:asc',
   });
   const items = ensureArray<{ id: number; attributes: { name: string; slug: string } }>(data?.data);
-  return items.map((tag) => ({ id: tag.id, ...tag.attributes }));
+  return items
+    .map((tag) => parseTag(tag))
+    .filter((tag): tag is Tag => Boolean(tag));
 };
 
 export const getPostsByTag = async (slug: string) => {
