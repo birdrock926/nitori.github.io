@@ -134,8 +134,7 @@
    | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.pages.dev,https://preview.example.com` |
    | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
    | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
-   | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
-   | `COMMENTS_MIN_INTERVAL_MS` | 同一ブラウザでの連投抑止用の最短送信間隔（ミリ秒）。`0` で無効化。 | `0` |
+  | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
    | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
@@ -280,9 +279,16 @@ npm run preview
 3. Actions が Astro をビルドし、Cloudflare Pages へデプロイ
 
 ## コメントモデレーション
-- 通報が閾値以上で自動非表示 → モデレータが `published` へ戻すか `shadow` に変更
-- BAN 登録で即時拒否（ip_hash / net_hash）。期限付き BAN も可能
-- シャドウ BAN 時は投稿者のみ表示され、他のユーザーには表示されません
+1. **審査・公開**
+   - Strapi 管理画面の「コンテンツマネージャー → Comments」で `pending` 状態の投稿を確認します。
+   - 問題がなければ `status` を `published` に更新。非表示にしたい場合は `hidden`、投稿者のみに見せたい場合は `shadow` を選択します。
+   - モデレーターとして公式返信する際は同画面でコメントを開き、`isModerator` をチェックするとフロントでバッジ表示されます。
+2. **IP / ネットワーク BAN**
+   - 悪質な送信元は「Content Manager → Bans」で新規エントリを作成し、`ip_hash` または `net_hash`（/24）を登録します。
+   - `expiresAt` に日時を設定すると期限付き BAN、空欄の場合は無期限 BAN になります。`reason` に調査メモを残しておくと管理が容易です。
+3. **自動判定と通報**
+   - 通報が閾値（既定値: 3 件）を超えると `hidden` に自動切替されます。管理画面から内容を確認して適切なステータスへ変更してください。
+   - コメント本文や表示名は禁止語・許可ドメイン判定を通過した内容のみが登録されます。待ち時間は設けていないため、過剰投稿はレート制限（分/時/日）で制御してください。
 
 ## セキュリティ
 - 管理画面は OAuth / SSO 連携や IP 制限の併用を推奨

@@ -14,7 +14,6 @@ export type SubmitCommentPayload = {
   alias?: string;
   captchaToken?: string;
   honeypot?: string;
-  sentAt?: number;
 };
 
 export type SubmittedComment = CommentNode & { parent?: number | null };

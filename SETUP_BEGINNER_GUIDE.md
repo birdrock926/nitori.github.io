@@ -51,7 +51,6 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
    | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
    | コメント即時公開 | `COMMENTS_AUTO_PUBLISH` | `true` にすると投稿直後から公開。開発は `true`、本番は `false` 推奨。 | `false` |
-   | コメント送信間隔 | `COMMENTS_MIN_INTERVAL_MS` | 同一ブラウザでの連投抑止（ミリ秒）。`0` で無効化。 | `0` |
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
    | DB | `DATABASE_CLIENT` | `sqlite`・`postgres` など | 初期は `sqlite` |
@@ -157,6 +156,13 @@ npm run dev
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。
 - Rich Text ブロックは改行や段落をそのまま HTML に変換し、Shift+Enter の改行も `<br>` として表示されます。プレビューで段落が期待通りに分かれているか確認しましょう。
 - 文字色や背景色は 16 進カラーコードで保存されるため、Web 側でも同じ色で再現されます。実際の公開ページで読みづらくならないよう、彩度の高い色は Callout や Columns で背景を調整するのがおすすめです。
+
+### 6-4. コメントをモデレーションする
+- Strapi のサイドバー「Content Manager → Comments」を開くと、最新投稿が `status` 列付きで表示されます。初期状態は `pending` なので、内容を確認して問題なければ `published` に更新してください。
+- 投稿者本人のみに見せたい場合は `shadow`、完全に非表示にしたい場合は `hidden` を選択します。変更すると API レスポンスに即時反映されます。
+- 公式アカウントとして返信する際はコメント編集画面で `isModerator` をオンにすると、Web 側でバッジとカラーが付いた「モデレーター」表示になります。必要に応じて `alias` を編集して署名を入れてください。
+- 悪質な送信元を遮断するには「Content Manager → Bans」で `ip_hash`（単一 IP）または `net_hash`（/24）を入力したレコードを追加します。`expiresAt` を設定すると期限付き BAN、空欄なら恒久 BAN です。
+- コメント詳細画面では `reports` リレーションから通報履歴を確認できます。閾値（既定 3 件）を超えると自動的に `hidden` へ切り替わるため、内容を確認して必要に応じて `published` へ戻してください。
 
 ## 7. OCI Always Free で CMS を公開する
 ここでは、OCI の無料枠を使って Strapi を常駐させるまでの流れを初心者向けに整理します。作業時間は 60〜90 分程度を見込んでください。

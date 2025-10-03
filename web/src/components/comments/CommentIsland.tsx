@@ -54,8 +54,6 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [notification, setNotification] = useState<Notification | null>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const [honeypot, setHoneypot] = useState('');
-  const formStartRef = useRef<number>(Date.now());
-  const hasInteractedRef = useRef(false);
   const fallbackAlias = defaultAlias?.trim() || '名無しのプレイヤーさん';
   const aliasInputId = 'comment-alias';
   const aliasHelpId = 'comment-alias-help';
@@ -88,17 +86,8 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
     setAlias('');
     setBody('');
     setParentId(null);
-    formStartRef.current = Date.now();
-    hasInteractedRef.current = false;
     loadComments();
   }, [postSlug]);
-
-  const markInteraction = () => {
-    if (!hasInteractedRef.current) {
-      hasInteractedRef.current = true;
-      formStartRef.current = Date.now();
-    }
-  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -114,7 +103,6 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
         body,
         alias: trimmedAlias ? trimmedAlias : undefined,
         honeypot,
-        sentAt: formStartRef.current,
       });
       const { comment, editKey } = res.data;
       const normalized = normalizeNode({ ...comment, children: comment.children ?? [] });
@@ -126,8 +114,6 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
       }
       setBody('');
       setParentId(null);
-      formStartRef.current = Date.now();
-      hasInteractedRef.current = false;
       const successMessage =
         comment.status === 'published'
           ? 'コメントを公開しました'
@@ -177,13 +163,11 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             id={aliasInputId}
             name="alias"
             type="text"
-            value={alias}
-            maxLength={24}
-            onFocus={markInteraction}
-            onChange={(event) => {
-              markInteraction();
-              setAlias(event.target.value);
-            }}
+          value={alias}
+          maxLength={24}
+          onChange={(event) => {
+            setAlias(event.target.value);
+          }}
             placeholder={fallbackAlias}
             aria-describedby={aliasHelpId}
             autoComplete="nickname"
@@ -205,9 +189,7 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             required
             rows={5}
             value={body}
-            onFocus={markInteraction}
             onChange={(event) => {
-              markInteraction();
               setBody(event.target.value);
             }}
             style={{

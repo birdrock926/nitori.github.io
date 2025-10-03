@@ -16,15 +16,6 @@ import {
 import { verifyCaptcha } from '../../../utils/captcha.js';
 
 const REPORT_THRESHOLD = 3;
-const resolveMinSubmitInterval = () => {
-  const raw = process.env.COMMENTS_MIN_INTERVAL_MS;
-  if (!raw) {
-    return 0;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-};
-
 const getClientIp = (ctx) =>
   ctx.request.headers['cf-connecting-ip'] ||
   ctx.request.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -41,15 +32,10 @@ const resolveAliasSalt = () => process.env.ALIAS_SALT || 'alias-salt';
 
 export default factories.createCoreController('api::comment.comment', ({ strapi }) => ({
   async submit(ctx) {
-    const { postSlug, parentId, body, alias: aliasInput, captchaToken, honeypot, sentAt } =
+    const { postSlug, parentId, body, alias: aliasInput, captchaToken, honeypot } =
       ctx.request.body || {};
     if (honeypot) {
       return ctx.badRequest('bot-detected');
-    }
-    const now = Date.now();
-    const minInterval = resolveMinSubmitInterval();
-    if (minInterval > 0 && sentAt && now - Number(sentAt) < minInterval) {
-      return ctx.badRequest('投稿が早すぎます');
     }
     if (!postSlug) {
       return ctx.badRequest('記事が指定されていません');
