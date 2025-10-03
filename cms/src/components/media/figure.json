@@ -1,0 +1,25 @@
+{
+  "collectionName": "components_media_figures",
+  "info": {
+    "displayName": "Figure",
+    "description": "単体画像",
+    "icon": "image"
+  },
+  "attributes": {
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": true
+    },
+    "alt": {
+      "type": "string",
+      "required": true
+    },
+    "caption": {
+      "type": "text"
+    },
+    "credit": {
+      "type": "string"
+    }
+  }
+}
