@@ -1,0 +1,13 @@
+[Unit]
+Description=Strapi CMS via Docker Compose
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/game-news
+ExecStart=/usr/bin/docker compose -f infrastructure/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f infrastructure/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
