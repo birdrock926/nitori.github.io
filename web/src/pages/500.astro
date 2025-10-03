@@ -1,0 +1,10 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+---
+<BaseLayout title="サーバーエラー" description="500 Error" canonical={Astro.url.href}>
+  <article class="card" style="gap: 1.5rem; align-items: center; text-align: center;">
+    <h1>500</h1>
+    <p>サーバーで問題が発生しました。時間をおいて再度お試しください。</p>
+    <a class="tag-chip" href="/search">記事を検索する</a>
+  </article>
+</BaseLayout>
