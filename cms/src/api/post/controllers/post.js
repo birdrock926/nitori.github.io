@@ -44,27 +44,27 @@ const mergePopulate = (incoming) => {
 
 export default factories.createCoreController('api::post.post', () => ({
   async find(ctx) {
-    const sanitizedQuery = await this.sanitizeQuery(ctx);
-    const query = {
-      ...sanitizedQuery,
-      filters: ensurePublishedFilter(sanitizedQuery.filters || {}),
-      populate: mergePopulate(sanitizedQuery.populate),
-    };
+    ctx.query = ctx.query || {};
+    ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
+    ctx.query.populate = mergePopulate(ctx.query.populate);
 
-    const { results, pagination } = await strapi.service('api::post.post').find(query);
+    await this.validateQuery(ctx);
+    const sanitizedQuery = await this.sanitizeQuery(ctx);
+
+    const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
     return this.transformResponse(sanitizedResults, { pagination });
   },
 
   async findOne(ctx) {
-    const sanitizedQuery = await this.sanitizeQuery(ctx);
-    const query = {
-      ...sanitizedQuery,
-      filters: ensurePublishedFilter(sanitizedQuery.filters || {}),
-      populate: mergePopulate(sanitizedQuery.populate),
-    };
+    ctx.query = ctx.query || {};
+    ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
+    ctx.query.populate = mergePopulate(ctx.query.populate);
 
-    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, query);
+    await this.validateQuery(ctx);
+    const sanitizedQuery = await this.sanitizeQuery(ctx);
+
+    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
     return this.transformResponse(sanitizedEntity);
   },
