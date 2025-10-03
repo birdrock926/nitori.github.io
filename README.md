@@ -135,6 +135,7 @@
    | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
    | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
    | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
+   | `COMMENTS_MIN_INTERVAL_MS` | 同一ブラウザでの連投抑止用の最短送信間隔（ミリ秒）。`0` で無効化。 | `0` |
    | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |

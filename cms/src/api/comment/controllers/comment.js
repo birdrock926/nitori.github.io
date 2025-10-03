@@ -16,7 +16,14 @@ import {
 import { verifyCaptcha } from '../../../utils/captcha.js';
 
 const REPORT_THRESHOLD = 3;
-const MIN_SUBMIT_INTERVAL_MS = 3000;
+const resolveMinSubmitInterval = () => {
+  const raw = process.env.COMMENTS_MIN_INTERVAL_MS;
+  if (!raw) {
+    return 0;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
 
 const getClientIp = (ctx) =>
   ctx.request.headers['cf-connecting-ip'] ||
@@ -40,7 +47,8 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       return ctx.badRequest('bot-detected');
     }
     const now = Date.now();
-    if (sentAt && now - Number(sentAt) < MIN_SUBMIT_INTERVAL_MS) {
+    const minInterval = resolveMinSubmitInterval();
+    if (minInterval > 0 && sentAt && now - Number(sentAt) < minInterval) {
       return ctx.badRequest('投稿が早すぎます');
     }
     if (!postSlug) {

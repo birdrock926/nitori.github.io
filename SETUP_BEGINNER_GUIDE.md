@@ -51,6 +51,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
    | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
    | コメント即時公開 | `COMMENTS_AUTO_PUBLISH` | `true` にすると投稿直後から公開。開発は `true`、本番は `false` 推奨。 | `false` |
+   | コメント送信間隔 | `COMMENTS_MIN_INTERVAL_MS` | 同一ブラウザでの連投抑止（ミリ秒）。`0` で無効化。 | `0` |
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
    | DB | `DATABASE_CLIENT` | `sqlite`・`postgres` など | 初期は `sqlite` |
