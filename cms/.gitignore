@@ -1,0 +1,10 @@
+node_modules
+build
+.tmp
+dist
+.env
+.env.*
+!.env.sample
+.DS_Store
+package-lock.json
+coverage
