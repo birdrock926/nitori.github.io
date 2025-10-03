@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_embed_youtubes",
+  "info": {
+    "displayName": "YouTube",
+    "description": "YouTube 埋め込み",
+    "icon": "youtube"
+  },
+  "attributes": {
+    "videoId": {
+      "type": "string",
+      "required": true
+    },
+    "title": {
+      "type": "string"
+    }
+  }
+}
