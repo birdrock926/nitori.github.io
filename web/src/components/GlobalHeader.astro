@@ -1,0 +1,69 @@
+---
+import ThemeToggle from '@components/ThemeToggle.tsx';
+import { SITE_TITLE } from '@config/site';
+import { getTags } from '@lib/strapi';
+
+const tags = await getTags();
+const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
+const navLinks = [
+  { href: '/', label: 'トップ', match: ['/'] },
+  { href: '/posts/', label: '記事一覧', match: ['/posts'] },
+  { href: '/tags/', label: 'タグ一覧', match: ['/tags'] },
+  { href: '/search/', label: '検索', match: ['/search'] },
+];
+---
+<header class="site-header" role="banner">
+  <div class="site-header__inner">
+    <div class="header-bar glass-panel">
+      <a class="brand" href="/" aria-label="{SITE_TITLE} トップへ">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false" role="img">
+            <defs>
+              <linearGradient id="header-mark" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="var(--accent)" />
+                <stop offset="100%" stop-color="var(--accent-strong)" />
+              </linearGradient>
+            </defs>
+            <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="url(#header-mark)" opacity="0.9" />
+            <path
+              d="M14.5 6.5h6.6l-3.6 7.9h4.3l-10.5 11.6 2.8-8.7H10L14.5 6.5Z"
+              fill="var(--layer-raised)"
+              stroke="var(--layer-elevated)"
+              stroke-width="0.8"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-title">{SITE_TITLE}</span>
+          <span class="brand-subtitle">ゲームトレンドを最速キャッチ</span>
+        </span>
+      </a>
+      <nav class="primary-nav" aria-label="主要コンテンツ">
+        {navLinks.map((link) => {
+          const isActive = link.match.some((match) => {
+            if (match === '' || match === '/') {
+              return currentPath === '/';
+            }
+            return currentPath === match || currentPath.startsWith(`${match}/`);
+          });
+          return (
+            <a class={`primary-nav__link${isActive ? ' is-active' : ''}`} href={link.href}>
+              {link.label}
+            </a>
+          );
+        })}
+      </nav>
+      <div class="header-tools">
+        <ThemeToggle client:load />
+      </div>
+    </div>
+    {tags.length > 0 && (
+      <div class="tag-scroll" aria-label="人気タグ">
+        {tags.slice(0, 10).map((tag) => (
+          <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+        ))}
+      </div>
+    )}
+  </div>
+</header>

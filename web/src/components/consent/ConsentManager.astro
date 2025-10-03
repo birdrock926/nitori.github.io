@@ -1,0 +1,91 @@
+<div class="card consent-banner" id="consent-banner" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+  <h2 id="consent-title" class="consent-banner__title">データ利用とクッキー設定</h2>
+  <p class="muted consent-banner__description">
+    パフォーマンス改善と広告配信のためにクッキー等の技術を使用します。詳しくは
+    <a href="/privacy">プライバシーポリシー</a>
+    をご確認のうえ、設定はいつでも変更できます。
+  </p>
+  <div class="consent-banner__actions">
+    <button id="consent-accept" class="consent-button consent-button--primary" type="button">同意する</button>
+    <button id="consent-deny" class="consent-button" type="button">拒否する</button>
+  </div>
+</div>
+<script is:inline>
+  const banner = document.getElementById('consent-banner');
+  const acceptBtn = document.getElementById('consent-accept');
+  const denyBtn = document.getElementById('consent-deny');
+  const STORAGE_KEY = 'consent-mode';
+
+  const applyConsent = (mode) => {
+    if (!window.gtag) return;
+    window.gtag('consent', 'update', mode);
+  };
+
+  const showBanner = () => {
+    banner?.style.setProperty('display', 'grid');
+  };
+
+  const hideBanner = () => {
+    banner?.style.setProperty('display', 'none');
+  };
+
+  const loadConsent = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const isValid =
+        parsed &&
+        typeof parsed === 'object' &&
+        ['granted', 'denied'].includes(parsed.ad_storage) &&
+        ['granted', 'denied'].includes(parsed.analytics_storage);
+      if (isValid) {
+        return parsed;
+      }
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    } catch (error) {
+      console.warn('[consent] Failed to parse stored consent, resetting.', error);
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+  };
+
+  const persistConsent = (mode) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mode));
+    } catch (error) {
+      console.warn('[consent] Failed to persist decision, continuing without storage.', error);
+    }
+  };
+
+  const saved = loadConsent();
+  if (saved) {
+    applyConsent(saved);
+    hideBanner();
+  } else {
+    showBanner();
+  }
+
+  const finalize = (consent) => {
+    applyConsent(consent);
+    persistConsent(consent);
+    hideBanner();
+  };
+
+  acceptBtn?.addEventListener('click', () => {
+    const consent = {
+      ad_storage: 'granted',
+      analytics_storage: 'granted',
+    };
+    finalize(consent);
+  });
+
+  denyBtn?.addEventListener('click', () => {
+    const consent = {
+      ad_storage: 'denied',
+      analytics_storage: 'denied',
+    };
+    finalize(consent);
+  });
+</script>
