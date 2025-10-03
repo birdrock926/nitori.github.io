@@ -1,0 +1,50 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+---
+<BaseLayout title="プライバシーポリシー" description="プライバシー保護方針" canonical={Astro.url.href}>
+  <article class="card" style="gap: 1.5rem;">
+    <h1 style="margin: 0;">プライバシーポリシー</h1>
+    <section>
+      <h2>1. 収集する情報</h2>
+      <p>
+        当サイトはアクセス解析および広告配信の最適化のため、Cookie、ローカルストレージ、匿名識別子等を利用する場合があります。利用者はブラウザ設定により Cookie の受け入れを拒否できますが、一部機能が正しく動作しない可能性があります。
+      </p>
+    </section>
+    <section>
+      <h2>2. アクセス解析</h2>
+      <p>
+        Google Analytics などのアクセス解析ツールを使用し、閲覧ページ、滞在時間、参照元などの統計情報を収集します。これらのデータは匿名で収集され、個人を特定するものではありません。
+      </p>
+    </section>
+    <section>
+      <h2>3. 広告配信</h2>
+      <p>
+        当サイトは Google AdSense を含む広告ネットワークを利用します。広告配信事業者は Cookie を使用してユーザーの興味に基づく広告を表示することがあります。詳細は Google 広告の<a href="https://policies.google.com/technologies/ads?hl=ja" target="_blank" rel="noopener noreferrer">広告に関するポリシー</a>をご確認ください。
+      </p>
+    </section>
+    <section>
+      <h2>4. 匿名コメント</h2>
+      <p>
+        スパム対策およびモデレーションのため、コメント送信時に IP アドレスのハッシュ、同一ネットワークを識別するネットハッシュ、ブラウザ情報、送信日時などを暗号化せずに内部メタデータとして保存します。これらは管理画面の「コメント &gt; 詳細」または管理 API（/api/mod/comments/:id/meta）からモデレーターが参照できます。公開レスポンスには含まれません。
+      </p>
+    </section>
+    <section>
+      <h2>5. BAN・モデレーション</h2>
+      <p>
+        悪質な投稿者に対しては IP / ネットハッシュ単位での BAN、過去コメントの一括削除、シャドウ BAN 等を実施する場合があります。詳細な手順は運用ドキュメント（セットアップガイド）をご確認ください。
+      </p>
+    </section>
+    <section>
+      <h2>6. お問い合わせ</h2>
+      <p>
+        お問い合わせフォームやメールで取得した個人情報は、回答およびサポートに必要な範囲でのみ利用し、法令に基づく場合を除き第三者に提供しません。
+      </p>
+    </section>
+    <section>
+      <h2>7. 改定</h2>
+      <p>
+        本ポリシーは必要に応じて改定します。重要な変更がある場合はサイト上で告知します。
+      </p>
+    </section>
+  </article>
+</BaseLayout>

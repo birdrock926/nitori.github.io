@@ -1,0 +1,67 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PostCard from '@components/PostCard.astro';
+import { getPostsByTag, getTags } from '@lib/strapi';
+
+const tags = await getTags();
+const candidateTags = tags.slice(0, 12);
+
+const groups = (
+  await Promise.all(
+    candidateTags.map(async (tag) => {
+      const posts = await getPostsByTag(tag.slug);
+      return { tag, posts: posts.slice(0, 3) };
+    })
+  )
+).filter((group) => group.posts.length > 0);
+
+const sortedGroups = groups.sort((a, b) => b.posts.length - a.posts.length);
+---
+<BaseLayout
+  title="タグで探す"
+  description="人気タグごとにゲームニュースをまとめてチェック"
+  canonical={Astro.url.href}
+>
+  <section class="section" aria-labelledby="tags-heading">
+    <header class="section-heading">
+      <span class="section-eyebrow">Collections</span>
+      <div>
+        <h1 id="tags-heading" class="section-title">タグでまとめて探す</h1>
+        <p class="section-subtitle muted">気になるテーマの最新記事をピックアップ</p>
+      </div>
+    </header>
+    {tags.length > 0 && (
+      <ul class="tag-cloud" aria-label="利用可能なタグ一覧">
+        {tags.map((tag) => (
+          <li>
+            <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+          </li>
+        ))}
+      </ul>
+    )}
+    <div class="tag-groups" aria-live="polite">
+      {sortedGroups.length === 0 ? (
+        <p class="muted">公開済みの記事が存在するタグがまだありません。</p>
+      ) : (
+        sortedGroups.map((group) => (
+          <section class="tag-group" id={`tag-${group.tag.slug}`}>
+            <header class="tag-group__header">
+              <h2 class="tag-group__title">{group.tag.name}</h2>
+              <a class="tag-group__cta" href={`/tags/${group.tag.slug}/`}>
+                すべて見る
+                <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" focusable="false" role="img">
+                  <path d="m6 3 5 5-5 5-1-1 4-4-4-4 1-1Z" fill="currentColor" />
+                </svg>
+              </a>
+            </header>
+            <div class="tag-group__posts">
+              {group.posts.map((post) => (
+                <PostCard post={post} />
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+    </div>
+  </section>
+</BaseLayout>
