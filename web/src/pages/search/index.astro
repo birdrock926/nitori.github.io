@@ -1,0 +1,16 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import SearchIsland from '@components/SearchIsland.tsx';
+import { getLatestPosts } from '@lib/strapi';
+
+const posts = await getLatestPosts(200);
+---
+<BaseLayout title="検索" description="ゲームニュースの全文検索とタグフィルター" canonical={Astro.url.href}>
+  <section style="display: grid; gap: 1.5rem;">
+    <header>
+      <h1 style="margin: 0;">検索</h1>
+      <p class="muted">キーワードとタグの組み合わせで、最短で気になる情報にアクセス。</p>
+    </header>
+    <SearchIsland client:load posts={posts} />
+  </section>
+</BaseLayout>
