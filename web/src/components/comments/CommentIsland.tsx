@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import type { CommentNode } from '@lib/strapi';
 import { fetchComments } from '@lib/strapi';
 import { deleteOwnComment, reportComment, submitComment } from '@lib/comments';
