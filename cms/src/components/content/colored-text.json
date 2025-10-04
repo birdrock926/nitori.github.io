@@ -1,0 +1,29 @@
+{
+  "collectionName": "components_content_colored_texts",
+  "info": {
+    "displayName": "Colored Text",
+    "description": "色付きテキスト",
+    "icon": "brush"
+  },
+  "attributes": {
+    "text": {
+      "type": "text",
+      "required": true
+    },
+    "color": {
+      "type": "customField",
+      "customField": "plugin::color-picker.color",
+      "default": "#2563eb",
+      "required": true
+    },
+    "background": {
+      "type": "customField",
+      "customField": "plugin::color-picker.color",
+      "default": "transparent"
+    },
+    "isInline": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

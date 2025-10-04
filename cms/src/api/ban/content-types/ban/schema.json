@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "bans",
+  "info": {
+    "singularName": "ban",
+    "pluralName": "bans",
+    "displayName": "Ban",
+    "description": "BAN リスト"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "ip_hash": {
+      "type": "string"
+    },
+    "net_hash": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "expiresAt": {
+      "type": "datetime"
+    }
+  }
+}

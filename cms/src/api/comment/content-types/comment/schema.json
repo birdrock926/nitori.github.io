@@ -1,0 +1,70 @@
+{
+  "kind": "collectionType",
+  "collectionName": "comments",
+  "info": {
+    "singularName": "comment",
+    "pluralName": "comments",
+    "displayName": "Comment",
+    "description": "匿名コメント"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "post": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::post.post",
+      "inversedBy": "comments"
+    },
+    "parent": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::comment.comment",
+      "inversedBy": "children"
+    },
+    "children": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::comment.comment",
+      "mappedBy": "parent"
+    },
+    "reports": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::report.report",
+      "mappedBy": "comment"
+    },
+    "body": {
+      "type": "text",
+      "required": true
+    },
+    "alias": {
+      "type": "string",
+      "required": true
+    },
+    "isModerator": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["published", "pending", "hidden", "shadow"],
+      "default": "pending"
+    },
+    "ip_hash": {
+      "type": "string",
+      "required": true
+    },
+    "net_hash": {
+      "type": "string"
+    },
+    "edit_key_hash": {
+      "type": "string",
+      "required": true
+    },
+    "meta": {
+      "type": "json"
+    }
+  }
+}
