@@ -324,8 +324,9 @@ npm run preview
    - どちらの API でも既定で過去コメントを一括削除（`purge`）。履歴を残したい場合のみ `purge=false` を指定してください。
    - `expiresAt` に日時を設定すると期限付き BAN、空欄の場合は無期限 BAN になります。`reason` に調査メモを残しておくと管理が容易です。
 4. **自動判定と通報**
-   - 通報が閾値（既定値: 3 件）を超えると `hidden` に自動切替されます。管理画面から内容を確認して適切なステータスへ変更してください。
-   - コメント本文や表示名は禁止語・許可ドメイン判定を通過した内容のみが登録されます。待ち時間は設けていないため、過剰投稿はレート制限（分/時/日）で制御してください。
+   - 本文には禁止語・未許可ドメイン・過剰なリンク数のインデックスが適用され、該当した場合は `pending` として保存し、理由を `meta.moderation.reasons` に記録します。それ以外は `COMMENTS_AUTO_PUBLISH=true` の環境では即時公開されます。
+   - 読者は「スパム・広告 / 誹謗中傷 / 権利侵害 / その他」のいずれかを選んで通報できます。同一ブラウザから同じコメントを重複通報しても 1 件として扱われます。
+   - 管理者は `POST /api/mod/comments/:id/report` で運営通報を追加でき、フロントでは「運営確認中」バッジを表示します。通報数は `meta.moderation.reportCount` に集計され、既定閾値（3 件）で自動的に `hidden` に移行します。
 
 ## セキュリティ
 - 管理画面は OAuth / SSO 連携や IP 制限の併用を推奨
@@ -385,7 +386,7 @@ Cloudflare Pages ではプロジェクト設定から独自ドメインを追加
 
 - **Strapi が起動しない**：`npm run build -- --clean` を実行し、`node_modules` を削除後再インストール
 - **Webhook が失敗する**：Strapi ログと GitHub Actions の `workflow_dispatch` イベントログを確認
-- **コメントが投稿できない**：CAPTCHA、BAN、禁止語リスト、URL ホワイトリストの各設定を確認
+- **コメントが投稿できない**：CAPTCHA、BAN、禁止語・未許可リンクによる自動判定で `pending` になっていないか、URL ホワイトリストの設定を確認
 - **Strapi ビルド時の `Bus error` (SIGBUS)**：Node 20 + Alpine でも動作するよう CLI をパッチ済みですが、メモリ 2GB 未満の環境では Vite が落ちる可能性があります。`npm run build` 実行前にメモリ割り当てを増やすか、公式 `strapi/strapi:5`（Node 18 ベース）でビルドする方法、またはローカルでビルド済み成果物をマウントする方法に切り替えてください。
 - **`ERR_UNSUPPORTED_DIR_IMPORT: lodash/fp`**：本リポジトリでは `patch-package` と `scripts/run-strapi.mjs` により解消済みです。もし再発した場合は `npm install` でパッチが適用されているか確認し、独自に Strapi をアップグレードした際は `NODE_OPTIONS=--experimental-specifier-resolution=node npm run develop` を一時的に指定するか、Docker/Node 18 での実行を検討してください。
 - **npm error ENOENT: Cannot cd into ... typescript**：`/cms/package.json` の `devDependencies` に `"typescript": "5.4.5"` を追加し、`rm -rf node_modules package-lock.json && npm install` を実行してください。本リポジトリには修正済みの定義が含まれています。

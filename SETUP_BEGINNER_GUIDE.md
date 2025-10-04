@@ -186,6 +186,7 @@ npm run dev
 - Strapi のサイドバー「Content Manager → Comments」を開くと、最新投稿が `status` 列付きで表示されます。初期状態は `pending` なので、内容を確認して問題なければ `published` に更新してください。
 - 投稿者本人のみに見せたい場合は `shadow`、完全に非表示にしたい場合は `hidden` を選択します。変更すると API レスポンスに即時反映されます。
 - 公式アカウントとして返信する際はコメント編集画面で `isModerator` をオンにすると、Web 側でバッジとカラーが付いた「モデレーター」表示になります。必要に応じて `alias` を編集して署名を入れてください。
+- 本文が禁止語・未許可ドメイン・リンク過多のインデックスに該当すると自動的に `pending` となり、理由が `meta.moderation.reasons` に記録されます。該当しない投稿は `COMMENTS_AUTO_PUBLISH=true` の環境で即時公開されます。
 - コメント詳細画面右上の「︙」→ **JSON を表示** を開くと、`meta.client.ip` と `maskedIp`、`ua`、`submittedAt` をそのまま確認できます。API で確認したい場合は管理者トークンを付与して `GET /api/mod/comments/:id/meta` を呼び出してください。
 - API の呼び出し例
   ```bash
@@ -194,7 +195,8 @@ npm run dev
   ```
 - 悪質な送信元を遮断するには「Content Manager → Bans」で `ip_hash`（単一 IP）または `net_hash`（/24）を入力したレコードを追加します。`expiresAt` を設定すると期限付き BAN、空欄なら恒久 BAN です。
 - もしくは `POST /api/mod/comments/:id/ban` を呼ぶと、対象コメントの `ip_hash` / `net_hash` を自動取得して BAN を登録し、既定で過去コメントを一括削除します。履歴を残したいときはリクエストボディに `{ "purge": false }` を含めてください。
-- コメント詳細画面では `reports` リレーションから通報履歴を確認できます。閾値（既定 3 件）を超えると自動的に `hidden` へ切り替わるため、内容を確認して必要に応じて `published` へ戻してください。
+- フロントエンドでは通報時に「スパム・広告 / 誹謗中傷 / 権利侵害 / その他」から選択できます。同じブラウザからの重複通報は 1 件として扱われます。
+- モデレーターが運営判断で通報する場合は `POST /api/mod/comments/:id/report` を呼び出すと `meta.moderation.moderatorFlagged` が有効になり、Web 側で「運営確認中」バッジが表示されます。通報件数は `meta.moderation.reportCount` に反映され、閾値（既定 3 件）を超えると自動で `hidden` に切り替わります。
 
 ## 7. OCI Always Free で CMS を公開する
 ここでは、OCI の無料枠を使って Strapi を常駐させるまでの流れを初心者向けに整理します。作業時間は 60〜90 分程度を見込んでください。

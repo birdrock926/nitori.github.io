@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import {
   validateBody,
+  evaluateModeration,
   hashIp,
   networkHash,
   generateAlias,
@@ -14,18 +15,24 @@ import {
 
 describe('コメントユーティリティ', () => {
   test('本文バリデーション成功', () => {
-    expect(() => validateBody('これはテストです')).not.toThrow();
+    expect(validateBody('これはテストです')).toBe('これはテストです');
   });
 
-  test('禁止語を検知', () => {
-    expect(() => validateBody('これは違法な投稿です')).toThrow('禁止語句');
+  test('禁止語はモデレーション対象になる', () => {
+    const result = evaluateModeration('これは違法な投稿です');
+    expect(result.requiresReview).toBe(true);
+    expect(result.reasons.some((reason) => reason.type === 'word')).toBe(true);
   });
 
-  test('URL 数制限', () => {
-    const body = 'a ' + Array.from({ length: 4 })
-      .map((_, idx) => `https://youtube.com/watch?v=${idx}`)
-      .join(' ');
-    expect(() => validateBody(body)).toThrow('URL');
+  test('URL 数が多い場合はモデレーション対象', () => {
+    const body =
+      'a ' +
+      Array.from({ length: 4 })
+        .map((_, idx) => `https://youtube.com/watch?v=${idx}`)
+        .join(' ');
+    const result = evaluateModeration(body);
+    expect(result.requiresReview).toBe(true);
+    expect(result.reasons.some((reason) => reason.type === 'link-count')).toBe(true);
   });
 
   test('ハッシュは同じ入力で一致', () => {

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { CommentNode } from '@lib/strapi';
+import type { CommentNode, ModerationReason } from '@lib/strapi';
 import { fetchComments } from '@lib/strapi';
-import { deleteOwnComment, reportComment, submitComment } from '@lib/comments';
+import { deleteOwnComment, reportComment, submitComment, type ReportReason } from '@lib/comments';
 import { formatDateTime, relative } from '@lib/format';
 import { CAPTCHA } from '@config/site';
 
@@ -28,6 +28,34 @@ type Props = {
 type Notification = {
   message: string;
   type: 'success' | 'error';
+};
+
+const REPORT_OPTIONS: { value: ReportReason; label: string; description: string }[] = [
+  { value: 'spam', label: 'スパム・広告', description: '宣伝や無関係な内容' },
+  { value: 'abuse', label: '誹謗中傷', description: '攻撃的・差別的な内容' },
+  { value: 'copyright', label: '権利侵害', description: '著作権や規約違反が疑われる' },
+  { value: 'other', label: 'その他', description: 'その他の問題' },
+];
+
+const describeModerationReasons = (reasons: ModerationReason[] = []) => {
+  if (!reasons.length) {
+    return '';
+  }
+  const labels = reasons
+    .map((reason) => {
+      if (reason.type === 'word') {
+        return `特定語句（${reason.matches.join(', ')}）`;
+      }
+      if (reason.type === 'link-count') {
+        return `リンク数が多い（${reason.count}件）`;
+      }
+      if (reason.type === 'link-host') {
+        return `要確認リンク（${reason.hosts.join(', ')}）`;
+      }
+      return null;
+    })
+    .filter(Boolean);
+  return labels.join('、');
 };
 
 const normalizeNodes = (nodes: CommentNode[] = []): CommentNode[] =>
@@ -57,6 +85,30 @@ const removeCommentById = (nodes: CommentNode[], id: number): CommentNode[] =>
     .filter((node) => node.id !== id)
     .map((node) => ({ ...node, children: node.children ? removeCommentById(node.children, id) : [] }));
 
+const updateCommentMeta = (
+  nodes: CommentNode[],
+  targetId: number,
+  updater: (meta: CommentNode['meta']) => CommentNode['meta']
+): CommentNode[] => {
+  let changed = false;
+  const next = nodes.map((node) => {
+    let nextNode = node;
+    if (node.id === targetId) {
+      changed = true;
+      nextNode = { ...node, meta: updater(node.meta) };
+    }
+    if (node.children?.length) {
+      const updatedChildren = updateCommentMeta(node.children, targetId, updater);
+      if (updatedChildren !== node.children) {
+        changed = true;
+        nextNode = { ...nextNode, children: updatedChildren };
+      }
+    }
+    return nextNode;
+  });
+  return changed ? next : nodes;
+};
+
 const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +121,9 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [notification, setNotification] = useState<Notification | null>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const [honeypot, setHoneypot] = useState('');
+  const [reportTargetId, setReportTargetId] = useState<number | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>('spam');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const configuredProvider = CAPTCHA.provider;
   const turnstileSiteKey = CAPTCHA.turnstileSiteKey;
   const recaptchaSiteKey = CAPTCHA.recaptchaSiteKey;
@@ -118,6 +173,9 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
     setParentId(null);
     setCaptchaToken(null);
     setCaptchaError(null);
+    setReportTargetId(null);
+    setReportReason('spam');
+    setReportSubmitting(false);
     if (captchaProvider === 'turnstile' && window.turnstile && turnstileWidgetId.current) {
       window.turnstile.reset(turnstileWidgetId.current);
       setCaptchaReady(false);
@@ -338,12 +396,39 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
     }
   };
 
-  const handleReport = async (id: number) => {
+  const startReport = (id: number) => {
+    if (reportTargetId === id) {
+      setReportTargetId(null);
+      return;
+    }
+    setReportSubmitting(false);
+    setReportTargetId(id);
+    setReportReason('spam');
+  };
+
+  const cancelReport = () => {
+    setReportTargetId(null);
+    setReportSubmitting(false);
+  };
+
+  const submitReport = async (id: number) => {
     try {
-      await reportComment(id, 'abuse');
-      announce({ message: '通報を受け付けました', type: 'success' });
+      setReportSubmitting(true);
+      const res = await reportComment(id, reportReason);
+      const message = res.alreadyReported
+        ? '既に通報済みのため内容を更新しました'
+        : '通報を受け付けました';
+      if (typeof res.reportCount === 'number') {
+        setComments((prev) =>
+          updateCommentMeta(prev, id, (meta) => ({ ...(meta ?? {}), reportCount: res.reportCount }))
+        );
+      }
+      announce({ message, type: 'success' });
+      setReportTargetId(null);
     } catch (err: any) {
       announce({ message: err.message ?? '通報に失敗しました', type: 'error' });
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -493,8 +578,14 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             key={comment.id}
             comment={comment}
             onReply={(id) => setParentId(id)}
-            onReport={handleReport}
             onDelete={handleDelete}
+            onStartReport={startReport}
+            onSubmitReport={submitReport}
+            onCancelReport={cancelReport}
+            onSelectReportReason={(reason) => setReportReason(reason)}
+            reportTargetId={reportTargetId}
+            reportReason={reportReason}
+            reportSubmitting={reportSubmitting}
           />
         ))}
         {nextCursor && (
@@ -510,15 +601,46 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
 type ThreadProps = {
   comment: CommentNode;
   onReply: (id: number) => void;
-  onReport: (id: number) => void;
   onDelete: (id: number) => void;
+  onStartReport: (id: number) => void;
+  onSubmitReport: (id: number) => void;
+  onCancelReport: () => void;
+  onSelectReportReason: (reason: ReportReason) => void;
+  reportTargetId: number | null;
+  reportReason: ReportReason;
+  reportSubmitting: boolean;
 };
 
-const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) => {
+const CommentThread = ({
+  comment,
+  onReply,
+  onDelete,
+  onStartReport,
+  onSubmitReport,
+  onCancelReport,
+  onSelectReportReason,
+  reportTargetId,
+  reportReason,
+  reportSubmitting,
+}: ThreadProps) => {
   const isPending = comment.status !== 'published';
   const aliasColor = comment.meta?.aliasColor || (comment.isModerator ? 'var(--accent-strong)' : undefined);
   const aliasLabel = comment.meta?.aliasLabel || (comment.isModerator ? 'モデレーター' : undefined);
   const aliasClass = comment.isModerator ? 'comment-alias comment-alias--moderator' : 'comment-alias';
+  const isReporting = reportTargetId === comment.id;
+  const moderationReasons = describeModerationReasons(comment.meta?.flaggedReasons);
+  const reportCount = typeof comment.meta?.reportCount === 'number' ? comment.meta.reportCount : 0;
+  const moderationMessages: string[] = [];
+  if (comment.meta?.requiresReview) {
+    moderationMessages.push(`自動判定により審査中${moderationReasons ? `（${moderationReasons}）` : ''}`);
+  }
+  if (comment.meta?.moderatorFlagged) {
+    moderationMessages.push('運営による確認中');
+  }
+  if (reportCount > 0) {
+    moderationMessages.push(`通報: ${reportCount}件`);
+  }
+  const moderationNote = moderationMessages.join(' / ');
   return (
     <article className="card comment-thread" style={{ gap: '0.75rem' }}>
       <header className="comment-thread__header">
@@ -531,6 +653,11 @@ const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) =>
               {aliasLabel}
             </span>
           )}
+          {comment.meta?.moderatorFlagged && (
+            <span className="comment-badge comment-badge--warning" aria-label="運営確認中">
+              運営確認中
+            </span>
+          )}
         </div>
         <time dateTime={comment.createdAt} className="muted">
           {formatDateTime(comment.createdAt)}（{relative(comment.createdAt)}）
@@ -538,17 +665,63 @@ const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) =>
       </header>
       <p style={{ margin: 0, opacity: isPending ? 0.6 : 1 }}>{comment.body}</p>
       {isPending && <p className="muted" style={{ margin: 0 }}>審査中のため非公開です</p>}
+      {moderationNote && (
+        <p className="muted" style={{ margin: 0 }}>{moderationNote}</p>
+      )}
       <div className="comment-thread__actions">
         <button type="button" className="tag-chip" onClick={() => onReply(comment.id)}>
           返信
         </button>
-        <button type="button" className="tag-chip" onClick={() => onReport(comment.id)}>
-          通報
+        <button type="button" className="tag-chip" onClick={() => onStartReport(comment.id)}>
+          {isReporting ? '通報を閉じる' : '通報'}
         </button>
         <button type="button" className="tag-chip" onClick={() => onDelete(comment.id)}>
           自分の投稿を非表示
         </button>
       </div>
+      {isReporting && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitReport(comment.id);
+          }}
+          className="comment-report"
+          style={{ display: 'grid', gap: '0.75rem', background: 'var(--layer-sunken)', padding: '0.75rem', borderRadius: '0.75rem' }}
+        >
+          <fieldset style={{ border: 'none', margin: 0, padding: 0 }} disabled={reportSubmitting}>
+            <legend className="muted" style={{ marginBottom: '0.5rem' }}>
+              通報する理由を選んでください
+            </legend>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {REPORT_OPTIONS.map((option) => (
+                <label key={option.value} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  <input
+                    type="radio"
+                    name={`report-${comment.id}`}
+                    value={option.value}
+                    checked={reportReason === option.value}
+                    onChange={() => onSelectReportReason(option.value)}
+                  />
+                  <span>
+                    <strong style={{ display: 'block' }}>{option.label}</strong>
+                    <span className="muted" style={{ display: 'block', fontSize: '0.85rem' }}>
+                      {option.description}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button type="submit" className="tag-chip" disabled={reportSubmitting}>
+              {reportSubmitting ? '送信中…' : '通報を送信'}
+            </button>
+            <button type="button" className="tag-chip" onClick={onCancelReport} disabled={reportSubmitting}>
+              キャンセル
+            </button>
+          </div>
+        </form>
+      )}
       {comment.children?.length > 0 && (
         <div className="comment-thread__children">
           {comment.children.map((child) => (
@@ -556,8 +729,14 @@ const CommentThread = ({ comment, onReply, onReport, onDelete }: ThreadProps) =>
               key={child.id}
               comment={child}
               onReply={onReply}
-              onReport={onReport}
               onDelete={onDelete}
+              onStartReport={onStartReport}
+              onSubmitReport={onSubmitReport}
+              onCancelReport={onCancelReport}
+              onSelectReportReason={onSelectReportReason}
+              reportTargetId={reportTargetId}
+              reportReason={reportReason}
+              reportSubmitting={reportSubmitting}
             />
           ))}
         </div>

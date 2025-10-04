@@ -25,6 +25,10 @@
     "reporter_key": {
       "type": "string",
       "required": true
+    },
+    "byModerator": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

@@ -65,6 +65,14 @@ export default {
       },
     },
     {
+      method: 'POST',
+      path: '/mod/comments/:id/report',
+      handler: 'comment.moderatorReport',
+      config: {
+        policies: ['admin::isAuthenticatedAdmin'],
+      },
+    },
+    {
       method: 'GET',
       path: '/mod/comments/:id/meta',
       handler: 'comment.moderatorMeta',

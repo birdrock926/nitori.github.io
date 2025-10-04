@@ -42,7 +42,9 @@ export const submitComment = async (payload: SubmitCommentPayload) => {
   return (await response.json()) as { data: { comment: SubmittedComment; editKey: string } };
 };
 
-export const reportComment = async (id: number, reason: string) => {
+export type ReportReason = 'spam' | 'abuse' | 'copyright' | 'other';
+
+export const reportComment = async (id: number, reason: ReportReason) => {
   if (!baseUrl) throw new Error('STRAPI_API_URL が未設定です');
   const response = await fetch(`${baseUrl}/api/comments/${id}/report`, {
     method: 'POST',
@@ -52,10 +54,20 @@ export const reportComment = async (id: number, reason: string) => {
     },
     body: JSON.stringify({ reason }),
   });
-  if (!response.ok) {
-    throw new Error('通報に失敗しました');
+  const text = await response.text();
+  let parsed: any = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      // ignore JSON parse error
+    }
   }
-  return (await response.json()) as { ok: boolean };
+  if (!response.ok) {
+    const message = parsed?.error?.message || parsed?.message || '通報に失敗しました';
+    throw new Error(message);
+  }
+  return (parsed || { ok: true }) as { ok: boolean; alreadyReported?: boolean; reportCount?: number };
 };
 
 export const deleteOwnComment = async (id: number, editKey: string) => {

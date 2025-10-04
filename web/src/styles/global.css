@@ -1128,9 +1128,19 @@ main > * {
   letter-spacing: 0.02em;
 }
 
+.comment-badge--warning {
+  background: rgba(239, 68, 68, 0.18);
+  color: #dc2626;
+}
+
 [data-theme='dark'] .comment-badge {
   background: rgba(45, 212, 191, 0.22);
   color: var(--accent-strong);
+}
+
+[data-theme='dark'] .comment-badge--warning {
+  background: rgba(248, 113, 113, 0.25);
+  color: #fca5a5;
 }
 
 @media (max-width: 640px) {

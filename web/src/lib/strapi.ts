@@ -567,10 +567,19 @@ export const getRanking = async () => {
   }
 };
 
+export type ModerationReason =
+  | { type: 'word'; matches: string[] }
+  | { type: 'link-count'; count: number }
+  | { type: 'link-host'; hosts: string[] };
+
 export type CommentMeta = {
   aliasColor?: string;
   aliasLabel?: string;
   aliasProvided?: boolean;
+  requiresReview?: boolean;
+  flaggedReasons?: ModerationReason[];
+  reportCount?: number;
+  moderatorFlagged?: boolean;
 };
 
 export type CommentNode = {

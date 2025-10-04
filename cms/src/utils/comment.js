@@ -4,7 +4,16 @@ import dayjs from 'dayjs';
 
 const URL_REGEX = /(https?:\/\/[\w.-]+(?:\/[\w./?%&=+-]*)?)/gi;
 const BANNED_WORDS = ['死ね', '殺す', '違法', 'スパム'];
-const ALLOWED_HOSTS = ['youtube.com', 'youtu.be', 'twitch.tv', 'www.youtube.com', 'www.twitch.tv'];
+const FLAGGED_WORDS = ['違法', '暴力', '殺す', '死ね', '詐欺', 'スパム'];
+const TRUSTED_LINK_HOSTS = [
+  'youtube.com',
+  'youtu.be',
+  'twitch.tv',
+  'www.youtube.com',
+  'www.twitch.tv',
+  'twitter.com',
+];
+const MAX_LINK_COUNT = 3;
 const ALIAS_MIN_LENGTH = 2;
 const ALIAS_MAX_LENGTH = 24;
 
@@ -88,25 +97,45 @@ export const validateBody = (body) => {
   if (sanitized.length > 2000) {
     throw new Error('コメント本文が長すぎます');
   }
+  return sanitized;
+};
+
+const normaliseHost = (value) => value.replace(/^www\./, '').toLowerCase();
+
+const mapReasons = ({ links, sanitized }) => {
+  const reasons = [];
 
   const lower = sanitized.toLowerCase();
-  for (const banned of BANNED_WORDS) {
-    if (lower.includes(banned.toLowerCase())) {
-      throw new Error('禁止語句が含まれています');
-    }
+  const matchedWords = FLAGGED_WORDS.filter((word) => lower.includes(word.toLowerCase()));
+  if (matchedWords.length) {
+    reasons.push({ type: 'word', matches: Array.from(new Set(matchedWords)) });
   }
 
+  if (links.length > MAX_LINK_COUNT) {
+    reasons.push({ type: 'link-count', count: links.length });
+  }
+
+  const disallowedHosts = links
+    .map((link) => normaliseHost(link.hostname))
+    .filter((host) => !TRUSTED_LINK_HOSTS.some((allowed) => host === normaliseHost(allowed) || host.endsWith(`.${normaliseHost(allowed)}`)));
+
+  if (disallowedHosts.length) {
+    reasons.push({ type: 'link-host', hosts: Array.from(new Set(disallowedHosts)) });
+  }
+
+  return reasons;
+};
+
+export const evaluateModeration = (body) => {
+  const sanitized = validateBody(body);
   const links = extractLinks(sanitized);
-  if (links.length > 3) {
-    throw new Error('URL は 3 件までです');
-  }
-  for (const link of links) {
-    if (!ALLOWED_HOSTS.some((host) => link.hostname.endsWith(host))) {
-      throw new Error('許可されていないドメインへのリンクがあります');
-    }
-  }
-
-  return sanitized;
+  const reasons = mapReasons({ links, sanitized });
+  return {
+    sanitized,
+    requiresReview: reasons.length > 0,
+    reasons,
+    linkCount: links.length,
+  };
 };
 
 export const hashIp = (ip, pepper) => sha256.hmac(pepper, ip || 'unknown');
@@ -239,14 +268,30 @@ export const detectSimilarity = async (strapi, { ipHash, body }) => {
 };
 
 const extractDisplayMeta = (meta) => {
-  if (!meta) return undefined;
-  if (typeof meta !== 'object') return undefined;
-  if (meta.display && typeof meta.display === 'object') {
-    const { aliasColor, aliasLabel, aliasProvided } = meta.display;
-    return { aliasColor, aliasLabel, aliasProvided };
+  if (!meta || typeof meta !== 'object') {
+    return undefined;
   }
-  const { aliasColor, aliasLabel, aliasProvided } = meta;
-  return { aliasColor, aliasLabel, aliasProvided };
+
+  const display = meta.display && typeof meta.display === 'object' ? meta.display : meta;
+  const moderation = meta.moderation && typeof meta.moderation === 'object' ? meta.moderation : {};
+
+  const result = {
+    aliasColor: display.aliasColor,
+    aliasLabel: display.aliasLabel,
+    aliasProvided: display.aliasProvided,
+    requiresReview: Boolean(moderation.requiresReview),
+    moderatorFlagged: Boolean(moderation.moderatorFlagged),
+  };
+
+  if (typeof moderation.reportCount === 'number') {
+    result.reportCount = moderation.reportCount;
+  }
+
+  if (Array.isArray(moderation.reasons)) {
+    result.flaggedReasons = moderation.reasons;
+  }
+
+  return result;
 };
 
 export const buildCommentResponse = (comment) => ({
