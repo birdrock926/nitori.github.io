@@ -43,8 +43,7 @@ const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
   .map((host) => host.trim())
   .filter(Boolean);
 
-const fallbackStrapiUrl =
-  import.meta.env.STRAPI_API_URL || (import.meta.env.DEV ? 'http://localhost:1337' : '');
+const fallbackStrapiUrl = import.meta.env.STRAPI_API_URL || 'http://localhost:1337';
 
 export const STRAPI = {
   url: fallbackStrapiUrl,

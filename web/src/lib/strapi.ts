@@ -506,6 +506,8 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
 
 const ensureArray = <T>(value: unknown): T[] => extractArray<T>(value);
 
+const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?.slug?.trim()));
+
 const PUBLISHED_FILTER_KEY = 'filters[publishedAt][$notNull]';
 
 const prepareFallbackParams = (params: Record<string, string | number | undefined>) => {
@@ -539,7 +541,7 @@ export const getLatestPosts = async (limit = 12) => {
     },
     true
   );
-  return items.map(mapPost);
+  return filterValidPosts(items.map(mapPost));
 };
 
 export const getAllPosts = async () => {
@@ -551,7 +553,7 @@ export const getAllPosts = async () => {
     },
     true
   );
-  return items.map(mapPost);
+  return filterValidPosts(items.map(mapPost));
 };
 
 export const getPostBySlug = async (slug: string) => {
@@ -578,13 +580,25 @@ export const getPostBySlug = async (slug: string) => {
     }
   }
 
-  const mapped = items.map(mapPost);
+  let mapped = filterValidPosts(items.map(mapPost));
   const normalized = slug.toString();
-  const found = mapped.find((item) => item.slug === normalized);
-  if (found) return found;
   const lower = normalized.toLowerCase();
-  const fallback = mapped.find((item) => item.slug.toLowerCase() === lower);
-  return fallback ?? mapped[0] ?? null;
+  let match = mapped.find((item) => item.slug === normalized);
+
+  if (!match) {
+    match = mapped.find((item) => item.slug.toLowerCase() === lower);
+  }
+
+  if (!match) {
+    const allPosts = await getAllPosts();
+    mapped = filterValidPosts(allPosts);
+    match =
+      mapped.find((item) => item.slug === normalized) ||
+      mapped.find((item) => item.slug.toLowerCase() === lower) ||
+      null;
+  }
+
+  return match ?? mapped[0] ?? null;
 };
 
 export const getTags = async () => {
@@ -618,7 +632,7 @@ export const getPostsByTag = async (slug: string) => {
     }
   }
 
-  return items.map(mapPost);
+  return filterValidPosts(items.map(mapPost));
 };
 
 export const getRanking = async () => {
