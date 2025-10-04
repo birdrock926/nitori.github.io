@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_embed_twitch_vods",
+  "info": {
+    "displayName": "Twitch Vod",
+    "description": "Twitch VOD 埋め込み",
+    "icon": "video"
+  },
+  "attributes": {
+    "vodId": {
+      "type": "string",
+      "required": true
+    },
+    "title": {
+      "type": "string"
+    }
+  }
+}
