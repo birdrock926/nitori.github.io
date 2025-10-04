@@ -47,8 +47,8 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | --- | --- | --- | --- |
    | 基本 | `PUBLIC_URL` | CMS を公開する URL | `https://cms.example.com` |
    |  | `PUBLIC_FRONT_ORIGINS` | フロントから API を呼べるオリジン | `https://example.pages.dev` |
-   | CAPTCHA | `CAPTCHA_PROVIDER` | `turnstile` または `recaptcha` | `turnstile` |
-   |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の場合: `1x0000000000000000000000000000000AA` |
+   | CAPTCHA | `CAPTCHA_PROVIDER` | `none` / `turnstile` / `recaptcha` | 開発は `none` |
+   |  | `CAPTCHA_SECRET` | プロバイダー発行のシークレットキー | Turnstile の例: `1x0000000000000000000000000000000AA` |
    | レート制限 | `RATE_LIMITS_MIN/HOUR/DAY` | コメント投稿の制限回数 | `5 / 30 / 200` |
    | コメント即時公開 | `COMMENTS_AUTO_PUBLISH` | `true` にすると投稿直後から公開。開発は `true`、本番は `false` 推奨。 | `false` |
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
@@ -82,9 +82,30 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | `ADSENSE_CLIENT_ID` / `ADSENSE_SLOT_*` | AdSense のクライアント / 広告ユニット ID | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意モードの初期判定地域 | `JP` |
    | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り） | `example.pages.dev,www.example.com` |
+   | `PUBLIC_CAPTCHA_PROVIDER` | コメントフォーム用 CAPTCHA の種別 (`none` / `turnstile` / `recaptcha`) | `none` |
+   | `PUBLIC_TURNSTILE_SITE_KEY` / `PUBLIC_RECAPTCHA_SITE_KEY` | 各プロバイダーのサイトキー | `0x00000000000000000000FFFF` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
 4. 編集後は `cd ..` でルートに戻ります。
+
+#### CAPTCHA の設定手順
+
+- 開発中は `CAPTCHA_PROVIDER=none`（CMS）と `PUBLIC_CAPTCHA_PROVIDER=none`（Web）のまま動作確認できます。
+- 本番で CAPTCHA を有効化する場合は、Cloudflare Turnstile か Google reCAPTCHA v3 のどちらかを選び、以下の手順でキーを取得します。
+
+**Cloudflare Turnstile**
+
+1. Cloudflare ダッシュボードで **Turnstile → Add Site** を開き、検証方式を `Managed`、ドメインに公開サイトのホスト名（複数可）を入力して作成します。
+2. 表示された **Site Key** と **Secret Key** を控え、`cms/.env` に `CAPTCHA_PROVIDER=turnstile`, `CAPTCHA_SECRET=<Secret Key>`、`web/.env` に `PUBLIC_CAPTCHA_PROVIDER=turnstile`, `PUBLIC_TURNSTILE_SITE_KEY=<Site Key>` を設定します。
+3. 設定を保存したら CMS/Web 双方で `npm run build` を再実行し、コメントフォームに Turnstile ウィジェットが表示されることを確認します。
+
+**Google reCAPTCHA v3**
+
+1. [reCAPTCHA 管理画面](https://www.google.com/recaptcha/admin) にアクセスし、タイプ `reCAPTCHA v3` で新しいサイトを登録します。
+2. 取得したサイトキー・シークレットキーを `cms/.env`（`CAPTCHA_PROVIDER=recaptcha`, `CAPTCHA_SECRET=<...>`）と `web/.env`（`PUBLIC_CAPTCHA_PROVIDER=recaptcha`, `PUBLIC_RECAPTCHA_SITE_KEY=<...>`）に設定します。
+3. Astro 側は送信時に自動で `grecaptcha.execute()` を呼び出すため、追加のフォーム改修は不要です。
+
+> **メモ**: CAPTCHA を有効にした状態でテスト投稿を行う場合は、シークレットキーが正しいか・Cloudflare/Google 側でドメインが許可されているかを確認してください。無効化する場合は再び `none` に戻すだけで OK です。
 
 > `.env` はチーム共有時に漏洩しないよう、1Password・Vault 等のシークレットマネージャーで管理しましょう。メールやチャットに平文で貼り付けるのは避けてください。
 

@@ -29,6 +29,7 @@ const ThemeToggle = () => {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('theme', theme);
+    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
   }, [theme]);
 
   const isDark = theme === 'dark';

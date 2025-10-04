@@ -132,7 +132,7 @@
    | --- | --- | --- |
    | `PUBLIC_URL` | CMS を公開する URL。HTTPS で運用します。 | `https://cms.example.com` |
    | `PUBLIC_FRONT_ORIGINS` | フロントエンドから API を呼ぶ許可ドメイン。カンマ区切り。 | `https://example.pages.dev,https://preview.example.com` |
-  | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | Turnstile or reCAPTCHA の種別とシークレットキー。 | `turnstile` / `1x0000000000000000000000000000000AA` |
+  | `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | `none`（開発用）/`turnstile`/`recaptcha` とシークレットキー。`none` の場合は検証をスキップします。 | `none` / `set-before-production` |
   | `RATE_LIMITS_MIN/HOUR/DAY` | 同一送信元のコメント投稿制限回数。ワークロードに合わせて調整。 | `5 / 30 / 200` |
   | `COMMENTS_AUTO_PUBLISH` | `true` でコメント投稿を即時公開。開発時は `true`、本番はモデレーション運用なら `false` を推奨。 | `false` |
   | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
@@ -182,12 +182,38 @@
    | `SITE_URL` | Cloudflare Pages や独自ドメインの公開 URL。 | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
    | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。 | `example.pages.dev,www.example.com` |
+   | `PUBLIC_CAPTCHA_PROVIDER` | コメント投稿フォームで利用する CAPTCHA。`none` / `turnstile` / `recaptcha` を指定。 | `none` |
+   | `PUBLIC_TURNSTILE_SITE_KEY` / `PUBLIC_RECAPTCHA_SITE_KEY` | 各 CAPTCHA プロバイダのサイトキー。未使用のプロバイダは空欄で可。 | `0x00000000000000000000FFFF` |
    | `GA_MEASUREMENT_ID` | Google Analytics 4 の測定 ID（利用しない場合は空欄可）。 | `G-XXXXXXXXXX` |
 | `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意ステータスの初期値を決める地域コード。 | `JP` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」から `Read-only` で発行し、ヘッダー `Authorization: Bearer <token>` で利用できるものを貼り付けます。
 4. `.env` 保存後は `cd ..` でルートに戻ります。
+
+#### CAPTCHA プロバイダの設定
+
+- **ローカル開発**では `CAPTCHA_PROVIDER=none`（`cms/.env`）と `PUBLIC_CAPTCHA_PROVIDER=none`（`web/.env`）のままで問題ありません。コメント API は CAPTCHA をスキップし、即時動作を確認できます。
+- **本番運用**で Cloudflare Turnstile や Google reCAPTCHA v3 を有効化する場合は、以下の手順でサイトキーとシークレットを取得し、`cms/.env` と `web/.env` の両方に設定します。
+
+**Cloudflare Turnstile（推奨）**
+
+1. Cloudflare ダッシュボードで **Turnstile → Add Site** を選択し、サイト名と検証方式に `Managed` を指定します。
+2. `Domain` にフロントエンドの公開ドメイン（例: `example.pages.dev`, `www.example.com`）をカンマ区切りで入力し、`Create` をクリックします。
+3. 画面に表示される **Site Key** と **Secret Key** を控えます。
+4. `cms/.env` に `CAPTCHA_PROVIDER=turnstile`, `CAPTCHA_SECRET=<Secret Key>` を設定し、`web/.env` に `PUBLIC_CAPTCHA_PROVIDER=turnstile`, `PUBLIC_TURNSTILE_SITE_KEY=<Site Key>` を設定します。
+5. 設定後に `npm run build`（web/cms）とデプロイを再実行すると、コメントフォームに Turnstile ウィジェットが表示されます。
+
+**Google reCAPTCHA v3**
+
+1. [Google reCAPTCHA 管理コンソール](https://www.google.com/recaptcha/admin) で新しい v3 サイトを登録します。ドメインには公開サイトのホスト名を入力します。
+2. 発行された **サイトキー** と **シークレットキー** を控え、`cms/.env` に `CAPTCHA_PROVIDER=recaptcha`, `CAPTCHA_SECRET=<シークレットキー>` を設定します。
+3. `web/.env` では `PUBLIC_CAPTCHA_PROVIDER=recaptcha`, `PUBLIC_RECAPTCHA_SITE_KEY=<サイトキー>` を設定してください。
+4. フロントエンドは送信時に自動で `grecaptcha.execute()` を呼び出し、サーバー側で検証が行われます。
+
+> **Tips**
+> - CAPTCHA を本番で有効化する場合は `COMMENTS_AUTO_PUBLISH` を `false` にし、モデレーション後に公開する運用を推奨します。
+> - Turnstile / reCAPTCHA の設定を無効化する際は `CAPTCHA_PROVIDER=none` と `PUBLIC_CAPTCHA_PROVIDER=none` に戻すだけで OK です。
 
 ### GitHub Actions Secrets（Cloudflare Pages デプロイ）
 Cloudflare Pages へ自動デプロイするため、GitHub リポジトリの **Settings → Secrets and variables → Actions** に以下を設定します。

@@ -24,6 +24,20 @@ export const DELETE_REQUEST = {
     'https://docs.google.com/forms/d/REPLACE_WITH_FORM_ID/viewform',
 };
 
+type CaptchaProvider = 'none' | 'turnstile' | 'recaptcha';
+
+const rawCaptchaProvider = (import.meta.env.PUBLIC_CAPTCHA_PROVIDER ?? 'none').toLowerCase();
+const captchaProvider: CaptchaProvider =
+  rawCaptchaProvider === 'turnstile' || rawCaptchaProvider === 'recaptcha'
+    ? (rawCaptchaProvider as CaptchaProvider)
+    : 'none';
+
+export const CAPTCHA = {
+  provider: captchaProvider,
+  turnstileSiteKey: import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? '',
+  recaptchaSiteKey: import.meta.env.PUBLIC_RECAPTCHA_SITE_KEY ?? '',
+};
+
 const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
   .split(',')
   .map((host) => host.trim())

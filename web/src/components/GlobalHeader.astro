@@ -1,5 +1,6 @@
 ---
 import ThemeToggle from '@components/ThemeToggle.tsx';
+import HeaderBehavior from '@components/HeaderBehavior.tsx';
 import { SITE_TITLE } from '@config/site';
 import { getTags } from '@lib/strapi';
 
@@ -67,3 +68,4 @@ const navLinks = [
     )}
   </div>
 </header>
+<HeaderBehavior client:load />

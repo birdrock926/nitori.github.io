@@ -4,6 +4,21 @@ import type { CommentNode } from '@lib/strapi';
 import { fetchComments } from '@lib/strapi';
 import { deleteOwnComment, reportComment, submitComment } from '@lib/comments';
 import { formatDateTime, relative } from '@lib/format';
+import { CAPTCHA } from '@config/site';
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (element: HTMLElement, options: Record<string, any>) => string;
+      reset: (widgetId: string) => void;
+      remove: (widgetId: string) => void;
+    };
+    grecaptcha?: {
+      ready: (callback: () => void) => void;
+      execute: (siteKey: string, options: Record<string, any>) => Promise<string>;
+    };
+  }
+}
 
 type Props = {
   postSlug: string;
@@ -54,6 +69,21 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
   const [notification, setNotification] = useState<Notification | null>(null);
   const liveRef = useRef<HTMLDivElement>(null);
   const [honeypot, setHoneypot] = useState('');
+  const configuredProvider = CAPTCHA.provider;
+  const turnstileSiteKey = CAPTCHA.turnstileSiteKey;
+  const recaptchaSiteKey = CAPTCHA.recaptchaSiteKey;
+  const captchaProvider =
+    configuredProvider === 'turnstile' && !turnstileSiteKey
+      ? 'none'
+      : configuredProvider === 'recaptcha' && !recaptchaSiteKey
+        ? 'none'
+        : configuredProvider;
+  const requiresCaptcha = captchaProvider !== 'none';
+  const captchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReady, setCaptchaReady] = useState(captchaProvider !== 'turnstile');
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
   const fallbackAlias = defaultAlias?.trim() || '名無しのプレイヤーさん';
   const aliasInputId = 'comment-alias';
   const aliasHelpId = 'comment-alias-help';
@@ -86,8 +116,154 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
     setAlias('');
     setBody('');
     setParentId(null);
+    setCaptchaToken(null);
+    setCaptchaError(null);
+    if (captchaProvider === 'turnstile' && window.turnstile && turnstileWidgetId.current) {
+      window.turnstile.reset(turnstileWidgetId.current);
+      setCaptchaReady(false);
+    }
     loadComments();
   }, [postSlug]);
+
+  useEffect(() => {
+    if (captchaProvider !== 'turnstile') {
+      if (captchaProvider === 'none') {
+        setCaptchaReady(true);
+      }
+      return;
+    }
+
+    setCaptchaReady(false);
+    setCaptchaToken(null);
+    setCaptchaError(null);
+
+    const container = captchaContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    if (!turnstileSiteKey) {
+      console.warn('Turnstile のサイトキーが未設定のため、CAPTCHA をスキップします');
+      setCaptchaReady(true);
+      return;
+    }
+
+    const renderWidget = () => {
+      if (!window.turnstile || !container) {
+        return;
+      }
+
+      if (turnstileWidgetId.current) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        return;
+      }
+
+      turnstileWidgetId.current = window.turnstile.render(container, {
+        sitekey: turnstileSiteKey,
+        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+        callback: (token: string) => {
+          setCaptchaToken(token);
+          setCaptchaReady(true);
+          setCaptchaError(null);
+        },
+        'expired-callback': () => {
+          setCaptchaToken(null);
+          setCaptchaReady(false);
+        },
+        'error-callback': () => {
+          setCaptchaToken(null);
+          setCaptchaReady(false);
+          setCaptchaError('セキュリティ確認の読み込みに失敗しました。再読み込みしてください。');
+        },
+      });
+    };
+
+    const handleThemeChange = () => {
+      if (window.turnstile && turnstileWidgetId.current) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        setCaptchaToken(null);
+        setCaptchaReady(false);
+      }
+    };
+
+    if (window.turnstile) {
+      renderWidget();
+    } else {
+      const existing = document.querySelector<HTMLScriptElement>('script[data-turnstile]');
+      if (existing) {
+        existing.addEventListener('load', renderWidget, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        script.async = true;
+        script.defer = true;
+        script.dataset.turnstile = 'true';
+        script.addEventListener('load', renderWidget, { once: true });
+        document.head.appendChild(script);
+      }
+    }
+
+    document.addEventListener('themechange', handleThemeChange);
+
+    return () => {
+      const script = document.querySelector<HTMLScriptElement>('script[data-turnstile]');
+      script?.removeEventListener('load', renderWidget);
+      if (window.turnstile && turnstileWidgetId.current) {
+        window.turnstile.remove(turnstileWidgetId.current);
+        turnstileWidgetId.current = null;
+      }
+      document.removeEventListener('themechange', handleThemeChange);
+    };
+  }, [captchaProvider, turnstileSiteKey, postSlug]);
+
+  useEffect(() => {
+    if (captchaProvider !== 'recaptcha') {
+      if (captchaProvider === 'none') {
+        setCaptchaReady(true);
+      }
+      return;
+    }
+
+    setCaptchaReady(false);
+    setCaptchaToken(null);
+
+    if (!recaptchaSiteKey) {
+      console.warn('reCAPTCHA のサイトキーが未設定のため、CAPTCHA をスキップします');
+      setCaptchaReady(true);
+      return;
+    }
+
+    const onReady = () => {
+      setCaptchaReady(true);
+    };
+
+    const handleLoad = () => window.grecaptcha?.ready(onReady);
+    let createdScript: HTMLScriptElement | null = null;
+
+    if (window.grecaptcha) {
+      window.grecaptcha.ready(onReady);
+    } else {
+      const existing = document.querySelector<HTMLScriptElement>('script[data-recaptcha]');
+      if (existing) {
+        existing.addEventListener('load', handleLoad, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.src = `https://www.google.com/recaptcha/api.js?render=${recaptchaSiteKey}`;
+        script.async = true;
+        script.defer = true;
+        script.dataset.recaptcha = 'true';
+        script.addEventListener('load', handleLoad, { once: true });
+        document.head.appendChild(script);
+        createdScript = script;
+      }
+    }
+
+    return () => {
+      const existing = document.querySelector<HTMLScriptElement>('script[data-recaptcha]');
+      existing?.removeEventListener('load', handleLoad);
+      createdScript?.removeEventListener('load', handleLoad);
+    };
+  }, [captchaProvider, recaptchaSiteKey]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -95,6 +271,31 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
       announce({ message: 'コメントを入力してください', type: 'error' });
       return;
     }
+    if (requiresCaptcha && !captchaReady) {
+      announce({ message: 'セキュリティ確認の準備中です。数秒後に再試行してください。', type: 'error' });
+      return;
+    }
+
+    let captchaTokenForSubmit: string | undefined;
+    if (captchaProvider === 'turnstile') {
+      if (!captchaToken) {
+        announce({ message: 'セキュリティチェックを完了してください', type: 'error' });
+        return;
+      }
+      captchaTokenForSubmit = captchaToken;
+    } else if (captchaProvider === 'recaptcha') {
+      if (!recaptchaSiteKey || !window.grecaptcha) {
+        announce({ message: 'reCAPTCHA の設定が完了していません', type: 'error' });
+        return;
+      }
+      try {
+        captchaTokenForSubmit = await window.grecaptcha.execute(recaptchaSiteKey, { action: 'comment_submit' });
+      } catch (error) {
+        announce({ message: 'reCAPTCHA の検証に失敗しました', type: 'error' });
+        return;
+      }
+    }
+
     try {
       const trimmedAlias = alias.trim();
       const res = await submitComment({
@@ -103,6 +304,7 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
         body,
         alias: trimmedAlias ? trimmedAlias : undefined,
         honeypot,
+        captchaToken: captchaTokenForSubmit,
       });
       const { comment, editKey } = res.data;
       const normalized = normalizeNode({ ...comment, children: comment.children ?? [] });
@@ -114,12 +316,24 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
       }
       setBody('');
       setParentId(null);
+      if (captchaProvider === 'turnstile' && window.turnstile && turnstileWidgetId.current) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        setCaptchaToken(null);
+        setCaptchaReady(false);
+      } else if (captchaProvider === 'recaptcha') {
+        setCaptchaToken(null);
+      }
       const successMessage =
         comment.status === 'published'
           ? 'コメントを公開しました'
           : 'コメントを受け付けました。モデレーションをお待ちください。';
       announce({ message: successMessage, type: 'success' });
     } catch (err: any) {
+      if (captchaProvider === 'turnstile' && window.turnstile && turnstileWidgetId.current) {
+        window.turnstile.reset(turnstileWidgetId.current);
+        setCaptchaToken(null);
+        setCaptchaReady(false);
+      }
       announce({ message: err.message ?? '投稿に失敗しました', type: 'error' });
     }
   };
@@ -210,13 +424,50 @@ const CommentIsland = ({ postSlug, defaultAlias }: Props) => {
             onChange={(event) => setHoneypot(event.target.value)}
             style={{ display: 'none' }}
           />
+          {requiresCaptcha && (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <p className="muted" style={{ margin: 0 }}>
+                スパム対策のためセキュリティチェックを実施します。
+              </p>
+              {captchaProvider === 'turnstile' ? (
+                <div
+                  ref={captchaContainerRef}
+                  className="captcha-frame"
+                  aria-live="polite"
+                  aria-busy={!captchaReady}
+                  style={{
+                    minHeight: '70px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    padding: '0.5rem',
+                    borderRadius: '0.75rem',
+                    background: 'var(--layer-sunken)',
+                  }}
+                ></div>
+              ) : (
+                <p className="muted" style={{ margin: 0 }}>
+                  送信時に自動で reCAPTCHA が検証されます。
+                </p>
+              )}
+              {captchaError && (
+                <p role="alert" className="muted" style={{ margin: 0, color: 'tomato' }}>
+                  {captchaError}
+                </p>
+              )}
+            </div>
+          )}
           {parentId && (
             <p className="muted">
               返信先 ID: {parentId}{' '}
               <button type="button" onClick={() => setParentId(null)}>返信を解除</button>
             </p>
           )}
-          <button type="submit" className="tag-chip" style={{ width: 'fit-content' }}>
+          <button
+            type="submit"
+            className="tag-chip"
+            style={{ width: 'fit-content', opacity: requiresCaptcha && !captchaReady ? 0.6 : 1 }}
+            disabled={requiresCaptcha && !captchaReady}
+          >
             送信する
           </button>
         </form>

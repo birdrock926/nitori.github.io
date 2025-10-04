@@ -92,8 +92,8 @@ const main = () => {
   ensureValue('LOG_LEVEL', () => process.env.LOG_LEVEL || 'info', state, changes);
   ensureValue('HASH_PEPPER', () => randomHex(16), state, changes);
   ensureValue('ALIAS_SALT', () => randomHex(16), state, changes);
-  ensureValue('CAPTCHA_PROVIDER', () => 'turnstile', state, changes);
-  ensureValue('CAPTCHA_SECRET', () => 'dev-turnstile-placeholder', state, changes);
+  ensureValue('CAPTCHA_PROVIDER', () => 'none', state, changes);
+  ensureValue('CAPTCHA_SECRET', () => 'set-before-production', state, changes);
   ensureValue('PUBLIC_FRONT_ORIGINS', () => 'http://localhost:4321', state, changes);
   ensureValue('RATE_LIMITS_MIN', () => '5', state, changes);
   ensureValue('RATE_LIMITS_HOUR', () => '30', state, changes);

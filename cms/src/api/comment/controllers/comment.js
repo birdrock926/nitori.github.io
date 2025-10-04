@@ -96,7 +96,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       return ctx.forbidden('BAN されています');
     }
 
-    const captchaProvider = process.env.CAPTCHA_PROVIDER || 'turnstile';
+    const captchaProvider = process.env.CAPTCHA_PROVIDER || 'none';
     const captchaSecret = process.env.CAPTCHA_SECRET || '';
     await verifyCaptcha({ provider: captchaProvider, secret: captchaSecret, token: captchaToken, remoteip: ip });
 

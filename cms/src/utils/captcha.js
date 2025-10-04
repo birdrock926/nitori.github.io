@@ -1,7 +1,21 @@
 import axios from 'axios';
 
+const isSecretConfigured = (secret = '') => {
+  if (!secret) return false;
+  const normalized = secret.trim();
+  if (!normalized) return false;
+  if (/set-before-production/i.test(normalized)) return false;
+  if (/replace-with/i.test(normalized)) return false;
+  if (/^dev-.*placeholder$/i.test(normalized)) return false;
+  return true;
+};
+
 export const verifyCaptcha = async ({ provider, secret, token, remoteip }) => {
   if (!provider || provider === 'none') {
+    return true;
+  }
+  if (!isSecretConfigured(secret)) {
+    console.warn('[captcha] シークレットが未設定のため検証をスキップしました');
     return true;
   }
   if (!token) {
