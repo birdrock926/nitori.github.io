@@ -31,6 +31,7 @@ export default (config) => {
 
   return async (ctx, next) => {
     const origin = ctx.request.header.origin;
+    strapi.log.debug('origin-check', { origin, allowed: Array.from(allowed) });
     if (!origin) {
       return next();
     }

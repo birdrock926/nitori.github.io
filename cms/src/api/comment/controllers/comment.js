@@ -264,6 +264,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
   },
 
   async list(ctx) {
+    strapi.log.debug('comment.list invoked', { origin: ctx.request.header.origin, user: ctx.state.user?.id });
     const { postSlug, cursor, limit = 20 } = ctx.query || {};
     if (!postSlug) {
       return ctx.badRequest('記事が指定されていません');

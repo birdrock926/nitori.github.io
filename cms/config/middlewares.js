@@ -8,6 +8,7 @@ const faviconRelativePath = './public/favicon.ico';
 const hasFavicon = existsSync(resolve(publicDir, 'favicon.ico'));
 
 const middlewares = [
+  'global::comment-proxy',
   'strapi::errors',
   {
     name: 'strapi::security',
