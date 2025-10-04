@@ -511,14 +511,16 @@ const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?
 const mapPostCollection = (items: PostListResponse['data']) => filterValidPosts(items.map(mapPost));
 
 const normalizeSearchParams = (params?: Record<string, string | number | undefined>) => {
-  const normalized: Record<string, string | number> = {};
+  const normalized: Record<string, string | number> = {
+    'pagination[page]': 1,
+  };
   let hasSort = false;
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
       if (key === 'sort' || key === 'sort[0]') {
-        normalized.sort = String(value);
+        normalized['sort[0]'] = String(value);
         hasSort = true;
         return;
       }
@@ -527,7 +529,7 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
   }
 
   if (!hasSort) {
-    normalized.sort = 'publishedAt:desc';
+    normalized['sort[0]'] = 'publishedAt:desc';
   }
 
   return normalized;
