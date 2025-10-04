@@ -13,6 +13,23 @@ const ensurePublishedFilter = (filters = {}) => {
   };
 };
 
+const sanitizeSlugValue = (value = '') =>
+  value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-]+|[-]+$/g, '');
+
+const collectSlugCandidates = (slug) => {
+  const raw = slug ? slug.toString().trim() : '';
+  if (!raw) return [];
+  const lower = raw.toLowerCase();
+  const sanitized = sanitizeSlugValue(raw);
+  return Array.from(new Set([raw, lower, sanitized].filter(Boolean)));
+};
+
 const DEFAULT_POPULATE = {
   cover: { populate: '*' },
   tags: { populate: '*' },
@@ -65,6 +82,30 @@ export default factories.createCoreController('api::post.post', () => ({
     const sanitizedQuery = await this.sanitizeQuery(ctx);
 
     const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
+    const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
+    return this.transformResponse(sanitizedEntity);
+  },
+
+  async findBySlug(ctx) {
+    const slug = ctx.params?.slug;
+    const candidates = collectSlugCandidates(slug);
+
+    if (!candidates.length) {
+      return ctx.notFound('記事が見つかりません');
+    }
+
+    const entity = await strapi.db.query('api::post.post').findOne({
+      where: {
+        slug: { $in: candidates },
+        publishedAt: { $notNull: true },
+      },
+      populate: DEFAULT_POPULATE,
+    });
+
+    if (!entity) {
+      return ctx.notFound('記事が見つかりません');
+    }
+
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
     return this.transformResponse(sanitizedEntity);
   },

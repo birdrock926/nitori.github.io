@@ -379,6 +379,9 @@ const emptyResponseFor = <T>(path: string) => {
   if (path.includes('/comments')) {
     return { data: [], nextCursor: null } as T;
   }
+  if (path.includes('/posts/by-slug')) {
+    return { data: null } as T;
+  }
   return { data: [] } as T;
 };
 
@@ -430,6 +433,11 @@ export type PostListResponse = {
       blocks: any[];
     };
   }[];
+};
+
+export type PostSingleResponse = {
+  data: PostListResponse['data'][number] | null;
+  meta?: unknown;
 };
 
 const asObject = (value: unknown) => (value && typeof value === 'object' ? (value as Record<string, unknown>) : {});
@@ -498,43 +506,75 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
 
 const ensureArray = <T>(value: unknown): T[] => extractArray<T>(value);
 
+const PUBLISHED_FILTER_KEY = 'filters[publishedAt][$notNull]';
+
+const prepareFallbackParams = (params: Record<string, string | number | undefined>) => {
+  const fallback = { ...params };
+  delete fallback[PUBLISHED_FILTER_KEY];
+  return fallback;
+};
+
+const fetchPostCollection = async (
+  params: Record<string, string | number | undefined>,
+  enableFallback = true
+) => {
+  const primary = await fetchJSON<PostListResponse>('/api/posts', params);
+  let items = ensureArray<PostListResponse['data'][number]>(primary?.data);
+
+  if (!items.length && enableFallback) {
+    const fallbackParams = prepareFallbackParams(params);
+    const fallback = await fetchJSON<PostListResponse>('/api/posts', fallbackParams);
+    items = ensureArray<PostListResponse['data'][number]>(fallback?.data);
+  }
+
+  return items;
+};
+
 export const getLatestPosts = async (limit = 12) => {
-  const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'pagination[pageSize]': limit,
-    sort: 'publishedAt:desc',
-    'filters[publishedAt][$notNull]': true,
-  });
-  const items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  const items = await fetchPostCollection(
+    {
+      'pagination[pageSize]': limit,
+      sort: 'publishedAt:desc',
+      [PUBLISHED_FILTER_KEY]: true,
+    },
+    true
+  );
   return items.map(mapPost);
 };
 
 export const getAllPosts = async () => {
-  const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'pagination[pageSize]': 100,
-    sort: 'publishedAt:desc',
-    'filters[publishedAt][$notNull]': true,
-  });
-  const items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  const items = await fetchPostCollection(
+    {
+      'pagination[pageSize]': 100,
+      sort: 'publishedAt:desc',
+      [PUBLISHED_FILTER_KEY]: true,
+    },
+    true
+  );
   return items.map(mapPost);
 };
 
 export const getPostBySlug = async (slug: string) => {
+  const single = await fetchJSON<PostSingleResponse>(`/api/posts/by-slug/${encodeURIComponent(slug)}`);
+  if (single?.data) {
+    return mapPost(single.data);
+  }
+
   const params = {
     'filters[slug][$eq]': slug,
-    'filters[publishedAt][$notNull]': true,
+    [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
-  } as const;
-  const data = await fetchJSON<PostListResponse>('/api/posts', params);
-  let items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  } as Record<string, string | number | undefined>;
+  let items = await fetchPostCollection(params, true);
 
   if (!items.length) {
     const fallbackSlug = slugify(slug);
     if (fallbackSlug && fallbackSlug !== slug) {
-      const retry = await fetchJSON<PostListResponse>('/api/posts', {
+      const retryParams = {
         ...params,
         'filters[slug][$eq]': fallbackSlug,
-      });
-      items = ensureArray<PostListResponse['data'][number]>(retry?.data);
+      } as Record<string, string | number | undefined>;
+      items = await fetchPostCollection(retryParams, true);
     }
   }
 
@@ -562,20 +602,19 @@ export const getTags = async () => {
 export const getPostsByTag = async (slug: string) => {
   const params = {
     'filters[tags][slug][$eq]': slug,
-    'filters[publishedAt][$notNull]': true,
+    [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
-  } as const;
-  const data = await fetchJSON<PostListResponse>('/api/posts', params);
-  let items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  } as Record<string, string | number | undefined>;
+  let items = await fetchPostCollection(params, true);
 
   if (!items.length) {
     const fallbackSlug = slugify(slug);
     if (fallbackSlug && fallbackSlug !== slug) {
-      const retry = await fetchJSON<PostListResponse>('/api/posts', {
+      const retryParams = {
         ...params,
         'filters[tags][slug][$eq]': fallbackSlug,
-      });
-      items = ensureArray<PostListResponse['data'][number]>(retry?.data);
+      } as Record<string, string | number | undefined>;
+      items = await fetchPostCollection(retryParams, true);
     }
   }
 
