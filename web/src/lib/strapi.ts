@@ -508,51 +508,24 @@ const ensureArray = <T>(value: unknown): T[] => extractArray<T>(value);
 
 const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?.slug?.trim()));
 
-const PUBLISHED_FILTER_KEY = 'filters[publishedAt][$notNull]';
-
-const prepareFallbackParams = (params: Record<string, string | number | undefined>) => {
-  const fallback = { ...params };
-  delete fallback[PUBLISHED_FILTER_KEY];
-  return fallback;
-};
-
-const fetchPostCollection = async (
-  params: Record<string, string | number | undefined>,
-  enableFallback = true
-) => {
-  const primary = await fetchJSON<PostListResponse>('/api/posts', params);
-  let items = ensureArray<PostListResponse['data'][number]>(primary?.data);
-
-  if (!items.length && enableFallback) {
-    const fallbackParams = prepareFallbackParams(params);
-    const fallback = await fetchJSON<PostListResponse>('/api/posts', fallbackParams);
-    items = ensureArray<PostListResponse['data'][number]>(fallback?.data);
-  }
-
-  return items;
+const fetchPostCollection = async (params?: Record<string, string | number | undefined>) => {
+  const response = await fetchJSON<PostListResponse>('/api/posts', params);
+  return ensureArray<PostListResponse['data'][number]>(response?.data);
 };
 
 export const getLatestPosts = async (limit = 12) => {
-  const items = await fetchPostCollection(
-    {
-      'pagination[pageSize]': limit,
-      sort: 'publishedAt:desc',
-      [PUBLISHED_FILTER_KEY]: true,
-    },
-    true
-  );
+  const items = await fetchPostCollection({
+    'pagination[pageSize]': limit,
+    sort: 'publishedAt:desc',
+  });
   return filterValidPosts(items.map(mapPost));
 };
 
 export const getAllPosts = async () => {
-  const items = await fetchPostCollection(
-    {
-      'pagination[pageSize]': 100,
-      sort: 'publishedAt:desc',
-      [PUBLISHED_FILTER_KEY]: true,
-    },
-    true
-  );
+  const items = await fetchPostCollection({
+    'pagination[pageSize]': 100,
+    sort: 'publishedAt:desc',
+  });
   return filterValidPosts(items.map(mapPost));
 };
 
@@ -564,10 +537,9 @@ export const getPostBySlug = async (slug: string) => {
 
   const params = {
     'filters[slug][$eqi]': slug,
-    [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
   } as Record<string, string | number | undefined>;
-  let items = await fetchPostCollection(params, true);
+  let items = await fetchPostCollection(params);
 
   if (!items.length) {
     const fallbackSlug = slugify(slug);
@@ -576,7 +548,7 @@ export const getPostBySlug = async (slug: string) => {
         ...params,
         'filters[slug][$eqi]': fallbackSlug,
       } as Record<string, string | number | undefined>;
-      items = await fetchPostCollection(retryParams, true);
+      items = await fetchPostCollection(retryParams);
     }
   }
 
@@ -616,10 +588,9 @@ export const getTags = async () => {
 export const getPostsByTag = async (slug: string) => {
   const params = {
     'filters[tags][slug][$eqi]': slug,
-    [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
   } as Record<string, string | number | undefined>;
-  let items = await fetchPostCollection(params, true);
+  let items = await fetchPostCollection(params);
 
   if (!items.length) {
     const fallbackSlug = slugify(slug);
@@ -628,7 +599,7 @@ export const getPostsByTag = async (slug: string) => {
         ...params,
         'filters[tags][slug][$eq]': fallbackSlug,
       } as Record<string, string | number | undefined>;
-      items = await fetchPostCollection(retryParams, true);
+      items = await fetchPostCollection(retryParams);
     }
   }
 
