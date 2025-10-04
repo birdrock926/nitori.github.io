@@ -519,12 +519,25 @@ export const getAllPosts = async () => {
 };
 
 export const getPostBySlug = async (slug: string) => {
-  const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'filters[slug][$eqi]': slug,
+  const params = {
+    'filters[slug][$eq]': slug,
     'filters[publishedAt][$notNull]': true,
     sort: 'publishedAt:desc',
-  });
-  const items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  } as const;
+  const data = await fetchJSON<PostListResponse>('/api/posts', params);
+  let items = ensureArray<PostListResponse['data'][number]>(data?.data);
+
+  if (!items.length) {
+    const fallbackSlug = slugify(slug);
+    if (fallbackSlug && fallbackSlug !== slug) {
+      const retry = await fetchJSON<PostListResponse>('/api/posts', {
+        ...params,
+        'filters[slug][$eq]': fallbackSlug,
+      });
+      items = ensureArray<PostListResponse['data'][number]>(retry?.data);
+    }
+  }
+
   const mapped = items.map(mapPost);
   const normalized = slug.toString();
   const found = mapped.find((item) => item.slug === normalized);
@@ -547,12 +560,25 @@ export const getTags = async () => {
 };
 
 export const getPostsByTag = async (slug: string) => {
-  const data = await fetchJSON<PostListResponse>('/api/posts', {
-    'filters[tags][slug][$eqi]': slug,
+  const params = {
+    'filters[tags][slug][$eq]': slug,
     'filters[publishedAt][$notNull]': true,
     sort: 'publishedAt:desc',
-  });
-  const items = ensureArray<PostListResponse['data'][number]>(data?.data);
+  } as const;
+  const data = await fetchJSON<PostListResponse>('/api/posts', params);
+  let items = ensureArray<PostListResponse['data'][number]>(data?.data);
+
+  if (!items.length) {
+    const fallbackSlug = slugify(slug);
+    if (fallbackSlug && fallbackSlug !== slug) {
+      const retry = await fetchJSON<PostListResponse>('/api/posts', {
+        ...params,
+        'filters[tags][slug][$eq]': fallbackSlug,
+      });
+      items = ensureArray<PostListResponse['data'][number]>(retry?.data);
+    }
+  }
+
   return items.map(mapPost);
 };
 
