@@ -1,5 +1,5 @@
-export const SITE_TITLE = 'ゲームニュース速報';
-export const SITE_DESCRIPTION = 'ゲームニュースと配信をまとめて高速に届けるメディア';
+export const SITE_TITLE = '気になったニュースまとめブログ';
+export const SITE_DESCRIPTION = '気になった話題を素早くキャッチできるニュース＆配信まとめブログ';
 export const SITE_URL = import.meta.env.SITE_URL || 'https://example.pages.dev';
 export const DEFAULT_LOCALE = 'ja-JP';
 export const TIMEZONE = 'Asia/Tokyo';

@@ -563,7 +563,7 @@ export const getPostBySlug = async (slug: string) => {
   }
 
   const params = {
-    'filters[slug][$eq]': slug,
+    'filters[slug][$eqi]': slug,
     [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
   } as Record<string, string | number | undefined>;
@@ -574,7 +574,7 @@ export const getPostBySlug = async (slug: string) => {
     if (fallbackSlug && fallbackSlug !== slug) {
       const retryParams = {
         ...params,
-        'filters[slug][$eq]': fallbackSlug,
+        'filters[slug][$eqi]': fallbackSlug,
       } as Record<string, string | number | undefined>;
       items = await fetchPostCollection(retryParams, true);
     }
@@ -615,7 +615,7 @@ export const getTags = async () => {
 
 export const getPostsByTag = async (slug: string) => {
   const params = {
-    'filters[tags][slug][$eq]': slug,
+    'filters[tags][slug][$eqi]': slug,
     [PUBLISHED_FILTER_KEY]: true,
     sort: 'publishedAt:desc',
   } as Record<string, string | number | undefined>;

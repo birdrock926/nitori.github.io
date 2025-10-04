@@ -98,6 +98,12 @@ const main = () => {
   ensureValue('RATE_LIMITS_MIN', () => '5', state, changes);
   ensureValue('RATE_LIMITS_HOUR', () => '30', state, changes);
   ensureValue('RATE_LIMITS_DAY', () => '200', state, changes);
+  ensureValue(
+    'COMMENTS_AUTO_PUBLISH',
+    () => (isProduction ? 'false' : 'true'),
+    state,
+    changes,
+  );
   ensureValue('GITHUB_WORKFLOW_OWNER', () => 'local-owner', state, changes);
   ensureValue('GITHUB_WORKFLOW_REPO', () => 'local-repo', state, changes);
   ensureValue('GITHUB_WORKFLOW_ID', () => 'dispatch-workflow.yml', state, changes);
@@ -112,7 +118,7 @@ const main = () => {
   ensureValue('SMTP_SECURE', () => 'false', state, changes);
   ensureValue('SMTP_USERNAME', () => 'apikey', state, changes);
   ensureValue('SMTP_PASSWORD', () => 'dev-smtp-password', state, changes);
-  ensureValue('SMTP_FROM', () => 'Game News <noreply@example.com>', state, changes);
+  ensureValue('SMTP_FROM', () => 'Kininatta News <noreply@example.com>', state, changes);
   ensureValue('SMTP_REPLY_TO', () => 'contact@example.com', state, changes);
 
   if (changes.length > 0) {

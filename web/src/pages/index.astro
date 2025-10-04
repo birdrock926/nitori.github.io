@@ -15,7 +15,11 @@ const secondary = showHero ? heroCandidates.slice(1) : [];
 const listing = showHero ? posts.slice(3) : posts;
 const ranking = await getRanking();
 ---
-<BaseLayout title="ゲームニュース速報" description="ゲーム最新ニュースと配信まとめを最速でお届け" canonical={Astro.url.href}>
+<BaseLayout
+  title="気になったニュースまとめブログ"
+  description="ゲーム・エンタメの気になる最新トピックを毎日アップデート"
+  canonical={Astro.url.href}
+>
   {showHero && featured && secondary.length > 0 && <Hero featured={featured} secondary={secondary} />}
   <section class="section" aria-labelledby="latest-heading">
     <header class="section-heading">

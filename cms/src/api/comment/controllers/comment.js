@@ -92,17 +92,34 @@ const collectSlugCandidates = (slug) => {
   return Array.from(new Set([raw, lower, sanitized].filter(Boolean)));
 };
 
+const buildSlugWhere = (candidates = []) => {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+
+  const slugMatchers = candidates.map((value) => ({ slug: { $eqi: value } }));
+
+  return {
+    $and: [
+      { $or: slugMatchers },
+      { publishedAt: { $notNull: true } },
+    ],
+  };
+};
+
 const findPublishedPostBySlug = async (strapi, slug) => {
   const candidates = collectSlugCandidates(slug);
   if (!candidates.length) {
     return null;
   }
 
+  const where = buildSlugWhere(candidates);
+  if (!where) {
+    return null;
+  }
+
   const entry = await strapi.db.query('api::post.post').findOne({
-    where: {
-      slug: { $in: candidates },
-      publishedAt: { $notNull: true },
-    },
+    where,
     select: ['id', 'slug', 'commentAliasDefault'],
   });
 
