@@ -1,0 +1,44 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "lint": "eslint . --ext .ts,.tsx,.astro",
+    "test:a11y": "axe --dir dist"
+  },
+  "dependencies": {
+    "@astrojs/react": "3.0.4",
+    "@astrojs/rss": "4.0.2",
+    "@astrojs/sitemap": "3.0.3",
+    "@floating-ui/react": "0.26.4",
+    "@types/lunr": "2.3.4",
+    "astro": "4.4.0",
+    "dayjs": "1.11.10",
+    "framer-motion": "11.0.3",
+    "lunr": "2.3.9",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "sharp": "0.33.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.6.0",
+    "@types/react": "18.2.47",
+    "@types/react-dom": "18.2.18",
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
+    "@vitejs/plugin-react": "4.2.1",
+    "eslint": "8.56.0",
+    "eslint-config-prettier": "9.1.0",
+    "eslint-plugin-astro": "0.31.1",
+    "eslint-plugin-jsx-a11y": "6.8.0",
+    "eslint-plugin-react": "7.33.2",
+    "eslint-plugin-react-hooks": "4.6.0",
+    "typescript": "5.3.3",
+    "@axe-core/cli": "4.8.2"
+  }
+}
