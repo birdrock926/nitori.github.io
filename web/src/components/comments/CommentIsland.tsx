@@ -58,14 +58,24 @@ const describeModerationReasons = (reasons: ModerationReason[] = []) => {
   return labels.join('、');
 };
 
+const normalizeStatus = (status: CommentNode['status'] | string | undefined): CommentNode['status'] => {
+  const value = typeof status === 'string' ? status.toLowerCase() : 'pending';
+  if (value === 'published' || value === 'pending' || value === 'hidden' || value === 'shadow') {
+    return value as CommentNode['status'];
+  }
+  return 'pending';
+};
+
 const normalizeNodes = (nodes: CommentNode[] = []): CommentNode[] =>
   nodes.map((node) => ({
     ...node,
+    status: normalizeStatus(node.status),
     children: normalizeNodes(node.children ?? []),
   }));
 
 const normalizeNode = (node: CommentNode): CommentNode => ({
   ...node,
+  status: normalizeStatus(node.status),
   children: normalizeNodes(node.children ?? []),
 });
 

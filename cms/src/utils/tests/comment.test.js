@@ -11,6 +11,7 @@ import {
   detectSimilarity,
   createClientMeta,
   readClientMeta,
+  buildCommentResponse,
 } from '../comment.js';
 
 describe('コメントユーティリティ', () => {
@@ -106,5 +107,19 @@ describe('コメントユーティリティ', () => {
     expect(restored.maskedIp).toBe('203.0.113.xxx');
     expect(restored.ua).toBe('jest-agent');
     expect(restored.submittedAt).toBe('2025-10-04T00:00:00.000Z');
+  });
+
+  test('コメントレスポンスのステータスを正規化する', () => {
+    const result = buildCommentResponse({
+      id: 1,
+      body: 'test',
+      alias: 'tester',
+      status: 'Published',
+      createdAt: '2025-10-04T00:00:00.000Z',
+      isModerator: false,
+      meta: null,
+      children: [],
+    });
+    expect(result.status).toBe('published');
   });
 });

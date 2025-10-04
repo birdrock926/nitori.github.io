@@ -52,10 +52,10 @@ const mergeModerationMeta = (meta, updates = {}) => {
   if (updates.moderatorFlagged !== undefined) {
     moderation.moderatorFlagged = updates.moderatorFlagged;
   }
-  if (updates.requiresReview !== undefined && moderation.requiresReview === undefined) {
+  if (updates.requiresReview !== undefined) {
     moderation.requiresReview = updates.requiresReview;
   }
-  if (updates.reasons && !moderation.reasons) {
+  if (updates.reasons !== undefined) {
     moderation.reasons = updates.reasons;
   }
   cloned.moderation = moderation;
@@ -109,7 +109,27 @@ const findPublishedPostBySlug = async (strapi, slug) => {
   return entry ?? null;
 };
 
-export default factories.createCoreController('api::comment.comment', ({ strapi }) => ({
+export default factories.createCoreController('api::comment.comment', ({ strapi }) => {
+  const changeStatus = async (ctx, status, metaUpdates) => {
+    const { id } = ctx.params;
+    if (!id) {
+      return ctx.badRequest('ID が必要です');
+    }
+    const comment = await strapi.entityService.findOne('api::comment.comment', id, {
+      fields: ['id', 'meta'],
+    });
+    if (!comment) {
+      return ctx.notFound('コメントが存在しません');
+    }
+    const data = { status };
+    if (metaUpdates) {
+      data.meta = mergeModerationMeta(comment.meta, metaUpdates);
+    }
+    await strapi.entityService.update('api::comment.comment', id, { data });
+    return { ok: true };
+  };
+
+  return {
   async submit(ctx) {
     const { postSlug, parentId, body, alias: aliasInput, captchaToken, honeypot } =
       ctx.request.body || {};
@@ -371,27 +391,32 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
       return ctx.notFound('コメントが存在しません');
     }
     const reporterKey = ctx.cookies.get('reporter_key') || createEditKey();
+    const ip = getClientIp(ctx) || '0.0.0.0';
+    const pepper = resolvePepper(strapi);
+    const ipHash = hashIp(ip, pepper);
     const existing = await strapi.entityService.findMany('api::report.report', {
       filters: {
         comment: id,
-        reporter_key: reporterKey,
+        $or: [{ reporter_key: reporterKey }, { ip_hash: ipHash }],
       },
       limit: 1,
     });
 
     let alreadyReported = false;
+    const reporterKeyForRecord = existing[0]?.reporter_key || reporterKey;
 
     if (existing.length) {
       alreadyReported = true;
       await strapi.entityService.update('api::report.report', existing[0].id, {
-        data: { reason },
+        data: { reason, ip_hash: ipHash },
       });
     } else {
       await strapi.entityService.create('api::report.report', {
         data: {
           comment: id,
           reason,
-          reporter_key: reporterKey,
+          reporter_key: reporterKeyForRecord,
+          ip_hash: ipHash,
           byModerator: false,
         },
       });
@@ -405,6 +430,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
     const updatedMeta = mergeModerationMeta(comment.meta, {
       reportCount,
       moderatorFlagged: moderatorReports > 0,
+      requiresReview: reportCount > 0,
     });
 
     const updatePayload = { meta: updatedMeta };
@@ -414,7 +440,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
 
     await strapi.entityService.update('api::comment.comment', id, { data: updatePayload });
 
-    ctx.cookies.set('reporter_key', reporterKey, {
+    ctx.cookies.set('reporter_key', reporterKeyForRecord, {
       httpOnly: true,
       sameSite: 'lax',
       secure: isSecureRequest(ctx),
@@ -470,6 +496,7 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
     const updatedMeta = mergeModerationMeta(comment.meta, {
       reportCount,
       moderatorFlagged: true,
+      requiresReview: true,
     });
 
     const updatePayload = { meta: updatedMeta };
@@ -503,26 +530,15 @@ export default factories.createCoreController('api::comment.comment', ({ strapi 
   },
 
   async publish(ctx) {
-    const { id } = ctx.params;
-    await strapi.entityService.update('api::comment.comment', id, {
-      data: { status: 'published' },
-    });
-    return { ok: true };
+    return changeStatus(ctx, 'published', { requiresReview: false, moderatorFlagged: false });
   },
 
   async hide(ctx) {
-    const { id } = ctx.params;
-    await strapi.entityService.update('api::comment.comment', id, {
-      data: { status: 'hidden' },
-    });
-    return { ok: true };
+    return changeStatus(ctx, 'hidden');
   },
 
   async shadow(ctx) {
-    const { id } = ctx.params;
-    await strapi.entityService.update('api::comment.comment', id, {
-      data: { status: 'shadow' },
-    });
-    return { ok: true };
+    return changeStatus(ctx, 'shadow', { moderatorFlagged: true });
   },
-}));
+};
+});

@@ -22,6 +22,9 @@
       "enum": ["spam", "abuse", "copyright", "other"],
       "required": true
     },
+    "ip_hash": {
+      "type": "string"
+    },
     "reporter_key": {
       "type": "string",
       "required": true
