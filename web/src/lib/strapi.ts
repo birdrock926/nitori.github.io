@@ -508,6 +508,8 @@ const ensureArray = <T>(value: unknown): T[] => extractArray<T>(value);
 
 const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?.slug?.trim()));
 
+const mapPostCollection = (items: PostListResponse['data']) => filterValidPosts(items.map(mapPost));
+
 const normalizeSearchParams = (params?: Record<string, string | number | undefined>) => {
   if (!params) return undefined;
   const normalized: Record<string, string | number> = {};
@@ -532,20 +534,43 @@ const fetchPostCollection = async (params?: Record<string, string | number | und
   return ensureArray<PostListResponse['data'][number]>(response?.data);
 };
 
+const fetchMappedPosts = async (params?: Record<string, string | number | undefined>) => {
+  const collection = await fetchPostCollection(params);
+  return mapPostCollection(collection);
+};
+
 export const getLatestPosts = async (limit = 12) => {
-  const items = await fetchPostCollection({
+  let mapped = await fetchMappedPosts({
     'pagination[pageSize]': limit,
     'sort[0]': 'publishedAt:desc',
   });
-  return filterValidPosts(items.map(mapPost));
+
+  if (!mapped.length) {
+    mapped = await fetchMappedPosts({ 'pagination[pageSize]': limit });
+  }
+
+  if (!mapped.length) {
+    mapped = await fetchMappedPosts();
+  }
+
+  return mapped;
 };
 
 export const getAllPosts = async () => {
-  const items = await fetchPostCollection({
+  let mapped = await fetchMappedPosts({
     'pagination[pageSize]': 100,
     'sort[0]': 'publishedAt:desc',
   });
-  return filterValidPosts(items.map(mapPost));
+
+  if (!mapped.length) {
+    mapped = await fetchMappedPosts({ 'pagination[pageSize]': 100 });
+  }
+
+  if (!mapped.length) {
+    mapped = await fetchMappedPosts();
+  }
+
+  return mapped;
 };
 
 export const getPostBySlug = async (slug: string) => {
@@ -627,10 +652,16 @@ export const getPostsByTag = async (slug: string) => {
 
 export const getPostSlugs = async () => {
   const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
-  const items = ensureArray<{ slug?: string }>(response?.data);
-  return items
+  let slugs = ensureArray<{ slug?: string }>(response?.data)
     .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
     .filter((slug) => slug.length > 0);
+
+  if (!slugs.length) {
+    const fallbackPosts = await getAllPosts();
+    slugs = fallbackPosts.map((post) => post.slug).filter((slug) => slug.length > 0);
+  }
+
+  return Array.from(new Set(slugs));
 };
 
 export const getRanking = async () => {
