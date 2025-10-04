@@ -73,20 +73,22 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
 
    | 変数 | 内容 | 推奨値・例 |
    | --- | --- | --- |
-   | `STRAPI_API_URL` | CMS API のベース URL | `https://cms.example.com` |
+   | `STRAPI_API_URL` | CMS API のベース URL（空欄なら `http://localhost:1337`） | `http://localhost:1337` |
    | `STRAPI_API_TOKEN` | Strapi で発行した Read-only API トークン | `strapi_pat_xxx` |
-   | `STRAPI_MEDIA_URL` | 画像のホスト URL（OCI の公開パス） | `https://objectstorage.ap-tokyo-1.oraclecloud.com/.../o` |
+   | `STRAPI_MEDIA_URL` | 画像のホスト URL。空欄なら `STRAPI_API_URL` を流用 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/.../o` |
    | `SITE_URL` | 公開サイトの URL（Pages or 独自ドメイン） | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォームへのリンク | Google フォームの「回答を収集」URL |
    | `GA_MEASUREMENT_ID` | GA4 の測定 ID。不要なら空欄 | `G-XXXXXXXXXX` |
    | `ADSENSE_CLIENT_ID` / `ADSENSE_SLOT_*` | AdSense のクライアント / 広告ユニット ID | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意モードの初期判定地域 | `JP` |
-   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り） | `example.pages.dev,www.example.com` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り）。未設定時は `localhost` を自動追加 | `example.pages.dev,www.example.com` |
    | `PUBLIC_CAPTCHA_PROVIDER` | コメントフォーム用 CAPTCHA の種別 (`none` / `turnstile` / `recaptcha`) | `none` |
    | `PUBLIC_TURNSTILE_SITE_KEY` / `PUBLIC_RECAPTCHA_SITE_KEY` | 各プロバイダーのサイトキー | `0x00000000000000000000FFFF` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
 4. 編集後は `cd ..` でルートに戻ります。
+
+> **ワンポイント**: `web/.env` で `STRAPI_API_URL` を空欄のままにするとローカル CMS (`http://localhost:1337`) へ自動接続します。`https://cms.example.com` のようなテンプレート値が残っている場合も同様にローカルへフォールバックするため、本番公開時は必ず実際の URL を設定してください。
 
 #### CAPTCHA の設定手順
 

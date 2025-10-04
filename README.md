@@ -176,20 +176,22 @@
 
    | 変数名 | 説明 | 例 |
    | --- | --- | --- |
-   | `STRAPI_API_URL` | CMS の公開 API エンドポイント。 | `https://cms.example.com` |
+   | `STRAPI_API_URL` | CMS の公開 API エンドポイント。空欄の場合は自動で `http://localhost:1337` を参照します。 | `http://localhost:1337` |
    | `STRAPI_API_TOKEN` | Strapi で発行した API Token（Public 読み取り用）。 | `strapi_pat_xxx` |
-   | `STRAPI_MEDIA_URL` | 画像配信用のベース URL。OCI Object Storage の公開 URL を指定。 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/n/namespace/b/bucket/o` |
+   | `STRAPI_MEDIA_URL` | 画像配信用のベース URL。空欄の場合は `STRAPI_API_URL` と同じ値を利用します。 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/n/your-namespace/b/your-bucket/o` |
    | `SITE_URL` | Cloudflare Pages や独自ドメインの公開 URL。 | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
-   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。 | `example.pages.dev,www.example.com` |
+   | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。未設定時は `localhost` を自動追加します。 | `example.pages.dev,www.example.com` |
    | `PUBLIC_CAPTCHA_PROVIDER` | コメント投稿フォームで利用する CAPTCHA。`none` / `turnstile` / `recaptcha` を指定。 | `none` |
    | `PUBLIC_TURNSTILE_SITE_KEY` / `PUBLIC_RECAPTCHA_SITE_KEY` | 各 CAPTCHA プロバイダのサイトキー。未使用のプロバイダは空欄で可。 | `0x00000000000000000000FFFF` |
    | `GA_MEASUREMENT_ID` | Google Analytics 4 の測定 ID（利用しない場合は空欄可）。 | `G-XXXXXXXXXX` |
-| `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
+   | `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
    | `CONSENT_DEFAULT_REGION` | 同意ステータスの初期値を決める地域コード。 | `JP` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」から `Read-only` で発行し、ヘッダー `Authorization: Bearer <token>` で利用できるものを貼り付けます。
 4. `.env` 保存後は `cd ..` でルートに戻ります。
+
+> **Note**: `.env.sample` をコピーした直後に `STRAPI_API_URL`/`STRAPI_MEDIA_URL` を未設定（空欄）のまま起動すると、自動的に `http://localhost:1337` を参照します。`example.com` や `namespace/b/bucket` などのプレースホルダードメインが残っている場合も同様にローカル URL へフォールバックするため、実環境では必ず公開 URL に置き換えてください。
 
 #### CAPTCHA プロバイダの設定
 

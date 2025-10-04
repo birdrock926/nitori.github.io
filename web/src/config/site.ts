@@ -1,6 +1,18 @@
 export const SITE_TITLE = '気になったニュースまとめブログ';
 export const SITE_DESCRIPTION = '気になった話題を素早くキャッチできるニュース＆配信まとめブログ';
-export const SITE_URL = import.meta.env.SITE_URL || 'https://example.pages.dev';
+const sanitizePlaceholderUrl = (value: string | undefined | null, fallback: string) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  const placeholderPatterns = [/example\.com/i, /example\.pages\.dev/i, /namespace\/b\/bucket/i];
+  if (placeholderPatterns.some((pattern) => pattern.test(trimmed))) {
+    return fallback;
+  }
+  return trimmed;
+};
+
+export const SITE_URL =
+  sanitizePlaceholderUrl(import.meta.env.SITE_URL, 'https://example.pages.dev') ||
+  'https://example.pages.dev';
 export const DEFAULT_LOCALE = 'ja-JP';
 export const TIMEZONE = 'Asia/Tokyo';
 export const COMMENT_PAGE_SIZE = 20;
@@ -43,12 +55,24 @@ const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
   .map((host) => host.trim())
   .filter(Boolean);
 
-const fallbackStrapiUrl = import.meta.env.STRAPI_API_URL || 'http://localhost:1337';
+if (!twitchHosts.length) {
+  twitchHosts.push('localhost');
+}
+
+const resolvedStrapiUrl = sanitizePlaceholderUrl(
+  import.meta.env.STRAPI_API_URL,
+  'http://localhost:1337'
+);
+
+const resolvedMediaUrl = sanitizePlaceholderUrl(
+  import.meta.env.STRAPI_MEDIA_URL,
+  resolvedStrapiUrl
+);
 
 export const STRAPI = {
-  url: fallbackStrapiUrl,
+  url: resolvedStrapiUrl,
   token: import.meta.env.STRAPI_API_TOKEN ?? '',
-  mediaUrl: import.meta.env.STRAPI_MEDIA_URL ?? fallbackStrapiUrl,
+  mediaUrl: resolvedMediaUrl,
 };
 
 export const TWITCH = {
