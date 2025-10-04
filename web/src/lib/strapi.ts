@@ -511,19 +511,23 @@ const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?
 const mapPostCollection = (items: PostListResponse['data']) => filterValidPosts(items.map(mapPost));
 
 const normalizeSearchParams = (params?: Record<string, string | number | undefined>) => {
-  if (!params) return undefined;
   const normalized: Record<string, string | number> = {};
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    if (key === 'sort' || key === 'sort[0]') {
-      normalized['sort[0]'] = String(value);
-      return;
-    }
-    normalized[key] = value;
-  });
+  let hasSort = false;
 
-  if (!('sort[0]' in normalized)) {
-    normalized['sort[0]'] = 'publishedAt:desc';
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      if (key === 'sort' || key === 'sort[0]') {
+        normalized.sort = String(value);
+        hasSort = true;
+        return;
+      }
+      normalized[key] = value;
+    });
+  }
+
+  if (!hasSort) {
+    normalized.sort = 'publishedAt:desc';
   }
 
   return normalized;
@@ -542,7 +546,7 @@ const fetchMappedPosts = async (params?: Record<string, string | number | undefi
 export const getLatestPosts = async (limit = 12) => {
   let mapped = await fetchMappedPosts({
     'pagination[pageSize]': limit,
-    'sort[0]': 'publishedAt:desc',
+    sort: 'publishedAt:desc',
   });
 
   if (!mapped.length) {
@@ -559,7 +563,7 @@ export const getLatestPosts = async (limit = 12) => {
 export const getAllPosts = async () => {
   let mapped = await fetchMappedPosts({
     'pagination[pageSize]': 100,
-    'sort[0]': 'publishedAt:desc',
+    sort: 'publishedAt:desc',
   });
 
   if (!mapped.length) {
@@ -574,47 +578,23 @@ export const getAllPosts = async () => {
 };
 
 export const getPostBySlug = async (slug: string) => {
-  const single = await fetchJSON<PostSingleResponse>(`/api/posts/by-slug/${encodeURIComponent(slug)}`);
+  const normalizedSlug = slug?.toString().trim();
+  if (!normalizedSlug) return null;
+
+  const single = await fetchJSON<PostSingleResponse>(
+    `/api/posts/by-slug/${encodeURIComponent(normalizedSlug)}`
+  );
   if (single?.data) {
     return mapPost(single.data);
   }
 
-  const params = {
-    'filters[slug][$eqi]': slug,
-    'sort[0]': 'publishedAt:desc',
-  } as Record<string, string | number | undefined>;
-  let items = await fetchPostCollection(params);
-
-  if (!items.length) {
-    const fallbackSlug = slugify(slug);
-    if (fallbackSlug && fallbackSlug !== slug) {
-      const retryParams = {
-        ...params,
-        'filters[slug][$eqi]': fallbackSlug,
-      } as Record<string, string | number | undefined>;
-      items = await fetchPostCollection(retryParams);
-    }
-  }
-
-  let mapped = filterValidPosts(items.map(mapPost));
-  const normalized = slug.toString();
-  const lower = normalized.toLowerCase();
-  let match = mapped.find((item) => item.slug === normalized);
-
-  if (!match) {
-    match = mapped.find((item) => item.slug.toLowerCase() === lower);
-  }
-
-  if (!match) {
-    const allPosts = await getAllPosts();
-    mapped = filterValidPosts(allPosts);
-    match =
-      mapped.find((item) => item.slug === normalized) ||
-      mapped.find((item) => item.slug.toLowerCase() === lower) ||
-      null;
-  }
-
-  return match ?? mapped[0] ?? null;
+  const lower = normalizedSlug.toLowerCase();
+  const posts = await getAllPosts();
+  return (
+    posts.find((item) => item.slug === normalizedSlug) ||
+    posts.find((item) => item.slug.toLowerCase() === lower) ||
+    null
+  );
 };
 
 export const getTags = async () => {
@@ -631,35 +611,32 @@ export const getTags = async () => {
 
 export const getPostsByTag = async (slug: string) => {
   const params = {
-    'filters[tags][slug][$eqi]': slug,
-    'sort[0]': 'publishedAt:desc',
+    'filters[tags][slug][$eq]': slug,
+    sort: 'publishedAt:desc',
   } as Record<string, string | number | undefined>;
   let items = await fetchPostCollection(params);
 
   if (!items.length) {
-    const fallbackSlug = slugify(slug);
-    if (fallbackSlug && fallbackSlug !== slug) {
-      const retryParams = {
-        ...params,
-        'filters[tags][slug][$eq]': fallbackSlug,
-      } as Record<string, string | number | undefined>;
-      items = await fetchPostCollection(retryParams);
-    }
+    const allPosts = await getAllPosts();
+    const lower = slug.toLowerCase();
+    return allPosts.filter((post) =>
+      post.tags.some((tag) => tag.slug === slug || tag.slug.toLowerCase() === lower)
+    );
   }
 
   return filterValidPosts(items.map(mapPost));
 };
 
 export const getPostSlugs = async () => {
-  const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
-  let slugs = ensureArray<{ slug?: string }>(response?.data)
-    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
-    .filter((slug) => slug.length > 0);
-
-  if (!slugs.length) {
-    const fallbackPosts = await getAllPosts();
-    slugs = fallbackPosts.map((post) => post.slug).filter((slug) => slug.length > 0);
+  const posts = await getAllPosts();
+  if (posts.length) {
+    return Array.from(new Set(posts.map((post) => post.slug).filter((slug) => slug.length > 0)));
   }
+
+  const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
+  const slugs = ensureArray<{ slug?: string }>(response?.data)
+    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
+    .filter((value) => value.length > 0);
 
   return Array.from(new Set(slugs));
 };

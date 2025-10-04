@@ -101,11 +101,19 @@ const mergePopulate = (incoming) => {
   return incoming;
 };
 
+const applyDefaultSort = (query = {}) => {
+  if (!query.sort) {
+    return { ...query, sort: 'publishedAt:desc' };
+  }
+  return query;
+};
+
 export default factories.createCoreController('api::post.post', () => ({
   async find(ctx) {
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
     ctx.query.populate = mergePopulate(ctx.query.populate);
+    ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
@@ -119,6 +127,7 @@ export default factories.createCoreController('api::post.post', () => ({
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
     ctx.query.populate = mergePopulate(ctx.query.populate);
+    ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
@@ -163,7 +172,7 @@ export default factories.createCoreController('api::post.post', () => ({
     const query = {
       fields: ['slug'],
       filters: ensurePublishedFilter(),
-      sort: { publishedAt: 'desc' },
+      sort: [{ publishedAt: 'desc' }],
       limit: 500,
     };
 
