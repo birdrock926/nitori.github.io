@@ -30,21 +30,17 @@ const collectSlugCandidates = (slug) => {
   return Array.from(new Set([raw, lower, sanitized].filter(Boolean)));
 };
 
-const buildSlugWhere = (candidates = []) => {
+const buildSlugFilter = (candidates = []) => {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     return null;
   }
 
-  const slugMatchers = candidates.map((value) => ({
-    slug: { $eqi: value },
-  }));
+  const slugMatchers = candidates.flatMap((value) => [
+    { slug: { $eq: value } },
+    { slug: { $eqi: value } },
+  ]);
 
-  return {
-    $and: [
-      { $or: slugMatchers },
-      { publishedAt: { $notNull: true } },
-    ],
-  };
+  return { $or: slugMatchers };
 };
 
 const DEFAULT_POPULATE = {
@@ -111,16 +107,22 @@ export default factories.createCoreController('api::post.post', () => ({
       return ctx.notFound('記事が見つかりません');
     }
 
-    const where = buildSlugWhere(candidates);
+    const slugFilter = buildSlugFilter(candidates);
 
-    if (!where) {
+    if (!slugFilter) {
       return ctx.notFound('記事が見つかりません');
     }
 
-    const entity = await strapi.db.query('api::post.post').findOne({
-      where,
+    const query = {
+      filters: {
+        $and: [ensurePublishedFilter(slugFilter)],
+      },
       populate: DEFAULT_POPULATE,
-    });
+      limit: 1,
+    };
+
+    const results = await strapi.entityService.findMany('api::post.post', query);
+    const entity = Array.isArray(results) ? results[0] : results;
 
     if (!entity) {
       return ctx.notFound('記事が見つかりません');

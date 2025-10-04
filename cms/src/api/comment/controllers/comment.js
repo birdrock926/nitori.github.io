@@ -97,7 +97,10 @@ const buildSlugWhere = (candidates = []) => {
     return null;
   }
 
-  const slugMatchers = candidates.map((value) => ({ slug: { $eqi: value } }));
+  const slugMatchers = candidates.flatMap((value) => [
+    { slug: { $eq: value } },
+    { slug: { $eqi: value } },
+  ]);
 
   return {
     $and: [
