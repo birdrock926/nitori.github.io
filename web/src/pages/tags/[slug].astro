@@ -3,17 +3,16 @@ import BaseLayout from '@layouts/BaseLayout.astro';
 import PostCard from '@components/PostCard.astro';
 import { getPostsByTag, getTags } from '@lib/strapi';
 
-export const prerender = import.meta.env.PROD;
+export const prerender = true;
 
 export async function getStaticPaths() {
-  if (!import.meta.env.PROD) {
-    return [];
-  }
-
   const tags = await getTags();
 
   if (!tags.length) {
-    throw new Error('Strapi からタグ情報を取得できませんでした。公開タグが存在するか確認してください。');
+    console.warn(
+      '[strapi] タグ情報が見つからなかったため、タグ詳細ページの静的生成をスキップします。CMS が起動中か、公開タグが存在するかを確認してください。'
+    );
+    return [];
   }
 
   return tags.map((tag) => ({ params: { slug: tag.slug } }));

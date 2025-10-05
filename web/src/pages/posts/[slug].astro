@@ -18,19 +18,16 @@ import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
 import { ADSENSE, DELETE_REQUEST } from '@config/site';
 
-export const prerender = import.meta.env.PROD;
+export const prerender = true;
 
 export async function getStaticPaths() {
-  if (!import.meta.env.PROD) {
-    return [];
-  }
-
   const slugs = await getPostSlugs();
 
   if (!slugs.length) {
-    throw new Error(
-      'Strapi から投稿スラッグを取得できませんでした。CMS が起動しているか、公開記事が存在するかを確認してください。'
+    console.warn(
+      '[strapi] 投稿スラッグが見つからなかったため、記事詳細ページの静的生成をスキップします。CMS が起動中か、公開記事が存在するかを確認してください。'
     );
+    return [];
   }
 
   return slugs.map((slug) => ({ params: { slug } }));

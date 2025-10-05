@@ -3,7 +3,7 @@ import BaseLayout from '@layouts/BaseLayout.astro';
 import PostCard from '@components/PostCard.astro';
 import { getPostsByTag, getTags } from '@lib/strapi';
 
-export const prerender = import.meta.env.PROD;
+export const prerender = true;
 
 const tags = await getTags();
 const candidateTags = tags.slice(0, 12);

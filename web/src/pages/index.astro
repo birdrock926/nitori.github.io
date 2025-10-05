@@ -7,7 +7,7 @@ import InlineAd from '@components/ads/InlineAd.astro';
 import { getLatestPosts, getRanking } from '@lib/strapi';
 import { ADSENSE } from '@config/site';
 
-export const prerender = import.meta.env.PROD;
+export const prerender = true;
 
 const posts = await getLatestPosts(12);
 const heroCandidates = posts.slice(0, 3);
