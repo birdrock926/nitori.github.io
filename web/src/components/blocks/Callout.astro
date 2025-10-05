@@ -1,0 +1,36 @@
+---
+const { title, tone = 'info', icon, body } = Astro.props as {
+  title?: string;
+  tone?: 'info' | 'success' | 'warning' | 'danger';
+  icon?: string;
+  body: string;
+};
+
+const toneClass = {
+  info: 'callout--info',
+  success: 'callout--success',
+  warning: 'callout--warning',
+  danger: 'callout--danger',
+}[tone ?? 'info'];
+
+const toneLabel = {
+  info: '補足情報',
+  success: '成功メッセージ',
+  warning: '注意喚起',
+  danger: '重要な警告',
+}[tone ?? 'info'];
+---
+<section class={`callout ${toneClass}`} aria-label={title ?? toneLabel}>
+  <div class="callout__icon">
+    <span class="sr-only">{toneLabel}</span>
+    {icon ? (
+      <span aria-hidden="true">{icon}</span>
+    ) : (
+      <span aria-hidden="true" class="callout__glyph">i</span>
+    )}
+  </div>
+  <div class="callout__body">
+    {title && <h3 class="callout__title">{title}</h3>}
+    <div class="callout__content" set:html={body} />
+  </div>
+</section>
