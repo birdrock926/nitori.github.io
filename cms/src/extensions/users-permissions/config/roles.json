@@ -8,7 +8,7 @@
         "api::post": {
           "controllers": {
             "post": {
-              "actions": ["find", "findOne"]
+              "actions": ["find", "findOne", "findBySlug", "slugs"]
             }
           }
         },

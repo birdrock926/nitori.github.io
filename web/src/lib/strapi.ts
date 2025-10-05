@@ -630,17 +630,21 @@ export const getPostsByTag = async (slug: string) => {
 };
 
 export const getPostSlugs = async () => {
+  const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
+  const directSlugs = ensureArray<{ slug?: string }>(response?.data)
+    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  if (directSlugs.length) {
+    return Array.from(new Set(directSlugs));
+  }
+
   const posts = await getAllPosts();
   if (posts.length) {
     return Array.from(new Set(posts.map((post) => post.slug).filter((slug) => slug.length > 0)));
   }
 
-  const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
-  const slugs = ensureArray<{ slug?: string }>(response?.data)
-    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
-    .filter((value) => value.length > 0);
-
-  return Array.from(new Set(slugs));
+  return [];
 };
 
 export const getRanking = async () => {
