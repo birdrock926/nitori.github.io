@@ -1,0 +1,10 @@
+:80 {
+  encode gzip
+  reverse_proxy strapi:1337
+}
+
+:443 {
+  tls you@example.com
+  encode gzip
+  reverse_proxy strapi:1337
+}

@@ -1,0 +1,790 @@
+diff --git a/node_modules/@strapi/core/dist/Strapi.mjs b/node_modules/@strapi/core/dist/Strapi.mjs
+index 298cbaf..4bfb353 100644
+--- a/node_modules/@strapi/core/dist/Strapi.mjs
++++ b/node_modules/@strapi/core/dist/Strapi.mjs
+@@ -1,7 +1,8 @@
+ import * as globalAgent from 'global-agent';
+ import path from 'path';
+ import _ from 'lodash';
+-import { isFunction } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isFunction } = fp;
+ import { createLogger } from '@strapi/logger';
+ import { Database } from '@strapi/database';
+ import tsUtils from '@strapi/typescript-utils';
+diff --git a/node_modules/@strapi/core/dist/configuration/get-dirs.mjs b/node_modules/@strapi/core/dist/configuration/get-dirs.mjs
+index 5dd9470..c63789a 100644
+--- a/node_modules/@strapi/core/dist/configuration/get-dirs.mjs
++++ b/node_modules/@strapi/core/dist/configuration/get-dirs.mjs
+@@ -1,5 +1,6 @@
+ import { join, resolve } from 'path';
+-import { get } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { get } = fp;
+ 
+ const getDirs = ({ appDir, distDir }, config)=>({
+         dist: {
+diff --git a/node_modules/@strapi/core/dist/configuration/index.mjs b/node_modules/@strapi/core/dist/configuration/index.mjs
+index 9cc6f30..2bb75e2 100644
+--- a/node_modules/@strapi/core/dist/configuration/index.mjs
++++ b/node_modules/@strapi/core/dist/configuration/index.mjs
+@@ -1,7 +1,8 @@
+ import os from 'os';
+ import path from 'path';
+ import _ from 'lodash';
+-import { omit } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { omit } = fp;
+ import dotenv from 'dotenv';
+ import { strings } from '@strapi/utils';
+ import { getConfigUrls, getAbsoluteServerUrl, getAbsoluteAdminUrl } from './urls.mjs';
+diff --git a/node_modules/@strapi/core/dist/core-api/controller/collection-type.mjs b/node_modules/@strapi/core/dist/core-api/controller/collection-type.mjs
+index c2da5b0..cd741aa 100644
+--- a/node_modules/@strapi/core/dist/core-api/controller/collection-type.mjs
++++ b/node_modules/@strapi/core/dist/core-api/controller/collection-type.mjs
+@@ -1,4 +1,5 @@
+-import { isObject } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isObject } = fp;
+ import { errors } from '@strapi/utils';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/core-api/controller/index.mjs b/node_modules/@strapi/core/dist/core-api/controller/index.mjs
+index afaec5f..a2a6742 100644
+--- a/node_modules/@strapi/core/dist/core-api/controller/index.mjs
++++ b/node_modules/@strapi/core/dist/core-api/controller/index.mjs
+@@ -1,4 +1,5 @@
+-import { prop } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { prop } = fp;
+ import { contentTypes } from '@strapi/utils';
+ import { transformResponse } from './transform.mjs';
+ import { createSingleTypeController } from './single-type.mjs';
+diff --git a/node_modules/@strapi/core/dist/core-api/controller/single-type.mjs b/node_modules/@strapi/core/dist/core-api/controller/single-type.mjs
+index 515665d..0f4613a 100644
+--- a/node_modules/@strapi/core/dist/core-api/controller/single-type.mjs
++++ b/node_modules/@strapi/core/dist/core-api/controller/single-type.mjs
+@@ -1,4 +1,5 @@
+-import { isObject } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isObject } = fp;
+ import { errors } from '@strapi/utils';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/core-api/controller/transform.mjs b/node_modules/@strapi/core/dist/core-api/controller/transform.mjs
+index ca00cfc..a9d29ff 100644
+--- a/node_modules/@strapi/core/dist/core-api/controller/transform.mjs
++++ b/node_modules/@strapi/core/dist/core-api/controller/transform.mjs
+@@ -1,4 +1,5 @@
+-import { isNil, isPlainObject } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isNil, isPlainObject } = fp;
+ import { async } from '@strapi/utils';
+ 
+ function isEntry(property) {
+diff --git a/node_modules/@strapi/core/dist/core-api/service/pagination.mjs b/node_modules/@strapi/core/dist/core-api/service/pagination.mjs
+index 274c004..ca31777 100644
+--- a/node_modules/@strapi/core/dist/core-api/service/pagination.mjs
++++ b/node_modules/@strapi/core/dist/core-api/service/pagination.mjs
+@@ -1,4 +1,5 @@
+-import { has, isNil, omit, toNumber } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has, isNil, omit, toNumber } = fp;
+ import { errors, pagination } from '@strapi/utils';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/domain/content-type/index.mjs b/node_modules/@strapi/core/dist/domain/content-type/index.mjs
+index fa7897c..66131e7 100644
+--- a/node_modules/@strapi/core/dist/domain/content-type/index.mjs
++++ b/node_modules/@strapi/core/dist/domain/content-type/index.mjs
+@@ -1,4 +1,5 @@
+-import { cloneDeep } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { cloneDeep } = fp;
+ import _ from 'lodash';
+ import { contentTypes, yup } from '@strapi/utils';
+ import { validateContentTypeDefinition } from './validator.mjs';
+diff --git a/node_modules/@strapi/core/dist/domain/module/index.mjs b/node_modules/@strapi/core/dist/domain/module/index.mjs
+index c9a03cb..065cc26 100644
+--- a/node_modules/@strapi/core/dist/domain/module/index.mjs
++++ b/node_modules/@strapi/core/dist/domain/module/index.mjs
+@@ -1,4 +1,5 @@
+-import _, { flatten } from 'lodash';
++import _ from 'lodash';
++const { flatten } = _;
+ import { yup } from '@strapi/utils';
+ import { removeNamespace } from '../../registries/namespace.mjs';
+ import { validateModule } from './validation.mjs';
+diff --git a/node_modules/@strapi/core/dist/ee/index.mjs b/node_modules/@strapi/core/dist/ee/index.mjs
+index 27f4e19..67cbc0b 100644
+--- a/node_modules/@strapi/core/dist/ee/index.mjs
++++ b/node_modules/@strapi/core/dist/ee/index.mjs
+@@ -1,4 +1,5 @@
+-import { pick, isEqual } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pick, isEqual } = fp;
+ import { createStrapiFetch } from '../utils/fetch.mjs';
+ import { readLicense, verifyLicense, LICENSE_REGISTRY_URI, LicenseCheckError, fetchLicense } from './license.mjs';
+ import { shiftCronExpression } from '../utils/cron.mjs';
+diff --git a/node_modules/@strapi/core/dist/ee/license.mjs b/node_modules/@strapi/core/dist/ee/license.mjs
+index 1c64000..ecc9628 100644
+--- a/node_modules/@strapi/core/dist/ee/license.mjs
++++ b/node_modules/@strapi/core/dist/ee/license.mjs
+@@ -1,8 +1,10 @@
+ import fs from 'fs';
+-import { resolve, join } from 'path';
++import { resolve, join, dirname } from 'path';
++import { fileURLToPath } from 'url';
+ import crypto from 'crypto';
+ import { generateInstallId } from '@strapi/utils';
+ 
++const __dirname = dirname(fileURLToPath(import.meta.url));
+ const DEFAULT_FEATURES = {
+     bronze: [],
+     silver: [],
+diff --git a/node_modules/@strapi/core/dist/factories.mjs b/node_modules/@strapi/core/dist/factories.mjs
+index b5e6100..350a828 100644
+--- a/node_modules/@strapi/core/dist/factories.mjs
++++ b/node_modules/@strapi/core/dist/factories.mjs
+@@ -1,4 +1,5 @@
+-import { pipe, omit, pick } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pipe, omit, pick } = fp;
+ import { createController } from './core-api/controller/index.mjs';
+ import '@strapi/utils';
+ import 'zod/v4';
+diff --git a/node_modules/@strapi/core/dist/index.mjs b/node_modules/@strapi/core/dist/index.mjs
+index f06138f..d6ddd7d 100644
+--- a/node_modules/@strapi/core/dist/index.mjs
++++ b/node_modules/@strapi/core/dist/index.mjs
+@@ -1,6 +1,6 @@
+ import Strapi from './Strapi.mjs';
+ import 'open';
+-import 'lodash/fp';
++import 'lodash/fp.js';
+ import 'path';
+ import 'undici';
+ import './ee/license.mjs';
+diff --git a/node_modules/@strapi/core/dist/loaders/apis.mjs b/node_modules/@strapi/core/dist/loaders/apis.mjs
+index a2370e0..f916d4a 100644
+--- a/node_modules/@strapi/core/dist/loaders/apis.mjs
++++ b/node_modules/@strapi/core/dist/loaders/apis.mjs
+@@ -1,8 +1,10 @@
+ import { join, extname, basename } from 'path';
+-import fse, { existsSync } from 'fs-extra';
++import fse from 'fs-extra';
++const { existsSync } = fse;
+ import _ from 'lodash';
+ import { strings, importDefault } from '@strapi/utils';
+-import { isEmpty } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isEmpty } = fp;
+ import { getGlobalId } from '../domain/content-type/index.mjs';
+ 
+ const DEFAULT_CONTENT_TYPE = {
+diff --git a/node_modules/@strapi/core/dist/loaders/components.mjs b/node_modules/@strapi/core/dist/loaders/components.mjs
+index 520a328..0829000 100644
+--- a/node_modules/@strapi/core/dist/loaders/components.mjs
++++ b/node_modules/@strapi/core/dist/loaders/components.mjs
+@@ -1,6 +1,7 @@
+ import { join } from 'path';
+ import _ from 'lodash';
+-import { pathExists } from 'fs-extra';
++import fse from 'fs-extra';
++const { pathExists } = fse;
+ import { loadFiles } from '../utils/load-files.mjs';
+ 
+ async function loadComponents(strapi) {
+diff --git a/node_modules/@strapi/core/dist/loaders/plugins/get-enabled-plugins.mjs b/node_modules/@strapi/core/dist/loaders/plugins/get-enabled-plugins.mjs
+index 5762985..cf3fecb 100644
+--- a/node_modules/@strapi/core/dist/loaders/plugins/get-enabled-plugins.mjs
++++ b/node_modules/@strapi/core/dist/loaders/plugins/get-enabled-plugins.mjs
+@@ -1,7 +1,8 @@
+ import { join, dirname, resolve } from 'path';
+ import { existsSync, statSync } from 'fs';
+ import _ from 'lodash';
+-import { map, prop, pickBy, pipe, defaultsDeep, get } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { map, prop, pickBy, pipe, defaultsDeep, get } = fp;
+ import { strings } from '@strapi/utils';
+ import { getUserPluginsConfig } from './get-user-plugins-config.mjs';
+ 
+diff --git a/node_modules/@strapi/core/dist/loaders/plugins/get-user-plugins-config.mjs b/node_modules/@strapi/core/dist/loaders/plugins/get-user-plugins-config.mjs
+index b384c29..4f4f0df 100644
+--- a/node_modules/@strapi/core/dist/loaders/plugins/get-user-plugins-config.mjs
++++ b/node_modules/@strapi/core/dist/loaders/plugins/get-user-plugins-config.mjs
+@@ -1,6 +1,7 @@
+ import { join } from 'path';
+ import fse from 'fs-extra';
+-import { merge } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { merge } = fp;
+ import { loadConfigFile } from '../../utils/load-config-file.mjs';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/loaders/plugins/index.mjs b/node_modules/@strapi/core/dist/loaders/plugins/index.mjs
+index 70f4666..df40500 100644
+--- a/node_modules/@strapi/core/dist/loaders/plugins/index.mjs
++++ b/node_modules/@strapi/core/dist/loaders/plugins/index.mjs
+@@ -1,6 +1,7 @@
+ import { join } from 'path';
+ import fse from 'fs-extra';
+-import { defaults, get, getOr, defaultsDeep } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { defaults, get, getOr, defaultsDeep } = fp;
+ import * as resolve from 'resolve.exports';
+ import { env } from '@strapi/utils';
+ import { loadConfigFile } from '../../utils/load-config-file.mjs';
+diff --git a/node_modules/@strapi/core/dist/middlewares/body.mjs b/node_modules/@strapi/core/dist/middlewares/body.mjs
+index 25ab12c..fba1927 100644
+--- a/node_modules/@strapi/core/dist/middlewares/body.mjs
++++ b/node_modules/@strapi/core/dist/middlewares/body.mjs
+@@ -1,5 +1,6 @@
+ import fse from 'fs-extra';
+-import { defaultsDeep } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { defaultsDeep } = fp;
+ import { koaBody } from 'koa-body';
+ import mime from 'mime-types';
+ 
+diff --git a/node_modules/@strapi/core/dist/middlewares/public.mjs b/node_modules/@strapi/core/dist/middlewares/public.mjs
+index 88e52fc..ae19594 100644
+--- a/node_modules/@strapi/core/dist/middlewares/public.mjs
++++ b/node_modules/@strapi/core/dist/middlewares/public.mjs
+@@ -1,4 +1,5 @@
+-import { defaultsDeep } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { defaultsDeep } = fp;
+ import koaStatic from 'koa-static';
+ 
+ const defaults = {
+diff --git a/node_modules/@strapi/core/dist/middlewares/responses.mjs b/node_modules/@strapi/core/dist/middlewares/responses.mjs
+index 0ba39cb..df7bbce 100644
+--- a/node_modules/@strapi/core/dist/middlewares/responses.mjs
++++ b/node_modules/@strapi/core/dist/middlewares/responses.mjs
+@@ -1,4 +1,5 @@
+-import { isFunction } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isFunction } = fp;
+ 
+ const responses = (config = {})=>{
+     return async (ctx, next)=>{
+diff --git a/node_modules/@strapi/core/dist/middlewares/security.mjs b/node_modules/@strapi/core/dist/middlewares/security.mjs
+index 51d3591..461e22a 100644
+--- a/node_modules/@strapi/core/dist/middlewares/security.mjs
++++ b/node_modules/@strapi/core/dist/middlewares/security.mjs
+@@ -1,4 +1,5 @@
+-import { defaultsDeep, mergeWith } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { defaultsDeep, mergeWith } = fp;
+ import helmet from 'koa-helmet';
+ 
+ const defaults = {
+diff --git a/node_modules/@strapi/core/dist/middlewares/session.mjs b/node_modules/@strapi/core/dist/middlewares/session.mjs
+index 593d60c..c0f7cc4 100644
+--- a/node_modules/@strapi/core/dist/middlewares/session.mjs
++++ b/node_modules/@strapi/core/dist/middlewares/session.mjs
+@@ -1,4 +1,5 @@
+-import { isArray, isEmpty } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isArray, isEmpty } = fp;
+ import koaSession from 'koa-session';
+ 
+ const defaultConfig = {
+diff --git a/node_modules/@strapi/core/dist/registries/apis.mjs b/node_modules/@strapi/core/dist/registries/apis.mjs
+index 14942e1..62f3713 100644
+--- a/node_modules/@strapi/core/dist/registries/apis.mjs
++++ b/node_modules/@strapi/core/dist/registries/apis.mjs
+@@ -1,4 +1,5 @@
+-import { has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has } = fp;
+ 
+ const apisRegistry = (strapi)=>{
+     const apis = {};
+diff --git a/node_modules/@strapi/core/dist/registries/components.mjs b/node_modules/@strapi/core/dist/registries/components.mjs
+index 824b198..a97785a 100644
+--- a/node_modules/@strapi/core/dist/registries/components.mjs
++++ b/node_modules/@strapi/core/dist/registries/components.mjs
+@@ -1,4 +1,5 @@
+-import { has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has } = fp;
+ 
+ const componentsRegistry = ()=>{
+     const components = {};
+diff --git a/node_modules/@strapi/core/dist/registries/content-types.mjs b/node_modules/@strapi/core/dist/registries/content-types.mjs
+index c6e8a34..79c23db 100644
+--- a/node_modules/@strapi/core/dist/registries/content-types.mjs
++++ b/node_modules/@strapi/core/dist/registries/content-types.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has } = fp;
+ import { createContentType } from '../domain/content-type/index.mjs';
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+diff --git a/node_modules/@strapi/core/dist/registries/controllers.mjs b/node_modules/@strapi/core/dist/registries/controllers.mjs
+index 62568fe..562b54a 100644
+--- a/node_modules/@strapi/core/dist/registries/controllers.mjs
++++ b/node_modules/@strapi/core/dist/registries/controllers.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has } = fp;
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+ const controllersRegistry = (strapi)=>{
+diff --git a/node_modules/@strapi/core/dist/registries/custom-fields.mjs b/node_modules/@strapi/core/dist/registries/custom-fields.mjs
+index d73db7c..3457bea 100644
+--- a/node_modules/@strapi/core/dist/registries/custom-fields.mjs
++++ b/node_modules/@strapi/core/dist/registries/custom-fields.mjs
+@@ -1,4 +1,5 @@
+-import { has, isPlainObject } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has, isPlainObject } = fp;
+ 
+ const ALLOWED_TYPES = [
+     'biginteger',
+diff --git a/node_modules/@strapi/core/dist/registries/hooks.mjs b/node_modules/@strapi/core/dist/registries/hooks.mjs
+index 9243767..17d7575 100644
+--- a/node_modules/@strapi/core/dist/registries/hooks.mjs
++++ b/node_modules/@strapi/core/dist/registries/hooks.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy } = fp;
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+ const hooksRegistry = ()=>{
+diff --git a/node_modules/@strapi/core/dist/registries/middlewares.mjs b/node_modules/@strapi/core/dist/registries/middlewares.mjs
+index b273b60..553afb7 100644
+--- a/node_modules/@strapi/core/dist/registries/middlewares.mjs
++++ b/node_modules/@strapi/core/dist/registries/middlewares.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has } = fp;
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+ // TODO: move instantiation part here instead of in the server service
+diff --git a/node_modules/@strapi/core/dist/registries/modules.mjs b/node_modules/@strapi/core/dist/registries/modules.mjs
+index fb86dc9..2c0a16b 100644
+--- a/node_modules/@strapi/core/dist/registries/modules.mjs
++++ b/node_modules/@strapi/core/dist/registries/modules.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has } = fp;
+ import { createModule } from '../domain/module/index.mjs';
+ 
+ const modulesRegistry = (strapi)=>{
+diff --git a/node_modules/@strapi/core/dist/registries/plugins.mjs b/node_modules/@strapi/core/dist/registries/plugins.mjs
+index 370e8e1..c779b48 100644
+--- a/node_modules/@strapi/core/dist/registries/plugins.mjs
++++ b/node_modules/@strapi/core/dist/registries/plugins.mjs
+@@ -1,4 +1,5 @@
+-import { has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has } = fp;
+ 
+ const pluginsRegistry = (strapi)=>{
+     const plugins = {};
+diff --git a/node_modules/@strapi/core/dist/registries/policies.mjs b/node_modules/@strapi/core/dist/registries/policies.mjs
+index e69a230..00ab79c 100644
+--- a/node_modules/@strapi/core/dist/registries/policies.mjs
++++ b/node_modules/@strapi/core/dist/registries/policies.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has, castArray } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has, castArray } = fp;
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+ const PLUGIN_PREFIX = 'plugin::';
+diff --git a/node_modules/@strapi/core/dist/registries/services.mjs b/node_modules/@strapi/core/dist/registries/services.mjs
+index 9f34870..eed38c3 100644
+--- a/node_modules/@strapi/core/dist/registries/services.mjs
++++ b/node_modules/@strapi/core/dist/registries/services.mjs
+@@ -1,4 +1,5 @@
+-import { pickBy, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pickBy, has } = fp;
+ import { hasNamespace, addNamespace } from './namespace.mjs';
+ 
+ const servicesRegistry = (strapi)=>{
+diff --git a/node_modules/@strapi/core/dist/services/auth/index.mjs b/node_modules/@strapi/core/dist/services/auth/index.mjs
+index 394599e..8f768ca 100644
+--- a/node_modules/@strapi/core/dist/services/auth/index.mjs
++++ b/node_modules/@strapi/core/dist/services/auth/index.mjs
+@@ -1,5 +1,6 @@
+ import assert from 'assert/strict';
+-import { has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has } = fp;
+ import { errors } from '@strapi/utils';
+ 
+ const INVALID_STRATEGY_MSG = 'Invalid auth strategy. Expecting an object with properties {name: string, authenticate: function, verify: function}';
+diff --git a/node_modules/@strapi/core/dist/services/config.mjs b/node_modules/@strapi/core/dist/services/config.mjs
+index d8a1333..bb3699e 100644
+--- a/node_modules/@strapi/core/dist/services/config.mjs
++++ b/node_modules/@strapi/core/dist/services/config.mjs
+@@ -1,4 +1,5 @@
+-import { get, set, has, isString, isArray, isNumber } from 'lodash';
++import lodash from 'lodash';
++const { get, set, has, isString, isArray, isNumber } = lodash;
+ 
+ const createConfigProvider = (initialConfig = {}, strapi)=>{
+     const state = {
+diff --git a/node_modules/@strapi/core/dist/services/core-store.mjs b/node_modules/@strapi/core/dist/services/core-store.mjs
+index 64856b7..bb8376e 100644
+--- a/node_modules/@strapi/core/dist/services/core-store.mjs
++++ b/node_modules/@strapi/core/dist/services/core-store.mjs
+@@ -1,4 +1,5 @@
+-import { toString } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { toString } = fp;
+ 
+ const coreStoreModel = {
+     uid: 'strapi::core-store',
+diff --git a/node_modules/@strapi/core/dist/services/cron.mjs b/node_modules/@strapi/core/dist/services/cron.mjs
+index 0abf6b7..dd64137 100644
+--- a/node_modules/@strapi/core/dist/services/cron.mjs
++++ b/node_modules/@strapi/core/dist/services/cron.mjs
+@@ -1,5 +1,6 @@
+ import { Job } from 'node-schedule';
+-import { isFunction } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isFunction } = fp;
+ 
+ const createCronService = ()=>{
+     let jobsSpecs = [];
+diff --git a/node_modules/@strapi/core/dist/services/document-service/attributes/index.mjs b/node_modules/@strapi/core/dist/services/document-service/attributes/index.mjs
+index 5e5d85f..6b28ee7 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/attributes/index.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/attributes/index.mjs
+@@ -1,4 +1,5 @@
+-import { curry } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry } = fp;
+ import transforms from './transforms.mjs';
+ 
+ const applyTransforms = curry((schema, data)=>{
+diff --git a/node_modules/@strapi/core/dist/services/document-service/attributes/transforms.mjs b/node_modules/@strapi/core/dist/services/document-service/attributes/transforms.mjs
+index 3504cc7..5ac74de 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/attributes/transforms.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/attributes/transforms.mjs
+@@ -1,4 +1,5 @@
+-import { isString, toNumber, getOr } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isString, toNumber, getOr } = fp;
+ import bcrypt from 'bcryptjs';
+ 
+ const transforms = {
+diff --git a/node_modules/@strapi/core/dist/services/document-service/components.mjs b/node_modules/@strapi/core/dist/services/document-service/components.mjs
+index 2946696..702b2be 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/components.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/components.mjs
+@@ -1,5 +1,6 @@
+ import _ from 'lodash';
+-import { curry, omit, pipe, assign, has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, omit, pipe, assign, has } = fp;
+ import { contentTypes, async, errors } from '@strapi/utils';
+ import { getComponentJoinTableName, getComponentJoinColumnEntityName, getComponentJoinColumnInverseName, getComponentTypeColumn } from '../../utils/transform-content-types-to-models.mjs';
+ 
+diff --git a/node_modules/@strapi/core/dist/services/document-service/draft-and-publish.mjs b/node_modules/@strapi/core/dist/services/document-service/draft-and-publish.mjs
+index f7e179f..b4b3659 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/draft-and-publish.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/draft-and-publish.mjs
+@@ -1,4 +1,5 @@
+-import { curry, assoc } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, assoc } = fp;
+ import { contentTypes } from '@strapi/utils';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/services/document-service/entries.mjs b/node_modules/@strapi/core/dist/services/document-service/entries.mjs
+index 5a3f868..75e28eb 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/entries.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/entries.mjs
+@@ -1,5 +1,6 @@
+ import { errors, async } from '@strapi/utils';
+-import { omit, assoc } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { omit, assoc } = fp;
+ import { createComponents, assignComponentData, getComponents, deleteComponents, updateComponents } from './components.mjs';
+ import { transformParamsDocumentId as curriedTransformParamsDocumentId } from './transform/id-transform.mjs';
+ import { transformParamsToQuery } from './transform/query.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/document-service/first-published-at.mjs b/node_modules/@strapi/core/dist/services/document-service/first-published-at.mjs
+index 1650fbc..550ccbc 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/first-published-at.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/first-published-at.mjs
+@@ -1,5 +1,6 @@
+ import { contentTypes } from '@strapi/utils';
+-import { assoc } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { assoc } = fp;
+ 
+ const addFirstPublishedAtToDraft = async (draft, update, contentType)=>{
+     if (!contentTypes.hasFirstPublishedAtField(contentType)) {
+diff --git a/node_modules/@strapi/core/dist/services/document-service/internationalization.mjs b/node_modules/@strapi/core/dist/services/document-service/internationalization.mjs
+index 22bb1d9..debf5e2 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/internationalization.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/internationalization.mjs
+@@ -1,5 +1,6 @@
+ import { errors } from '@strapi/utils';
+-import { curry, assoc } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, assoc } = fp;
+ 
+ const getDefaultLocale = async ()=>{
+     return strapi.plugin('i18n').service('locales').getDefaultLocale();
+diff --git a/node_modules/@strapi/core/dist/services/document-service/params.mjs b/node_modules/@strapi/core/dist/services/document-service/params.mjs
+index a661dc7..c23b821 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/params.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/params.mjs
+@@ -1,4 +1,5 @@
+-import { pick } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pick } = fp;
+ 
+ const pickSelectionParams = (data)=>{
+     return pick([
+diff --git a/node_modules/@strapi/core/dist/services/document-service/repository.mjs b/node_modules/@strapi/core/dist/services/document-service/repository.mjs
+index 823e293..66243b4 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/repository.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/repository.mjs
+@@ -1,4 +1,5 @@
+-import { curry, assoc, omit, merge } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, assoc, omit, merge } = fp;
+ import { contentTypes, async, errors, validate } from '@strapi/utils';
+ import { wrapInTransaction } from './common.mjs';
+ import { defaultToDraft as defaultToDraftCurry, statusToLookup as statusToLookupCurry, filterDataPublishedAt as filterDataPublishedAtCurry, setStatusToDraft as setStatusToDraftCurry, statusToData as statusToDataCurry, defaultStatus as defaultStatusCurry } from './draft-and-publish.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/id-transform.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/id-transform.mjs
+index c3cc0be..882a569 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/id-transform.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/id-transform.mjs
+@@ -1,4 +1,5 @@
+-import { curry } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry } = fp;
+ import { transformData } from './data.mjs';
+ import { transformFields } from './fields.mjs';
+ import { transformPopulate } from './populate.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/query.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/query.mjs
+index e1cbe02..e869bd0 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/query.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/query.mjs
+@@ -1,4 +1,5 @@
+-import { curry, assoc } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, assoc } = fp;
+ 
+ const transformParamsToQuery = curry((uid, params)=>{
+     const query = strapi.get('query-params').transform(uid, params);
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/relations/extract/data-ids.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/relations/extract/data-ids.mjs
+index 22bf1d1..8ecc1ff 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/relations/extract/data-ids.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/relations/extract/data-ids.mjs
+@@ -1,4 +1,5 @@
+-import { curry } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry } = fp;
+ import { relations } from '@strapi/utils';
+ import { getRelationTargetLocale } from '../utils/i18n.mjs';
+ import { getRelationTargetStatus } from '../utils/dp.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/relations/transform/data-ids.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/relations/transform/data-ids.mjs
+index ae7b899..2ee9e62 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/relations/transform/data-ids.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/relations/transform/data-ids.mjs
+@@ -1,4 +1,5 @@
+-import { curry } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry } = fp;
+ import { errors, relations } from '@strapi/utils';
+ import { getRelationTargetLocale } from '../utils/i18n.mjs';
+ import { getRelationTargetStatus } from '../utils/dp.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/dp.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/dp.mjs
+index d2398a9..767becd 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/dp.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/dp.mjs
+@@ -1,4 +1,5 @@
+-import { isNil } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isNil } = fp;
+ import { contentTypes } from '@strapi/utils';
+ 
+ const getRelationTargetStatus = (relation, opts)=>{
+diff --git a/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/map-relation.mjs b/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/map-relation.mjs
+index 73d1e23..ce4c055 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/map-relation.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/transform/relations/utils/map-relation.mjs
+@@ -1,4 +1,5 @@
+-import { curry, isNil, isObject } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { curry, isNil, isObject } = fp;
+ import { async, traverseEntity } from '@strapi/utils';
+ 
+ const isNumeric = (value)=>{
+diff --git a/node_modules/@strapi/core/dist/services/document-service/utils/bidirectional-relations.mjs b/node_modules/@strapi/core/dist/services/document-service/utils/bidirectional-relations.mjs
+index 294b29f..6fdfb03 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/utils/bidirectional-relations.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/utils/bidirectional-relations.mjs
+@@ -1,4 +1,5 @@
+-import { keyBy } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { keyBy } = fp;
+ import { async } from '@strapi/utils';
+ 
+ /**
+diff --git a/node_modules/@strapi/core/dist/services/document-service/utils/unidirectional-relations.mjs b/node_modules/@strapi/core/dist/services/document-service/utils/unidirectional-relations.mjs
+index 7092a9a..53c2437 100644
+--- a/node_modules/@strapi/core/dist/services/document-service/utils/unidirectional-relations.mjs
++++ b/node_modules/@strapi/core/dist/services/document-service/utils/unidirectional-relations.mjs
+@@ -1,4 +1,5 @@
+-import { omit, keyBy } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { omit, keyBy } = fp;
+ 
+ /**
+  * Loads lingering relations that need to be updated when overriding a published or draft entry.
+diff --git a/node_modules/@strapi/core/dist/services/entity-validator/index.mjs b/node_modules/@strapi/core/dist/services/entity-validator/index.mjs
+index a8afb59..a56d8e0 100644
+--- a/node_modules/@strapi/core/dist/services/entity-validator/index.mjs
++++ b/node_modules/@strapi/core/dist/services/entity-validator/index.mjs
+@@ -1,5 +1,7 @@
+-import { isNil, castArray, mergeWith, isArray, uniqBy } from 'lodash';
+-import { isObject, isEmpty, prop, has } from 'lodash/fp';
++import lodash from 'lodash';
++const { isNil, castArray, mergeWith, isArray, uniqBy } = lodash;
++import fp from 'lodash/fp.js';
++const { isObject, isEmpty, prop, has } = fp;
+ import jsonLogic from 'json-logic-js';
+ import strapiUtils from '@strapi/utils';
+ import { Validators } from './validators.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/server/compose-endpoint.mjs b/node_modules/@strapi/core/dist/services/server/compose-endpoint.mjs
+index 12d6913..77e46e3 100644
+--- a/node_modules/@strapi/core/dist/services/server/compose-endpoint.mjs
++++ b/node_modules/@strapi/core/dist/services/server/compose-endpoint.mjs
+@@ -1,4 +1,5 @@
+-import { prop, castArray, trim, toLower, isNil } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { prop, castArray, trim, toLower, isNil } = fp;
+ import { errors } from '@strapi/utils';
+ import compose from 'koa-compose';
+ import { resolveRouteMiddlewares } from './middleware.mjs';
+diff --git a/node_modules/@strapi/core/dist/services/server/koa.mjs b/node_modules/@strapi/core/dist/services/server/koa.mjs
+index c5c367c..e1e3440 100644
+--- a/node_modules/@strapi/core/dist/services/server/koa.mjs
++++ b/node_modules/@strapi/core/dist/services/server/koa.mjs
+@@ -1,4 +1,5 @@
+-import { camelCase, isNil } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { camelCase, isNil } = fp;
+ import Koa from 'koa';
+ import createError from 'http-errors';
+ import delegate from 'delegates';
+diff --git a/node_modules/@strapi/core/dist/services/server/middleware.mjs b/node_modules/@strapi/core/dist/services/server/middleware.mjs
+index b682971..18013f1 100644
+--- a/node_modules/@strapi/core/dist/services/server/middleware.mjs
++++ b/node_modules/@strapi/core/dist/services/server/middleware.mjs
+@@ -1,5 +1,6 @@
+ import path from 'path';
+-import { isArray } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isArray } = fp;
+ import { importDefault } from '@strapi/utils';
+ 
+ const instantiateMiddleware = (middlewareFactory, name, config, strapi)=>{
+diff --git a/node_modules/@strapi/core/dist/services/server/routing.mjs b/node_modules/@strapi/core/dist/services/server/routing.mjs
+index 7ea9efe..d5803eb 100644
+--- a/node_modules/@strapi/core/dist/services/server/routing.mjs
++++ b/node_modules/@strapi/core/dist/services/server/routing.mjs
+@@ -1,5 +1,6 @@
+ import Router from '@koa/router';
+-import { has } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { has } = fp;
+ import { yup } from '@strapi/utils';
+ import createEndpointComposer from './compose-endpoint.mjs';
+ 
+diff --git a/node_modules/@strapi/core/dist/services/utils/conditional-fields.mjs b/node_modules/@strapi/core/dist/services/utils/conditional-fields.mjs
+index 556996d..36d9791 100644
+--- a/node_modules/@strapi/core/dist/services/utils/conditional-fields.mjs
++++ b/node_modules/@strapi/core/dist/services/utils/conditional-fields.mjs
+@@ -1,4 +1,5 @@
+-import { pipe, map, flatMap, values, sumBy } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pipe, map, flatMap, values, sumBy } = fp;
+ 
+ const getNumberOfConditionalFields = ()=>{
+     const contentTypes = strapi.contentTypes;
+diff --git a/node_modules/@strapi/core/dist/services/utils/dynamic-zones.mjs b/node_modules/@strapi/core/dist/services/utils/dynamic-zones.mjs
+index 0220342..cf735cd 100644
+--- a/node_modules/@strapi/core/dist/services/utils/dynamic-zones.mjs
++++ b/node_modules/@strapi/core/dist/services/utils/dynamic-zones.mjs
+@@ -1,4 +1,5 @@
+-import { pipe, map, flatMap, values, sumBy } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { pipe, map, flatMap, values, sumBy } = fp;
+ 
+ const getNumberOfDynamicZones = ()=>{
+     const contentTypes = strapi.contentTypes;
+diff --git a/node_modules/@strapi/core/dist/utils/cron.mjs b/node_modules/@strapi/core/dist/utils/cron.mjs
+index 4542025..8bc405b 100644
+--- a/node_modules/@strapi/core/dist/utils/cron.mjs
++++ b/node_modules/@strapi/core/dist/utils/cron.mjs
+@@ -1,4 +1,5 @@
+-import { negate, isEmpty } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { negate, isEmpty } = fp;
+ 
+ const INTEGER_REGEX = /^\d+$/;
+ const STEP_REGEX = /^\*\/\d+$/;
+diff --git a/node_modules/@strapi/core/dist/utils/filepath-to-prop-path.mjs b/node_modules/@strapi/core/dist/utils/filepath-to-prop-path.mjs
+index fdc2a3d..33eb990 100644
+--- a/node_modules/@strapi/core/dist/utils/filepath-to-prop-path.mjs
++++ b/node_modules/@strapi/core/dist/utils/filepath-to-prop-path.mjs
+@@ -1,5 +1,5 @@
+ import path from 'node:path';
+-import fp from 'lodash/fp';
++import fp from 'lodash/fp.js';
+ 
+ /**
+  * Returns a path (as an array) from a file path
+diff --git a/node_modules/@strapi/core/dist/utils/is-initialized.mjs b/node_modules/@strapi/core/dist/utils/is-initialized.mjs
+index 91d8605..ea180ed 100644
+--- a/node_modules/@strapi/core/dist/utils/is-initialized.mjs
++++ b/node_modules/@strapi/core/dist/utils/is-initialized.mjs
+@@ -1,4 +1,5 @@
+-import { isEmpty, isNil } from 'lodash/fp';
++import fp from 'lodash/fp.js';
++const { isEmpty, isNil } = fp;
+ 
+ /**
+  * Test if the strapi application is considered as initialized (1st user has been created)
+diff --git a/node_modules/@strapi/core/dist/utils/startup-logger.mjs b/node_modules/@strapi/core/dist/utils/startup-logger.mjs
+index f9002b5..20e73af 100644
+--- a/node_modules/@strapi/core/dist/utils/startup-logger.mjs
++++ b/node_modules/@strapi/core/dist/utils/startup-logger.mjs
+@@ -1,6 +1,6 @@
+ import chalk from 'chalk';
+ import CLITable from 'cli-table3';
+-import fp from 'lodash/fp';
++import fp from 'lodash/fp.js';
+ 
+ const createStartupLogger = (app)=>{
+     return {
+diff --git a/node_modules/@strapi/core/dist/utils/transform-content-types-to-models.mjs b/node_modules/@strapi/core/dist/utils/transform-content-types-to-models.mjs
+index 316179c..b284daa 100644
+--- a/node_modules/@strapi/core/dist/utils/transform-content-types-to-models.mjs
++++ b/node_modules/@strapi/core/dist/utils/transform-content-types-to-models.mjs
+@@ -1,6 +1,6 @@
+ import { createId } from '@paralleldrive/cuid2';
+ import assert from 'node:assert';
+-import fp from 'lodash/fp';
++import fp from 'lodash/fp.js';
+ 
+ /**
+  * Because strapi/database models don't know about things like components or dynamic zones, we use this file to convert them
