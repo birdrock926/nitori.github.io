@@ -1,0 +1,10 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+---
+<BaseLayout title="ページが見つかりません" description="404 Not Found" canonical={Astro.url.href}>
+  <article class="card" style="gap: 1.5rem; align-items: center; text-align: center;">
+    <h1>404</h1>
+    <p>お探しのページは移動または削除された可能性があります。</p>
+    <a class="tag-chip" href="/">トップページへ戻る</a>
+  </article>
+</BaseLayout>

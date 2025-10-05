@@ -1,0 +1,18 @@
+{
+  "collectionName": "components_layout_separators",
+  "info": {
+    "displayName": "Separator",
+    "description": "セクション区切り",
+    "icon": "minus"
+  },
+  "attributes": {
+    "style": {
+      "type": "enumeration",
+      "enum": ["line", "dots", "space"],
+      "default": "line"
+    },
+    "label": {
+      "type": "string"
+    }
+  }
+}
