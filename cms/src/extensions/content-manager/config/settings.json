@@ -1,0 +1,45 @@
+{
+  "layouts": {
+    "contentType": {
+      "api::comment.comment": {
+        "list": ["post", "alias", "status", "createdAt"],
+        "editRelations": ["post", "parent"],
+        "edit": [
+          [
+            { "name": "post", "size": 6 },
+            { "name": "parent", "size": 6 }
+          ],
+          [
+            { "name": "alias", "size": 6 },
+            { "name": "status", "size": 6 }
+          ],
+          [
+            { "name": "body", "size": 12 }
+          ],
+          [
+            { "name": "meta", "size": 12 }
+          ]
+        ]
+      }
+    }
+  },
+  "metadatas": {
+    "api::comment.comment": {
+      "list": {
+        "post": {
+          "label": "対象記事",
+          "sortable": false
+        },
+        "alias": {
+          "label": "投稿者"
+        },
+        "status": {
+          "label": "状態"
+        },
+        "createdAt": {
+          "label": "投稿日時"
+        }
+      }
+    }
+  }
+}
