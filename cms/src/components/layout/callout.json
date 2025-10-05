@@ -1,0 +1,26 @@
+{
+  "collectionName": "components_layout_callouts",
+  "info": {
+    "displayName": "Callout",
+    "description": "強調ボックス",
+    "icon": "alert"
+  },
+  "attributes": {
+    "title": {
+      "type": "string"
+    },
+    "tone": {
+      "type": "enumeration",
+      "enum": ["info", "success", "warning", "danger"],
+      "default": "info"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "body": {
+      "type": "component",
+      "component": "content.rich-text",
+      "required": true
+    }
+  }
+}
