@@ -514,23 +514,25 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
   const normalized: Record<string, string | number> = {
     'pagination[page]': 1,
   };
-  let hasSort = false;
+  let sortValue: string | undefined;
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
       if (key === 'sort' || key === 'sort[0]') {
-        normalized.sort = String(value);
-        hasSort = true;
+        sortValue = String(value);
         return;
       }
       normalized[key] = value;
     });
   }
 
-  if (!hasSort) {
-    normalized.sort = 'publishedAt:desc';
+  if (!sortValue) {
+    sortValue = 'publishedAt:desc';
   }
+
+  normalized.sort = sortValue;
+  normalized['sort[0]'] = sortValue;
 
   return normalized;
 };
