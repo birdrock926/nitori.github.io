@@ -511,8 +511,8 @@ const filterValidPosts = (posts: Post[]) => posts.filter((post) => Boolean(post?
 const mapPostCollection = (items: PostListResponse['data']) => filterValidPosts(items.map(mapPost));
 
 const normalizeSearchParams = (params?: Record<string, string | number | undefined>) => {
-  const normalized: Record<string, string | number> = {
-    'pagination[page]': 1,
+  const normalized: Record<string, string> = {
+    'pagination[page]': '1',
   };
   let sortValue: string | undefined;
   let prefersArraySort = false;
@@ -529,7 +529,7 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
         prefersArraySort = true;
         return;
       }
-      normalized[key] = value;
+      normalized[key] = String(value);
     });
   }
 
@@ -546,8 +546,43 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
 };
 
 const fetchPostCollection = async (params?: Record<string, string | number | undefined>) => {
-  const response = await fetchJSON<PostListResponse>('/api/posts', normalizeSearchParams(params));
-  return ensureArray<PostListResponse['data'][number]>(response?.data);
+  const seen = new Set<string>();
+  const attempts: Record<string, string>[] = [];
+  const addAttempt = (query: Record<string, string>) => {
+    const key = JSON.stringify(Object.keys(query).sort().map((k) => `${k}:${query[k]}`));
+    if (!seen.has(key)) {
+      attempts.push(query);
+      seen.add(key);
+    }
+  };
+
+  const base = normalizeSearchParams(params);
+  const sortValue = base.sort ?? 'publishedAt:desc';
+  const candidates: Record<string, string>[] = [
+    base,
+    { ...base, 'sort[0]': sortValue },
+    { ...base, sort: sortValue, 'sort[0]': sortValue },
+    { ...base, sort: sortValue },
+    { 'pagination[page]': '1', sort: sortValue, 'sort[0]': sortValue },
+    { 'pagination[page]': '1', sort: sortValue },
+    { 'pagination[page]': '1' },
+  ];
+
+  if (base['pagination[pageSize]']) {
+    candidates.push({ 'pagination[page]': '1', 'pagination[pageSize]': base['pagination[pageSize]'] });
+  }
+
+  candidates.forEach(addAttempt);
+
+  for (const query of attempts) {
+    const response = await fetchJSON<PostListResponse>('/api/posts', query);
+    const collection = ensureArray<PostListResponse['data'][number]>(response?.data);
+    if (collection.length) {
+      return collection;
+    }
+  }
+
+  return [];
 };
 
 const fetchMappedPosts = async (params?: Record<string, string | number | undefined>) => {
@@ -598,6 +633,32 @@ export const getPostBySlug = async (slug: string) => {
   );
   if (single?.data) {
     return mapPost(single.data);
+  }
+
+  const directMatches = await fetchPostCollection({
+    "filters[slug][$eq]": normalizedSlug,
+    'pagination[pageSize]': 5,
+  });
+  if (directMatches.length) {
+    const mapped = mapPostCollection(directMatches);
+    const exact = mapped.find((item) => item.slug === normalizedSlug);
+    if (exact) return exact;
+    const lower = normalizedSlug.toLowerCase();
+    const insensitive = mapped.find((item) => item.slug.toLowerCase() === lower);
+    if (insensitive) return insensitive;
+  }
+
+  const insensitiveMatches = await fetchPostCollection({
+    "filters[slug][$eqi]": normalizedSlug,
+    'pagination[pageSize]': 5,
+  });
+  if (insensitiveMatches.length) {
+    const mapped = mapPostCollection(insensitiveMatches);
+    const lower = normalizedSlug.toLowerCase();
+    const insensitive = mapped.find((item) => item.slug.toLowerCase() === lower);
+    if (insensitive) {
+      return insensitive;
+    }
   }
 
   const lower = normalizedSlug.toLowerCase();
@@ -654,6 +715,15 @@ const extractSlugsFromCollection = (collection: PostListResponse['data']) =>
   );
 
 export const getPostSlugs = async () => {
+  const fallbackResponse = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
+  const fromEndpoint = ensureArray<{ slug?: string }>(fallbackResponse?.data)
+    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  if (fromEndpoint.length) {
+    return Array.from(new Set(fromEndpoint));
+  }
+
   const primaryCollection = await fetchPostCollection({
     'pagination[pageSize]': 200,
     sort: 'publishedAt:desc',
@@ -662,15 +732,6 @@ export const getPostSlugs = async () => {
 
   if (fromCollection.length) {
     return fromCollection;
-  }
-
-  const fallbackResponse = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
-  const fromEndpoint = ensureArray<{ slug?: string }>(fallbackResponse?.data)
-    .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
-    .filter((value) => value.length > 0);
-
-  if (fromEndpoint.length) {
-    return Array.from(new Set(fromEndpoint));
   }
 
   const posts = await getAllPosts();
