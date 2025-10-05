@@ -520,7 +520,7 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
       if (key === 'sort' || key === 'sort[0]') {
-        normalized['sort[0]'] = String(value);
+        normalized.sort = String(value);
         hasSort = true;
         return;
       }
@@ -529,7 +529,7 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
   }
 
   if (!hasSort) {
-    normalized['sort[0]'] = 'publishedAt:desc';
+    normalized.sort = 'publishedAt:desc';
   }
 
   return normalized;
@@ -603,7 +603,7 @@ export const getTags = async () => {
   const data = await fetchJSON<{
     data: { id: number; attributes: { name: string; slug: string } }[];
   }>('/api/tags', {
-    'sort[0]': 'name:asc',
+    sort: 'name:asc',
   });
   const items = ensureArray<{ id: number; attributes: { name: string; slug: string } }>(data?.data);
   return items
