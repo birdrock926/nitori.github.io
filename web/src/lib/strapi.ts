@@ -515,12 +515,18 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
     'pagination[page]': 1,
   };
   let sortValue: string | undefined;
+  let prefersArraySort = false;
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
-      if (key === 'sort' || key === 'sort[0]') {
+      if (key === 'sort') {
         sortValue = String(value);
+        return;
+      }
+      if (key === 'sort[0]') {
+        sortValue = String(value);
+        prefersArraySort = true;
         return;
       }
       normalized[key] = value;
@@ -532,7 +538,9 @@ const normalizeSearchParams = (params?: Record<string, string | number | undefin
   }
 
   normalized.sort = sortValue;
-  normalized['sort[0]'] = sortValue;
+  if (prefersArraySort) {
+    normalized['sort[0]'] = sortValue;
+  }
 
   return normalized;
 };
@@ -631,14 +639,38 @@ export const getPostsByTag = async (slug: string) => {
   return filterValidPosts(items.map(mapPost));
 };
 
+const extractSlugsFromCollection = (collection: PostListResponse['data']) =>
+  Array.from(
+    new Set(
+      collection
+        .map((item) => {
+          const base = asObject(item);
+          const attr = asObject(base.attributes ?? base);
+          const slugValue = attr.slug ?? base.slug;
+          return typeof slugValue === 'string' ? slugValue.trim() : '';
+        })
+        .filter((slug) => slug.length > 0)
+    )
+  );
+
 export const getPostSlugs = async () => {
-  const response = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
-  const directSlugs = ensureArray<{ slug?: string }>(response?.data)
+  const primaryCollection = await fetchPostCollection({
+    'pagination[pageSize]': 200,
+    sort: 'publishedAt:desc',
+  });
+  const fromCollection = extractSlugsFromCollection(primaryCollection);
+
+  if (fromCollection.length) {
+    return fromCollection;
+  }
+
+  const fallbackResponse = await fetchJSON<{ data: { slug?: string }[] }>('/api/posts/slugs');
+  const fromEndpoint = ensureArray<{ slug?: string }>(fallbackResponse?.data)
     .map((item) => (typeof item.slug === 'string' ? item.slug.trim() : ''))
     .filter((value) => value.length > 0);
 
-  if (directSlugs.length) {
-    return Array.from(new Set(directSlugs));
+  if (fromEndpoint.length) {
+    return Array.from(new Set(fromEndpoint));
   }
 
   const posts = await getAllPosts();
