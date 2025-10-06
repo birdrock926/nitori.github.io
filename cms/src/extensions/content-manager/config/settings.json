@@ -1,4 +1,17 @@
 {
+  "settings": {
+    "contentType": {
+      "api::comment.comment": {
+        "bulkable": true,
+        "filterable": true,
+        "searchable": true,
+        "pageSize": 20,
+        "defaultSortBy": "createdAt",
+        "defaultSortOrder": "desc",
+        "mainField": "body"
+      }
+    }
+  },
   "layouts": {
     "contentType": {
       "api::comment.comment": {
