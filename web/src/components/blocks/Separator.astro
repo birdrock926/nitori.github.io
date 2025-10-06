@@ -1,0 +1,11 @@
+---
+const { style = 'line', label } = Astro.props as {
+  style?: 'line' | 'dots' | 'space';
+  label?: string;
+};
+
+const styleClass = `separator--${style}`;
+---
+<div class={`separator ${styleClass}`} role="separator" aria-label={label ?? undefined}>
+  {label && <span class="separator__label">{label}</span>}
+</div>

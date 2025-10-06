@@ -1,0 +1,236 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import RichText from '@components/blocks/RichText.astro';
+import Figure from '@components/blocks/Figure.astro';
+import Gallery from '@components/blocks/Gallery.astro';
+import Callout from '@components/blocks/Callout.astro';
+import Columns from '@components/blocks/Columns.astro';
+import Separator from '@components/blocks/Separator.astro';
+import ColorText from '@components/blocks/ColorText.astro';
+import YouTubePlayer from '@components/blocks/YouTubePlayer.tsx';
+import TwitchPlayer from '@components/blocks/TwitchPlayer.tsx';
+import InlineAd from '@components/ads/InlineAd.astro';
+import InlineAdBlock from '@components/blocks/InlineAdBlock.astro';
+import CommentIsland from '@components/comments/CommentIsland.tsx';
+import PostCard from '@components/PostCard.astro';
+import ShareMenu from '@components/ShareMenu.tsx';
+import { getPostBySlug, getPostsByTag, getPostSlugs } from '@lib/strapi';
+import type { DynamicZoneBlock } from '@lib/strapi';
+import { formatDateTime } from '@lib/format';
+import { ADSENSE, DELETE_REQUEST } from '@config/site';
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const slugs = await getPostSlugs();
+
+  if (!slugs.length) {
+    console.warn(
+      '[strapi] 投稿スラッグが見つからなかったため、記事詳細ページの静的生成をスキップします。CMS が起動中か、公開記事が存在するかを確認してください。'
+    );
+    return [];
+  }
+
+  return slugs.map((slug) => ({ params: { slug } }));
+}
+
+const { slug } = Astro.params;
+if (!slug) throw new Error('slug not provided');
+
+const post = await getPostBySlug(slug);
+if (!post) {
+  return Astro.redirect('/404');
+}
+
+const primaryTag = post.tags[0]?.slug;
+const relatedPosts = primaryTag
+  ? (await getPostsByTag(primaryTag)).filter((item) => item.slug !== post.slug).slice(0, 3)
+  : [];
+
+const adSlotForRelated = ADSENSE.slots.related || ADSENSE.slots.feed || '';
+const shouldInsertAd = Boolean(adSlotForRelated) && relatedPosts.length >= 3;
+const hashSeed = Array.from(post.slug).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+const adIndex = shouldInsertAd ? hashSeed % (relatedPosts.length + 1) : null;
+const relatedWithAds: Array<
+  | { type: 'post'; payload: typeof relatedPosts[number] }
+  | { type: 'ad' }
+> = [];
+
+relatedPosts.forEach((item) => {
+  if (adIndex !== null && relatedWithAds.length === adIndex) {
+    relatedWithAds.push({ type: 'ad' });
+  }
+  relatedWithAds.push({ type: 'post', payload: item });
+});
+
+if (adIndex !== null && adIndex >= relatedWithAds.length) {
+  relatedWithAds.push({ type: 'ad' });
+}
+
+const toc = post.blocks
+  .filter((block) => block.__component === 'content.rich-text')
+  .flatMap((block) => {
+    const matches = [...(block.body.matchAll(/<h(2|3) id="([^"]+)">([^<]+)<\/h\1>/g) ?? [])];
+    return matches.map((match) => ({
+      level: Number(match[1]),
+      id: match[2],
+      text: match[3],
+    }));
+  });
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'NewsArticle',
+  headline: post.title,
+  datePublished: post.publishedAt,
+  author: post.author ? { '@type': 'Person', name: post.author } : undefined,
+  image: post.cover?.url ? [post.cover.url] : undefined,
+  mainEntityOfPage: Astro.url.href,
+  publisher: {
+    '@type': 'Organization',
+    name: '気になったニュースまとめブログ',
+    logo: {
+      '@type': 'ImageObject',
+      url: `${Astro.url.origin}/logo.svg`,
+    },
+  },
+};
+
+---
+<BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
+  <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
+  <article class="card" style="gap: 2rem;">
+    <header class="article-header">
+      <div class="article-header__top">
+        <div class="article-header__tags" aria-label="記事のタグ">
+          {post.tags.map((tag) => (
+            <a class="tag-chip" href={`/tags/${tag.slug}/`}>{tag.name}</a>
+          ))}
+        </div>
+        <div class="article-header__actions">
+          <ShareMenu client:load url={Astro.url.href} title={post.title} />
+          {DELETE_REQUEST.formUrl && (
+            <a
+              href={DELETE_REQUEST.formUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ghost-button ghost-button--small article-header__delete"
+            >
+              <span class="ghost-button__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
+                </svg>
+              </span>
+              <span class="ghost-button__label">記事削除依頼</span>
+            </a>
+          )}
+        </div>
+      </div>
+      <h1 style="font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 0.5rem;">{post.title}</h1>
+      <div class="muted" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <time dateTime={post.publishedAt}>{formatDateTime(post.publishedAt)}</time>
+        {post.author && <span>著者: {post.author}</span>}
+        {post.source && (
+          <a href={post.source} target="_blank" rel="noopener" class="tag-chip">
+            出典を見る
+          </a>
+        )}
+      </div>
+    </header>
+    {toc.length > 0 && (
+      <nav aria-label="目次" class="card" style="background: transparent;">
+        <h2 style="margin: 0 0 1rem;">目次</h2>
+        <ol style="margin: 0; padding-left: 1.2rem; display: grid; gap: 0.5rem;">
+          {toc.map((item) => (
+            <li style={{ marginLeft: item.level === 3 ? '1rem' : '0' }}>
+              <a href={`#${item.id}`}>{item.text}</a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    )}
+    <div style="display: grid; gap: 2rem;">
+      {post.blocks.map((block, index) => {
+        if (block.__component === 'content.rich-text') {
+          return <RichText body={block.body} />;
+        }
+        if (block.__component === 'content.colored-text') {
+          return (
+            <ColorText text={block.text} color={block.color} background={block.background} isInline={block.isInline} />
+          );
+        }
+        if (block.__component === 'media.figure') {
+          return (
+            <Figure
+              image={block.image}
+              alt={block.alt}
+              caption={block.caption}
+              credit={block.credit}
+              displayMode={block.displayMode}
+            />
+          );
+        }
+        if (block.__component === 'media.gallery') {
+          return <Gallery items={block.items} />;
+        }
+        if (block.__component === 'embed.youtube') {
+          return <YouTubePlayer client:load videoId={block.videoId} title={block.title} />;
+        }
+        if (block.__component === 'embed.twitch-live') {
+          return <TwitchPlayer client:load channel={block.channel} title={block.title} />;
+        }
+        if (block.__component === 'embed.twitch-vod') {
+          return <TwitchPlayer client:load vodId={block.vodId} title={block.title} />;
+        }
+        if (block.__component === 'layout.callout') {
+          return <Callout title={block.title} tone={block.tone} icon={block.icon} body={block.body} />;
+        }
+        if (block.__component === 'layout.columns') {
+          return (
+            <Columns
+              layout={block.layout}
+              columns={block.columns}
+              background={block.background}
+              gutter={block.gutter}
+            />
+          );
+        }
+        if (block.__component === 'layout.separator') {
+          return <Separator style={block.style} label={block.label} />;
+        }
+        if (block.__component === 'ads.inline-slot') {
+          if (!block.slot) return null;
+          return (
+            <InlineAdBlock
+              slot={block.slot}
+              placement={block.placement}
+              label={block.label}
+              note={block.note}
+              instanceId={`inline-${post.slug}-${index}`}
+            />
+          );
+        }
+        return null;
+      })}
+    </div>
+  </article>
+  <InlineAd slot={ADSENSE.slots.inArticle} placement="in-article" />
+  <section style="margin-top: 3rem; display: grid; gap: 1.5rem;">
+    <h2 style="margin: 0;">関連記事</h2>
+    <div class="grid posts">
+      {relatedWithAds.map((entry, index) =>
+        entry.type === 'post' ? (
+          <PostCard post={entry.payload} key={entry.payload.slug} />
+        ) : (
+          <InlineAd slot={adSlotForRelated} placement="related" instanceId={`related-${index}`} key={`related-ad-${index}`} />
+        )
+      )}
+    </div>
+  </section>
+  <InlineAd slot={ADSENSE.slots.feed} placement="feed" />
+  <CommentIsland client:load postSlug={post.slug} defaultAlias={post.commentAliasDefault} />
+</BaseLayout>
