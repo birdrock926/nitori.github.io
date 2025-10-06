@@ -1,0 +1,25 @@
+---
+import type { Post } from '@lib/strapi';
+import { formatDateTime, relative, toMultilineHtml } from '@lib/format';
+
+const { post } = Astro.props as { post: Post };
+---
+<article class="post-card card hover-lift">
+  <header class="post-card-meta">
+    <time dateTime={post.publishedAt} class="muted">
+      {formatDateTime(post.publishedAt)}（{relative(post.publishedAt)}）
+    </time>
+    <div class="post-card-tags" role="list">
+      {post.tags.map((tag) => (
+        <a class="tag-chip" role="listitem" href={`/tags/${tag.slug}/`}>
+          {tag.name}
+        </a>
+      ))}
+    </div>
+  </header>
+  <h3 class="post-card-title"><a href={`/posts/${post.slug}/`}>{post.title}</a></h3>
+  <p class="post-card-summary muted" set:html={toMultilineHtml(post.summary)}></p>
+  <a class="post-card-link" href={`/posts/${post.slug}/`}>
+    続きを読む<span aria-hidden="true">→</span>
+  </a>
+</article>
