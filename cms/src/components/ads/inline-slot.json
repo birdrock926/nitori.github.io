@@ -1,0 +1,26 @@
+{
+  "collectionName": "components_ads_inline_slots",
+  "info": {
+    "displayName": "Inline Ad Slot",
+    "description": "記事本文内の広告枠",
+    "icon": "megaphone"
+  },
+  "attributes": {
+    "slot": {
+      "type": "string",
+      "required": true
+    },
+    "placement": {
+      "type": "string",
+      "description": "ヘッダービッディング等で利用するプレースメントコード"
+    },
+    "label": {
+      "type": "string",
+      "default": "スポンサーリンク"
+    },
+    "note": {
+      "type": "text",
+      "description": "運用メモや設置意図など"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "collectionType",
+  "collectionName": "reports",
+  "info": {
+    "singularName": "report",
+    "pluralName": "reports",
+    "displayName": "Report",
+    "description": "コメント通報"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "comment": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::comment.comment",
+      "inversedBy": "reports"
+    },
+    "reason": {
+      "type": "enumeration",
+      "enum": ["spam", "abuse", "copyright", "other"],
+      "required": true
+    },
+    "ip_hash": {
+      "type": "string"
+    },
+    "reporter_key": {
+      "type": "string",
+      "required": true
+    },
+    "byModerator": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}
