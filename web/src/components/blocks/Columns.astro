@@ -1,0 +1,29 @@
+---
+const { layout = 'two', columns, background = 'none', gutter = 'normal' } = Astro.props as {
+  layout?: 'two' | 'three';
+  columns: { title?: string; body: string }[];
+  background?: 'none' | 'subtle' | 'accent';
+  gutter?: 'normal' | 'wide' | 'compact';
+};
+
+const normalized = Array.isArray(columns) ? columns.filter((column) => column && column.body) : [];
+const resolvedLayout = layout === 'three' && normalized.length >= 3 ? 'three' : 'two';
+const fallbackCount = resolvedLayout === 'three' ? 3 : 2;
+const columnCount = normalized.length > 0 ? Math.min(fallbackCount, normalized.length) : 0;
+const displayedColumns = normalized.slice(0, columnCount);
+const shouldRender = displayedColumns.length > 0;
+
+const layoutClass = `columns--${resolvedLayout}`;
+const backgroundClass = `columns--bg-${background}`;
+const gutterClass = `columns--gutter-${gutter}`;
+---
+{shouldRender && (
+  <section class={`columns ${layoutClass} ${backgroundClass} ${gutterClass}`}>
+    {displayedColumns.map((column, index) => (
+      <article class="columns__item" data-index={index + 1}>
+        {column.title && <h3 class="columns__title">{column.title}</h3>}
+        <div class="columns__content" set:html={column.body} />
+      </article>
+    ))}
+  </section>
+)}
