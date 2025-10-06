@@ -1,0 +1,17 @@
+{
+  "collectionName": "components_embed_twitch_lives",
+  "info": {
+    "displayName": "Twitch Live",
+    "description": "ライブ配信埋め込み",
+    "icon": "broadcast-tower"
+  },
+  "attributes": {
+    "channel": {
+      "type": "string",
+      "required": true
+    },
+    "title": {
+      "type": "string"
+    }
+  }
+}
