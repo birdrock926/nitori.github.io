@@ -1,0 +1,73 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import PostCard from '@components/PostCard.astro';
+import { getAllPosts, getTags } from '@lib/strapi';
+
+export const prerender = true;
+
+const [posts, tags] = await Promise.all([getAllPosts(), getTags()]);
+
+const postsWithoutTags = posts.filter((post) => post.tags.length === 0);
+
+const sections = tags
+  .map((tag) => ({
+    tag,
+    posts: posts.filter((post) => post.tags.some((item) => item.slug === tag.slug)),
+  }))
+  .filter((section) => section.posts.length > 0);
+
+if (postsWithoutTags.length > 0) {
+  sections.push({
+    tag: { id: -1, name: 'タグ未設定', slug: 'untagged' },
+    posts: postsWithoutTags,
+  });
+}
+---
+<BaseLayout
+  title="記事一覧"
+  description="公開済みの記事をタグ別にまとめてチェック"
+  canonical={Astro.url.href}
+>
+  <section class="section" aria-labelledby="posts-directory-heading">
+    <header class="section-heading posts-directory__header">
+      <div>
+        <span class="section-eyebrow">Articles</span>
+        <h1 id="posts-directory-heading" class="section-title">記事一覧</h1>
+        <p class="section-subtitle muted">
+          最新の公開記事をタグごとにグルーピング。気になるテーマから素早くアクセスできます。
+        </p>
+      </div>
+      {sections.length > 0 && (
+        <nav class="posts-directory__nav" aria-label="タグ別セクション">
+          <ul>
+            {sections.map((section) => (
+              <li>
+                <a class="pill-link" href={`#tag-${section.tag.slug}`}>{section.tag.name}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+    </header>
+
+    {sections.length === 0 ? (
+      <p class="muted">公開済みの記事がまだありません。</p>
+    ) : (
+      <div class="posts-directory__groups">
+        {sections.map((section) => (
+          <section class="posts-directory__group" id={`tag-${section.tag.slug}`}>
+            <header class="posts-directory__group-header">
+              <h2>{section.tag.name}</h2>
+              <span class="posts-directory__count" aria-label={`${section.posts.length}件`}>{section.posts.length}</span>
+            </header>
+            <div class="posts-directory__grid">
+              {section.posts.map((post) => (
+                <PostCard post={post} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    )}
+  </section>
+</BaseLayout>
