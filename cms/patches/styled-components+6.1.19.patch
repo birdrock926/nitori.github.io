@@ -1,0 +1,16 @@
+diff --git a/node_modules/styled-components/dist/styled-components.browser.cjs.js b/node_modules/styled-components/dist/styled-components.browser.cjs.js
+index 0a1b2c3..4d5e6f7 100644
+--- a/node_modules/styled-components/dist/styled-components.browser.cjs.js
++++ b/node_modules/styled-components/dist/styled-components.browser.cjs.js
+@@
+-//# sourceMappingURL=styled-components.browser.cjs.js.map
++module.exports = Object.assign(exports.default, exports);
++//# sourceMappingURL=styled-components.browser.cjs.js.map
+diff --git a/node_modules/styled-components/dist/styled-components.cjs.js b/node_modules/styled-components/dist/styled-components.cjs.js
+index 0a1b2c3..4d5e6f7 100644
+--- a/node_modules/styled-components/dist/styled-components.cjs.js
++++ b/node_modules/styled-components/dist/styled-components.cjs.js
+@@
+-//# sourceMappingURL=styled-components.cjs.js.map
++module.exports = Object.assign(exports.default, exports);
++//# sourceMappingURL=styled-components.cjs.js.map
