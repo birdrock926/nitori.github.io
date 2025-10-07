@@ -1,0 +1,54 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Hero from '@components/Hero.astro';
+import PostCard from '@components/PostCard.astro';
+import Ranking from '@components/Ranking.astro';
+import InlineAd from '@components/ads/InlineAd.astro';
+import { getLatestPosts, getRanking } from '@lib/strapi';
+import { ADSENSE } from '@config/site';
+
+export const prerender = true;
+
+const posts = await getLatestPosts(12);
+const heroCandidates = posts.slice(0, 3);
+const showHero = heroCandidates.length >= 2;
+const featured = showHero ? heroCandidates[0] : null;
+const secondary = showHero ? heroCandidates.slice(1) : [];
+const listing = showHero ? posts.slice(3) : posts;
+const ranking = await getRanking();
+---
+<BaseLayout
+  title="気になったニュースまとめブログ"
+  description="ゲーム・エンタメの気になる最新トピックを毎日アップデート"
+  canonical={Astro.url.href}
+>
+  {showHero && featured && secondary.length > 0 && <Hero featured={featured} secondary={secondary} />}
+  <section class="section" aria-labelledby="latest-heading">
+    <header class="section-heading">
+      <span class="section-eyebrow">Latest</span>
+      <div>
+        <h2 id="latest-heading" class="section-title">最新ニュース</h2>
+        <p class="section-subtitle muted">気になる話題をまとめてチェック</p>
+      </div>
+    </header>
+    <div class="post-grid">
+      {listing.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+  </section>
+  <InlineAd slot={ADSENSE.slots.feed} placement="feed" />
+  <section class="section" aria-labelledby="ranking-heading">
+    <header class="section-heading">
+      <span class="section-eyebrow">Trending</span>
+      <div>
+        <h2 id="ranking-heading" class="section-title">人気ランキング</h2>
+        <p class="section-subtitle muted">過去24時間と7日間の注目度を比較</p>
+      </div>
+    </header>
+    <div class="ranking-grid">
+      <Ranking title="24時間" items={ranking.slice(0, 5)} />
+      <Ranking title="7日間" items={ranking.slice(5, 10)} />
+    </div>
+  </section>
+</BaseLayout>

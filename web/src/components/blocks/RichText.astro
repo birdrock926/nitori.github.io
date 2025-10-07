@@ -1,0 +1,24 @@
+---
+const { body } = Astro.props as { body: string };
+---
+<div class="richtext" set:html={body}></div>
+<style>
+.richtext :global(p) {
+  margin: 0 0 1rem;
+}
+.richtext :global(h2) {
+  font-size: 1.75rem;
+  margin: 2rem 0 1rem;
+}
+.richtext :global(h3) {
+  font-size: 1.4rem;
+  margin: 1.5rem 0 0.75rem;
+}
+.richtext :global(ul) {
+  padding-left: 1.5rem;
+}
+.richtext :global(a) {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+</style>
