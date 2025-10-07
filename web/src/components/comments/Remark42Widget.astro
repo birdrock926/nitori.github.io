@@ -1,0 +1,195 @@
+---
+import { REMARK42 } from '@config/site';
+
+interface Props {
+  slug: string;
+  title: string;
+  url: string;
+}
+
+const { slug, title, url } = Astro.props as Props;
+
+const host = REMARK42.host?.trim() ?? '';
+const siteId = REMARK42.siteId?.trim() ?? '';
+const locale = REMARK42.locale ?? 'ja';
+const threadId = slug.replace(/[^a-zA-Z0-9-_]/g, '-') || 'thread';
+const containerId = `remark42-thread-${threadId}`;
+
+const safeHost = JSON.stringify(host);
+const safeSiteId = JSON.stringify(siteId);
+const safeLocale = JSON.stringify(locale);
+const safeTitle = JSON.stringify(title);
+const fallbackId = `${containerId}-fallback`;
+---
+<section class="card remark42-thread" aria-label="コメント">
+  <h2>コメント</h2>
+  <div class="remark42-wrapper">
+    <div
+      id={containerId}
+      class="remark42"
+      data-url={url}
+      data-title={title}
+      data-page-title={title}
+      data-components="embed"
+      data-locale={locale}
+      role="region"
+      aria-live="polite"
+    ></div>
+    <p id={fallbackId} class="muted remark42-fallback" hidden>
+      コメントを読み込めませんでした。設定（ホスト・サイトID・CSP）をご確認ください。
+    </p>
+  </div>
+  <script is:inline>
+    (function () {
+      const containerId = {JSON.stringify(containerId)};
+      const fallbackId = {JSON.stringify(fallbackId)};
+      const rawHost = {safeHost};
+      const siteId = {safeSiteId};
+      const locale = {safeLocale};
+      const title = {safeTitle};
+      const container = document.getElementById(containerId);
+      const fallback = document.getElementById(fallbackId);
+
+      if (!container) {
+        console.error('[remark42] コメントコンテナが見つかりません');
+        return;
+      }
+
+      const showFallback = (reason) => {
+        if (fallback) {
+          fallback.hidden = false;
+          fallback.setAttribute('data-reason', reason);
+        }
+      };
+
+      if (!rawHost || !siteId) {
+        console.warn('[remark42] host もしくは site_id が設定されていません');
+        showFallback('missing-config');
+        return;
+      }
+
+      let normalizedHost = rawHost.trim();
+      if (!/^https?:\/\//i.test(normalizedHost)) {
+        try {
+          normalizedHost = new URL(normalizedHost).origin;
+        } catch (error) {
+          console.error('[remark42] 無効な host が指定されています', error);
+          showFallback('invalid-host');
+          return;
+        }
+      }
+
+      normalizedHost = normalizedHost.replace(/\/$/, '');
+
+      if (window.location.protocol === 'https:' && normalizedHost.startsWith('http:')) {
+        console.error('[remark42] HTTPS サイトでは HTTPS の Remark42 ホストが必要です');
+        showFallback('mixed-content');
+        return;
+      }
+
+      const config = {
+        host: normalizedHost,
+        site_id: siteId,
+        components: ['embed'],
+        url: window.location.href,
+        title: title,
+        page_title: document.title || title,
+        locale,
+        theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+      };
+
+      window.remark_config = config;
+
+      const loadScripts = () => {
+        const scriptId = 'remark42-embed-script';
+        if (document.getElementById(scriptId)) {
+          return true;
+        }
+        const target = document.head || document.body;
+        if (!target) {
+          console.error('[remark42] スクリプトの挿入先が見つかりません');
+          showFallback('no-target');
+          return false;
+        }
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.defer = true;
+        script.async = true;
+        script.src = `${normalizedHost}/web/embed.js`;
+        script.setAttribute('data-timestamp', Date.now().toString());
+        script.onerror = () => {
+          console.error('[remark42] embed.js の読み込みに失敗しました', script.src);
+          showFallback('load-failed');
+        };
+        script.onload = () => {
+          initializeWidget();
+        };
+        target.appendChild(script);
+        return true;
+      };
+
+      const initializeWidget = (attempt = 0) => {
+        if (!window.REMARK42 || typeof window.REMARK42.createInstance !== 'function') {
+          if (attempt > 40) {
+            console.error('[remark42] ウィジェットの初期化に失敗しました');
+            showFallback('init-timeout');
+            return;
+          }
+          window.setTimeout(() => initializeWidget(attempt + 1), 250);
+          return;
+        }
+
+        try {
+          window.REMARK42.createInstance({
+            node: container,
+            url: config.url,
+            site_id: config.site_id,
+            host: config.host,
+            components: config.components,
+            theme: config.theme,
+            locale: config.locale,
+          });
+          window.REMARK42.changeTheme?.(config.theme);
+          if (fallback) {
+            fallback.hidden = true;
+          }
+        } catch (error) {
+          console.error('[remark42] createInstance でエラーが発生しました', error);
+          showFallback('init-error');
+        }
+      };
+
+      if (loadScripts()) {
+        initializeWidget();
+      }
+
+      document.addEventListener('themechange', (event) => {
+        const nextTheme = (event.detail && event.detail.theme) === 'dark' ? 'dark' : 'light';
+        config.theme = nextTheme;
+        window.remark_config = config;
+        window.REMARK42?.changeTheme?.(nextTheme);
+      });
+    })();
+  </script>
+</section>
+---
+<style>
+  .remark42-thread {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .remark42 {
+    min-height: 220px;
+  }
+
+  .remark42-wrapper {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .remark42-fallback {
+    font-size: 0.95rem;
+  }
+</style>

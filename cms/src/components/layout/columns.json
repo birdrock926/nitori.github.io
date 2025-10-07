@@ -1,0 +1,33 @@
+{
+  "collectionName": "components_layout_columns_groups",
+  "info": {
+    "displayName": "Columns",
+    "description": "最大3カラムのレイアウト",
+    "icon": "layout"
+  },
+  "attributes": {
+    "layout": {
+      "type": "enumeration",
+      "enum": ["two", "three"],
+      "default": "two"
+    },
+    "gutter": {
+      "type": "enumeration",
+      "enum": ["normal", "wide", "compact"],
+      "default": "normal"
+    },
+    "background": {
+      "type": "enumeration",
+      "enum": ["none", "subtle", "accent"],
+      "default": "none"
+    },
+    "columns": {
+      "type": "component",
+      "repeatable": true,
+      "component": "layout.column",
+      "min": 2,
+      "max": 3,
+      "required": true
+    }
+  }
+}
