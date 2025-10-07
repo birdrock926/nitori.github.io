@@ -214,8 +214,9 @@
    ```
    - `SECRET` は `openssl rand -hex 32` などで生成した 64 桁以上の値を設定します。
    - `ADMIN_PASSWD` は管理 GUI 用のパスワードです。必要に応じて `ADMIN_SHARED_ID` を追加すると、既定ユーザー名（SITE）を別値にできます。
-2. `docker compose up -d` を実行すると `http://localhost:8080` でコメント API が起動し、`http://localhost:8080/web/admin` から管理 GUI を開けます。
-   - Compose ファイルでは常に最新の `umputun/remark42:latest` イメージを参照するため、起動前に `docker compose pull remark42` を実行して最新タグを取得してください。
+   - Compose 実行時に `remark42.env` が存在しないとエラーになるため、必ず上記コピーを完了させてください。
+2. `docker compose pull remark42` で最新イメージを取得した後、`docker compose up -d remark42` を実行すると `http://localhost:8080` でコメント API が起動し、`http://localhost:8080/web/admin` から管理 GUI を開けます。
+   - ボリュームはコンテナ内の `/srv/var` にマウントされます。既存環境から移行する場合は旧 `remark42_data` を `/srv/var` にコピーしてください。
 3. 初回アクセス時は `SITE` / `ADMIN_PASSWD` でログインし、**Settings → Email** で通知用 SMTP（任意）、**Settings → Basic** で pre-moderation や自動クローズなどを調整してください。
 4. 記事詳細ページでは slug + URL をスレッドキーにして埋め込みが行われます。公開 URL を変更した場合は管理 GUI の **Migrator** から URL マッピングを更新できます。
 5. バックアップは `remark42_data` ボリュームを保存するか、管理 GUI の **Export** ボタンで JSON/ZIP をダウンロードしてください。

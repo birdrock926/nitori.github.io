@@ -40,16 +40,13 @@ services:
 
   remark42:
     image: umputun/remark42:latest
+    env_file:
+      - ./remark42.env
     environment:
-      - REMARK_URL=http://0.0.0.0:8080
-      - REMARK_PORT=8080
-      - SITE=game-news
-      - SECRET=replace-with-remark42-secret
-      - ADMIN_PASSWD=replace-with-admin-password
       - AUTH_ANON=true
       - DEBUG=false
     volumes:
-      - remark42_data:/srv/remark42
+      - remark42_data:/srv/var
     ports:
       - "8080:8080"
     restart: unless-stopped

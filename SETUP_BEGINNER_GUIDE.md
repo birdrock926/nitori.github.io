@@ -196,6 +196,7 @@ npm run dev
    docker compose logs -f remark42  # 起動ログの確認（Ctrl + C で終了）
    ```
    - 既定では `http://localhost:8080` がコメント API、`http://localhost:8080/web` が管理 GUI です。
+   - ボリュームはコンテナ内の `/srv/var` にマウントされます。過去に `/srv/remark42` へマウントしていた場合は、バックアップを `/srv/var` へ移してから起動してください。
    - `docker-compose.yml` の `SITE` / `SECRET` / `ADMIN_PASSWD` はプレースホルダーなので、動作確認後は本番値に置き換えてください。
 3. Astro の記事ページを再読み込みし、コメント欄が表示されることを確認します。初回アクセス時に slug + URL をキーにしたスレッドが自
    動生成されます。投稿数が多い場合でも Remark42 が 1 ページあたりの件数とページ送り UI を自動で表示するため追加設定は不要です。
