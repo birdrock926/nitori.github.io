@@ -1,0 +1,45 @@
+diff --git a/node_modules/@strapi/admin/package.json b/node_modules/@strapi/admin/package.json
+index 0000000..0000000 100644
+--- a/node_modules/@strapi/admin/package.json
++++ b/node_modules/@strapi/admin/package.json
+@@ -23,35 +23,35 @@
+     "./strapi-admin": {
+       "types": "./dist/admin/src/index.d.ts",
+       "source": "./admin/src/index.ts",
+-      "import": "./dist/admin/index.mjs",
++      "import": "./dist/admin/index.js",
+       "require": "./dist/admin/index.js",
+       "default": "./dist/admin/index.js"
+     },
+     "./strapi-admin/ee": {
+       "types": "./dist/admin/src/ee.d.ts",
+       "source": "./admin/src/ee.ts",
+-      "import": "./dist/admin/ee.mjs",
++      "import": "./dist/admin/ee.js",
+       "require": "./dist/admin/ee.js",
+       "default": "./dist/admin/ee.js"
+     },
+     "./strapi-admin/test": {
+       "types": "./dist/admin/tests/index.d.ts",
+       "source": "./admin/tests/index.ts",
+-      "import": "./dist/admin/test.mjs",
++      "import": "./dist/admin/test.js",
+       "require": "./dist/admin/test.js",
+       "default": "./dist/admin/test.js"
+     },
+     "./_internal": {
+       "types": "./dist/_internal/index.d.ts",
+       "source": "./_internal/index.ts",
+-      "import": "./dist/_internal.mjs",
++      "import": "./dist/_internal.js",
+       "require": "./dist/_internal.js",
+       "default": "./dist/_internal.js"
+     },
+     "./strapi-server": {
+       "types": "./dist/server/src/index.d.ts",
+       "source": "./server/src/index.js",
+-      "import": "./dist/server/index.mjs",
++      "import": "./dist/server/index.js",
+       "require": "./dist/server/index.js",
+       "default": "./dist/server/index.js"
+     },
