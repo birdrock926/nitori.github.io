@@ -1,0 +1,248 @@
+---
+import { REMARK42 } from '@config/site';
+
+interface Props {
+  slug: string;
+  title: string;
+  url: string;
+}
+
+const { slug, title, url } = Astro.props as Props;
+
+const remarkHost = REMARK42.host?.trim();
+const remarkSite = REMARK42.siteId?.trim();
+const locale = REMARK42.locale ?? 'ja';
+const containerId = `remark42-${slug.replace(/[^a-zA-Z0-9-_]/g, '-') || 'thread'}`;
+const fallbackId = `${containerId}-fallback`;
+const scriptId = 'remark42-embed-script';
+
+const normaliseHost = (value: string | undefined | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).origin.replace(/\/$/, '');
+    } catch (error) {
+      console.warn('[remark42] Invalid host URL', error);
+      return null;
+    }
+  }
+
+  try {
+    return new URL(`https://${trimmed}`).origin.replace(/\/$/, '');
+  } catch (error) {
+    console.warn('[remark42] Failed to normalise host', error);
+    return null;
+  }
+};
+
+const resolvedHost = normaliseHost(remarkHost);
+const pageProtocol = (() => {
+  try {
+    return new URL(url).protocol;
+  } catch (error) {
+    return 'https:';
+  }
+})();
+
+const fallbackReason = (() => {
+  if (!remarkHost || !remarkSite) return 'missing-config';
+  if (!resolvedHost) return 'invalid-host';
+  if (pageProtocol === 'https:' && resolvedHost.startsWith('http:')) return 'mixed-content';
+  return null;
+})();
+
+const fallbackMessages: Record<string, string> = {
+  'missing-config': 'コメント設定が完了していません。環境変数を確認してください。',
+  'invalid-host': 'コメントサーバーの URL が不正です。',
+  'mixed-content': 'HTTPS ページでは HTTPS のコメントホストが必要です。',
+  'load-failed': 'コメントスクリプトを読み込めませんでした。ネットワーク設定をご確認ください。',
+  'render-timeout': 'コメントの初期化に時間がかかっています。ページを再読み込みしてください。',
+  'init-error': 'コメント欄の描画に失敗しました。時間を置いて再度お試しください。',
+};
+
+const serializedConfig = JSON.stringify({
+  host: resolvedHost,
+  site_id: remarkSite,
+  components: ['embed'],
+  locale,
+  url,
+  title,
+  page_title: title,
+});
+---
+<section class="card remark42-section" aria-label="コメント">
+  <h2>コメント</h2>
+    <div class="remark42-wrapper">
+      {fallbackReason ? (
+        <p id={fallbackId} class="remark42-fallback" data-reason={fallbackReason}>
+          {fallbackMessages[fallbackReason] ?? fallbackMessages['invalid-host']}
+        </p>
+      ) : (
+        <>
+          <div
+            id={containerId}
+            class="remark42"
+            data-url={url}
+            data-title={title}
+            data-page-title={title}
+            data-components="embed"
+            data-config={serializedConfig}
+            data-fallback-id={fallbackId}
+            aria-live="polite"
+          ></div>
+        <p id={fallbackId} class="remark42-fallback" hidden></p>
+        <script is:inline data-fallback-messages={JSON.stringify(fallbackMessages)}>
+          (function () {
+            const loaderId = 'remark42-embed-script';
+            const scriptTag = document.currentScript;
+            const fallbackNode = scriptTag?.previousElementSibling ?? null;
+            const containerNode = fallbackNode && fallbackNode.previousElementSibling instanceof HTMLElement ? fallbackNode.previousElementSibling : null;
+            const fallbackEl = fallbackNode instanceof HTMLElement ? fallbackNode : null;
+            const container = containerNode instanceof HTMLElement ? containerNode : null;
+            let messages = {};
+            try {
+              messages = scriptTag?.dataset.fallbackMessages ? JSON.parse(scriptTag.dataset.fallbackMessages) : {};
+            } catch (error) {
+              console.warn('[remark42] failed to parse fallback messages', error);
+            }
+            const configSource = container?.dataset.config;
+
+            const showFallback = (reason) => {
+              if (!fallbackEl) return;
+              fallbackEl.hidden = false;
+              fallbackEl.dataset.reason = reason;
+              fallbackEl.textContent = messages[reason] || messages['invalid-host'];
+            };
+
+            if (!container) {
+              showFallback('init-error');
+              return;
+            }
+
+            let baseConfig = {};
+            try {
+              baseConfig = configSource ? JSON.parse(configSource) : {};
+            } catch (error) {
+              console.warn('[remark42] failed to parse config', error);
+            }
+
+            const config = {
+              ...baseConfig,
+              theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+            };
+
+            window.remark_config = config;
+
+            if (!config.host || !config.site_id) {
+              showFallback('missing-config');
+              return;
+            }
+
+            const initialise = () => {
+              if (!window.REMARK42 || typeof window.REMARK42.createInstance !== 'function') {
+                showFallback('load-failed');
+                return;
+              }
+
+              try {
+                window.REMARK42.destroy?.();
+                const instance = window.REMARK42.createInstance({
+                  node: container,
+                  host: config.host,
+                  site_id: config.site_id,
+                  url: config.url,
+                  title: config.title,
+                  page_title: config.page_title,
+                  components: config.components,
+                  locale: config.locale,
+                  theme: config.theme,
+                });
+
+                if (fallbackEl) {
+                  fallbackEl.hidden = true;
+                  fallbackEl.dataset.reason = '';
+                }
+
+                if (!instance) {
+                  showFallback('render-timeout');
+                }
+              } catch (error) {
+                console.error('[remark42] failed to initialise', error);
+                showFallback('init-error');
+              }
+            };
+
+            const ensureScript = () => {
+              const existing = document.getElementById(loaderId);
+              if (existing) {
+                if (existing.dataset.loaded === 'true') {
+                  initialise();
+                } else {
+                  existing.addEventListener('load', initialise, { once: true });
+                }
+                return;
+              }
+
+              const script = document.createElement('script');
+              script.id = loaderId;
+              script.async = true;
+              script.defer = true;
+              script.src = config.host.replace(/\/$/, '') + '/web/embed.js';
+              script.dataset.host = config.host;
+              script.dataset.siteId = config.site_id;
+              script.onload = () => {
+                script.dataset.loaded = 'true';
+                initialise();
+              };
+              script.onerror = () => showFallback('load-failed');
+              document.head.appendChild(script);
+            };
+
+            ensureScript();
+
+            document.addEventListener('themechange', (event) => {
+              const nextTheme = (event.detail && event.detail.theme) === 'dark' ? 'dark' : 'light';
+              config.theme = nextTheme;
+              window.remark_config = { ...config };
+              if (window.REMARK42?.changeTheme) {
+                window.REMARK42.changeTheme(nextTheme);
+              }
+            });
+
+            window.addEventListener('load', () => {
+              window.setTimeout(() => {
+                if (!container.children.length) {
+                  showFallback('render-timeout');
+                }
+              }, 2500);
+            });
+          })();
+        </script>
+      </>
+    )}
+  </div>
+</section>
+---
+<style>
+  .remark42-section {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .remark42-wrapper {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .remark42 {
+    min-height: 260px;
+  }
+
+  .remark42-fallback {
+    font-size: 0.95rem;
+  }
+</style>
