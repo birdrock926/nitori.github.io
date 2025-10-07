@@ -1,7 +1,12 @@
 #!/usr/bin/env node
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const cmsDir = dirname(scriptDir);
 
 const cases = [
   {
@@ -40,4 +45,31 @@ if (typeof esm.default !== 'function') {
 }
 if (esm.default !== esm.default.styled) {
   throw new Error('Expected styled-components ESM default export to expose styled.styled referencing itself.');
+}
+
+const adminDistDir = join(cmsDir, 'node_modules', '@strapi', 'admin', 'dist');
+if (existsSync(adminDistDir)) {
+  const offenders = [];
+  const requirePattern = /require\((['\"])styled-components\1\)/;
+  function walk(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.js')) {
+        continue;
+      }
+      const contents = readFileSync(fullPath, 'utf8');
+      if (requirePattern.test(contents) && !contents.includes('/* __birdrockStyledRequire */')) {
+        offenders.push(fullPath);
+      }
+    }
+  }
+  walk(adminDistDir);
+  if (offenders.length > 0) {
+    const list = offenders.map((file) => ` - ${file.replace(cmsDir + '/', '')}`).join('\n');
+    throw new Error(`Expected styled-components requires in Strapi admin bundles to be normalized. Offending files:\n${list}`);
+  }
 }
