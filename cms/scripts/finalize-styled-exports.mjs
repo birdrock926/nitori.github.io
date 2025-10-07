@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -7,7 +7,6 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const cmsDir = dirname(scriptDir);
 
 const BUNDLE_MARKER = '/* __birdrockStyledInterop */';
-const REQUIRE_MARKER = '/* __birdrockStyledRequire */';
 
 const bundleFiles = [
   'node_modules/styled-components/dist/styled-components.cjs.js',
@@ -26,7 +25,7 @@ for (const relativePath of bundleFiles) {
     continue;
   }
 
-  const injection = `\n${BUNDLE_MARKER}\n(function() {\n  var current = module.exports;\n  var candidate = current && (current.styled || current.default || current);\n  if (candidate && typeof candidate === 'object' && typeof candidate.default === 'function') {\n    candidate = candidate.default;\n  }\n  if (typeof candidate !== 'function') {\n    if (typeof current === 'function') {\n      candidate = current;\n    } else {\n      return;\n    }\n  }\n  var finalStyled = candidate;\n  if (current && current !== finalStyled) {\n    try {\n      var keys = Object.getOwnPropertyNames(current);\n      for (var i = 0; i < keys.length; i += 1) {\n        var key = keys[i];\n        if (key === 'default' || key === 'styled') {\n          continue;\n        }\n        try {\n          finalStyled[key] = current[key];\n        } catch (error) {\n          // ignore reassignment errors for read-only descriptors\n        }\n      }\n    } catch (error) {\n      // ignore reflection errors\n    }\n  }\n  if (!finalStyled.styled) {\n    finalStyled.styled = finalStyled;\n  }\n  if (!finalStyled.default) {\n    finalStyled.default = finalStyled;\n  }\n  module.exports = finalStyled;\n  module.exports.default = finalStyled;\n  module.exports.styled = finalStyled;\n  try {\n    Object.defineProperty(module.exports, '__esModule', { value: true });\n  } catch (error) {\n    module.exports.__esModule = true;\n  }\n})();\n`;
+  const injection = `\n${BUNDLE_MARKER}\n(function() {\n  var current = module.exports;\n  var candidate = current && (typeof current === 'function' ? current : current.styled || current.default);\n  if (!candidate || typeof candidate !== 'function') {\n    return;\n  }\n  var descriptors = null;\n  try {\n    descriptors = Object.getOwnPropertyDescriptors(current);\n  } catch (error) {\n    // ignore descriptor retrieval failures\n  }\n  if (descriptors) {\n    for (var key in descriptors) {\n      if (key === 'default' || key === 'styled') {\n        continue;\n      }\n      var descriptor = descriptors[key];\n      try {\n        Object.defineProperty(candidate, key, descriptor);\n      } catch (descriptorError) {\n        // ignore descriptor assignment failures\n      }\n    }\n  } else if (current && current !== candidate) {\n    try {\n      var keys = Object.getOwnPropertyNames(current);\n      for (var i = 0; i < keys.length; i += 1) {\n        var key = keys[i];\n        if (key === 'default' || key === 'styled') {\n          continue;\n        }\n        try {\n          candidate[key] = current[key];\n        } catch (assignmentError) {\n          // ignore reassignment errors\n        }\n      }\n    } catch (reflectionError) {\n      // ignore reflection errors\n    }\n  }\n  if (candidate.styled !== candidate) {\n    try {\n      Object.defineProperty(candidate, 'styled', { configurable: true, enumerable: true, writable: true, value: candidate });\n    } catch (styledError) {\n      try {\n        candidate.styled = candidate;\n      } catch (writeError) {\n        // ignore write failures\n      }\n    }\n  }\n  if (candidate.default !== candidate) {\n    try {\n      Object.defineProperty(candidate, 'default', { configurable: true, enumerable: true, writable: true, value: candidate });\n    } catch (defaultError) {\n      try {\n        candidate.default = candidate;\n      } catch (writeError) {\n        // ignore write failures\n      }\n    }\n  }\n  try {\n    Object.defineProperty(candidate, '__esModule', { configurable: true, enumerable: true, writable: true, value: true });\n  } catch (esModuleError) {\n    try {\n      candidate.__esModule = true;\n    } catch (writeError) {\n      // ignore write failures\n    }\n  }\n  module.exports = candidate;\n  module.exports.default = candidate;\n  module.exports.styled = candidate;\n})();\n`;
 
   const sourceMapIndex = source.lastIndexOf('\n//# sourceMappingURL=');
   if (sourceMapIndex !== -1) {
@@ -41,92 +40,4 @@ for (const relativePath of bundleFiles) {
 
 if (bundleChanged) {
   console.info('[styled-components] Applied runtime export harmonization.');
-}
-
-const adminDistDir = join(cmsDir, 'node_modules', '@strapi', 'admin', 'dist');
-let adminChanged = false;
-
-function walk(directory) {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const fullPath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      walk(fullPath);
-      continue;
-    }
-    if (!entry.isFile() || !entry.name.endsWith('.js')) {
-      continue;
-    }
-
-    let contents = readFileSync(fullPath, 'utf8');
-    if (!contents.includes("require('styled-components')") && !contents.includes('require("styled-components")')) {
-      continue;
-    }
-    if (contents.includes(REQUIRE_MARKER)) {
-      continue;
-    }
-
-    const pattern = /(\s*)(const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\((['\"])styled-components\4\);/gm;
-    let replaced = false;
-    contents = contents.replace(pattern, (_, indent, keyword, identifier, quote) => {
-      replaced = true;
-      const moduleIdentifier = `${identifier}Module__birdrock`;
-      return [
-        `${indent}${keyword} ${moduleIdentifier} = require(${quote}styled-components${quote});`,
-        `${indent}${REQUIRE_MARKER}`,
-        `${indent}${keyword} ${identifier} = (() => {`,
-        `${indent}  var mod = ${moduleIdentifier};`,
-        `${indent}  if (!mod) {`,
-        `${indent}    return mod;`,
-        `${indent}  }`,
-        `${indent}  var candidate = typeof mod === 'function' ? mod : mod.styled || mod.default || mod;`,
-        `${indent}  if (candidate && typeof candidate === 'object' && typeof candidate.default === 'function') {`,
-        `${indent}    candidate = candidate.default;`,
-        `${indent}  }`,
-        `${indent}  if (typeof candidate !== 'function') {`,
-        `${indent}    candidate = mod;`,
-        `${indent}  }`,
-        `${indent}  if (candidate && typeof candidate === 'function' && mod && candidate !== mod) {`,
-        `${indent}    try {`,
-        `${indent}      var keys = Object.getOwnPropertyNames(mod);`,
-        `${indent}      for (var i = 0; i < keys.length; i += 1) {`,
-        `${indent}        var key = keys[i];`,
-        `${indent}        if (key === 'default' || key === 'styled') {`,
-        `${indent}          continue;`,
-        `${indent}        }`,
-        `${indent}        try {`,
-        `${indent}          candidate[key] = mod[key];`,
-        `${indent}        } catch (error) {`,
-        `${indent}          // ignore reassignment errors`,
-        `${indent}        }`,
-        `${indent}      }`,
-        `${indent}    } catch (error) {`,
-        `${indent}      // ignore reflection errors`,
-        `${indent}    }`,
-        `${indent}  }`,
-        `${indent}  if (candidate && typeof candidate === 'function') {`,
-        `${indent}    if (!candidate.styled) {`,
-        `${indent}      candidate.styled = candidate;`,
-        `${indent}    }`,
-        `${indent}    if (!candidate.default) {`,
-        `${indent}      candidate.default = candidate;`,
-        `${indent}    }`,
-        `${indent}  }`,
-        `${indent}  return candidate;`,
-        `${indent}})();`
-      ].join('\n');
-    });
-
-    if (replaced) {
-      writeFileSync(fullPath, contents, 'utf8');
-      adminChanged = true;
-    }
-  }
-}
-
-if (existsSync(adminDistDir)) {
-  walk(adminDistDir);
-}
-
-if (adminChanged) {
-  console.info('[styled-components] Normalized Strapi styled-components requires.');
 }
