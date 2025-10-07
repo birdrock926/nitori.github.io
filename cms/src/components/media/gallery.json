@@ -1,0 +1,16 @@
+{
+  "collectionName": "components_media_galleries",
+  "info": {
+    "displayName": "Gallery",
+    "description": "画像ギャラリー",
+    "icon": "images"
+  },
+  "attributes": {
+    "items": {
+      "type": "component",
+      "repeatable": true,
+      "component": "media.gallery-item",
+      "required": true
+    }
+  }
+}
