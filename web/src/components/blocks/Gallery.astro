@@ -1,0 +1,42 @@
+---
+import type { Media } from '@lib/strapi';
+const { items } = Astro.props as {
+  items: { image: Media; alt?: string; displayMode?: 'auto' | 'image' | 'gif' }[];
+};
+---
+<section class="card" style="gap: 1rem;">
+  <h3 style="margin: 0;">フォトギャラリー</h3>
+  <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
+    {items.map((item, index) => {
+      const mode = item.displayMode ?? 'auto';
+      const mime = item.image?.mime?.toLowerCase() ?? '';
+      const isGif =
+        mode === 'gif' || (mode === 'auto' && (mime === 'image/gif' || item.image.url?.toLowerCase().endsWith('.gif')));
+      const src = item.image?.formats?.medium?.url ?? item.image.url;
+      const srcset = isGif
+        ? undefined
+        : [
+            item.image.formats?.thumbnail?.url ? `${item.image.formats.thumbnail.url} 150w` : null,
+            item.image.formats?.small?.url ? `${item.image.formats.small.url} 320w` : null,
+            item.image.formats?.medium?.url ? `${item.image.formats.medium.url} 640w` : null,
+            item.image.url ? `${item.image.url} ${item.image.width ?? 1024}w` : null,
+          ]
+            .filter(Boolean)
+            .join(', ');
+      const alt = item.alt ?? item.image.alternativeText ?? '';
+      return (
+        <img
+          key={item.image?.url ?? `gallery-${index}`}
+          src={src}
+          srcset={srcset}
+          sizes="(max-width: 600px) 50vw, 25vw"
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          data-animated={isGif ? 'true' : 'false'}
+          style="width: 100%; height: auto; border-radius: 0.75rem; object-fit: cover;"
+        />
+      );
+    })}
+  </div>
+</section>
