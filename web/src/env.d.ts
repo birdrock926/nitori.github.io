@@ -1,12 +1,14 @@
 /// <reference types="astro/client" />
 
-declare global {
-  interface Window {
-    REMARK42?: {
-      createInstance: (options: Record<string, unknown>) => void;
-      destroy?: () => void;
-    };
-  }
+interface ImportMetaEnv {
+  readonly PUBLIC_COMMENTS_ENABLED?: string;
+  readonly PUBLIC_COMMENTS_REQUIRE_APPROVAL?: string;
+  readonly PUBLIC_COMMENTS_PAGE_SIZE?: string;
+  readonly PUBLIC_COMMENTS_MAX_LENGTH?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }
 
 export {};

@@ -35,20 +35,6 @@ services:
       - caddy_config:/config
     depends_on:
       - strapi
-      - remark42
-    restart: unless-stopped
-
-  remark42:
-    image: umputun/remark42:latest
-    env_file:
-      - ./remark42.env
-    environment:
-      - AUTH_ANON=true
-      - DEBUG=false
-    volumes:
-      - remark42_data:/srv/var
-    ports:
-      - "8080:8080"
     restart: unless-stopped
 
 volumes:
@@ -56,4 +42,3 @@ volumes:
   strapi_uploads:
   caddy_data:
   caddy_config:
-  remark42_data:

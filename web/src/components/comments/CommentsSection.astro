@@ -1,0 +1,24 @@
+---
+import CommentsApp from './CommentsApp.tsx';
+import type { CommentsConfig } from './CommentsApp.tsx';
+import { COMMENTS } from '@config/site';
+
+interface Props {
+  documentId?: string;
+  slug: string;
+  config?: CommentsConfig;
+}
+
+const { documentId, slug, config } = Astro.props as Props;
+const headingId = `comments-${slug.replace(/[^a-z0-9-]/gi, '-') || 'thread'}`;
+const resolvedConfig = config ?? COMMENTS;
+---
+<section class="comments-section" aria-labelledby={headingId}>
+  <CommentsApp
+    client:load
+    headingId={headingId}
+    documentId={documentId}
+    slug={slug}
+    config={resolvedConfig}
+  />
+</section>

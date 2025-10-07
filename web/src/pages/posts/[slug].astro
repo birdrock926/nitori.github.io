@@ -11,7 +11,7 @@ import YouTubePlayer from '@components/blocks/YouTubePlayer.tsx';
 import TwitchPlayer from '@components/blocks/TwitchPlayer.tsx';
 import InlineAd from '@components/ads/InlineAd.astro';
 import InlineAdBlock from '@components/blocks/InlineAdBlock.astro';
-import Remark42Widget from '@components/comments/Remark42Widget.astro';
+import CommentsSection from '@components/comments/CommentsSection.astro';
 import PostCard from '@components/PostCard.astro';
 import ShareMenu from '@components/ShareMenu.tsx';
 import { getPostBySlug, getPostsByTag, getPostSlugs } from '@lib/strapi';
@@ -232,5 +232,5 @@ const jsonLd = {
     </div>
   </section>
   <InlineAd slot={ADSENSE.slots.feed} placement="feed" />
-  <Remark42Widget slug={post.slug} title={post.title} url={Astro.url.href} />
+  <CommentsSection documentId={post.documentId} slug={post.slug} />
 </BaseLayout>

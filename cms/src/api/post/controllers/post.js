@@ -1,5 +1,55 @@
 import { factories } from '@strapi/strapi';
 
+const readDocumentId = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return undefined;
+  }
+
+  if (typeof entity.documentId === 'string' && entity.documentId.trim().length > 0) {
+    return entity.documentId;
+  }
+
+  if (typeof entity.document_id === 'string' && entity.document_id.trim().length > 0) {
+    return entity.document_id;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+  if (attributes && typeof attributes.documentId === 'string' && attributes.documentId.trim().length > 0) {
+    return attributes.documentId;
+  }
+
+  return undefined;
+};
+
+const attachDocumentId = (sanitized, raw) => {
+  if (!sanitized) {
+    return sanitized;
+  }
+
+  if (Array.isArray(sanitized) && Array.isArray(raw)) {
+    return sanitized.map((item, index) => attachDocumentId(item, raw[index]));
+  }
+
+  if (Array.isArray(sanitized)) {
+    return sanitized;
+  }
+
+  const documentId = readDocumentId(raw);
+
+  if (!documentId || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+
+  if ('documentId' in sanitized && sanitized.documentId) {
+    return sanitized;
+  }
+
+  return {
+    ...sanitized,
+    documentId,
+  };
+};
+
 const ensurePublishedFilter = (filters = {}) => {
   const base = filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {};
   const publishedCondition = {
@@ -120,7 +170,8 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
-    return this.transformResponse(sanitizedResults, { pagination });
+    const enrichedResults = attachDocumentId(sanitizedResults, results);
+    return this.transformResponse(enrichedResults, { pagination });
   },
 
   async findOne(ctx) {
@@ -134,7 +185,8 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = attachDocumentId(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async findBySlug(ctx) {
@@ -165,7 +217,8 @@ export default factories.createCoreController('api::post.post', () => ({
     }
 
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = attachDocumentId(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async slugs(ctx) {
