@@ -1,0 +1,18 @@
+{
+  "collectionName": "components_layout_columns",
+  "info": {
+    "displayName": "Column",
+    "description": "カラムコンテンツ",
+    "icon": "column"
+  },
+  "attributes": {
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "component",
+      "component": "content.rich-text",
+      "required": true
+    }
+  }
+}

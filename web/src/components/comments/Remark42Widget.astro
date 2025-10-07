@@ -1,0 +1,170 @@
+---
+import { REMARK42 } from '@config/site';
+
+interface Props {
+  slug: string;
+  title: string;
+  url: string;
+}
+
+const { slug, title, url } = Astro.props as Props;
+
+const remarkHost = REMARK42.host?.trim();
+const remarkSite = REMARK42.siteId?.trim();
+const locale = REMARK42.locale ?? 'ja';
+const containerId = `remark42-${slug.replace(/[^a-zA-Z0-9-_]/g, '-') || 'thread'}`;
+const fallbackId = `${containerId}-fallback`;
+const scriptId = `${containerId}-script`;
+
+const normaliseHost = (value: string | undefined | null) => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).origin.replace(/\/$/, '');
+    } catch (error) {
+      console.warn('[remark42] Invalid host URL', error);
+      return null;
+    }
+  }
+
+  try {
+    return new URL(`https://${trimmed}`).origin.replace(/\/$/, '');
+  } catch (error) {
+    console.warn('[remark42] Failed to normalise host', error);
+    return null;
+  }
+};
+
+const resolvedHost = normaliseHost(remarkHost);
+const pageProtocol = (() => {
+  try {
+    return new URL(url).protocol;
+  } catch (error) {
+    return 'https:';
+  }
+})();
+
+const fallbackReason = (() => {
+  if (!remarkHost || !remarkSite) return 'missing-config';
+  if (!resolvedHost) return 'invalid-host';
+  if (pageProtocol === 'https:' && resolvedHost.startsWith('http:')) return 'mixed-content';
+  return null;
+})();
+
+const fallbackMessages: Record<string, string> = {
+  'missing-config': 'コメント設定が完了していません。環境変数を確認してください。',
+  'invalid-host': 'コメントサーバーの URL が不正です。',
+  'mixed-content': 'HTTPS ページでは HTTPS のコメントホストが必要です。',
+  'load-failed': 'コメントスクリプトを読み込めませんでした。ネットワーク設定をご確認ください。',
+  'render-timeout': 'コメントの初期化に時間がかかっています。ページを再読み込みしてください。',
+};
+---
+<section class="card remark42-section" aria-label="コメント">
+  <h2>コメント</h2>
+  <div class="remark42-wrapper">
+    {fallbackReason ? (
+      <p id={fallbackId} class="remark42-fallback" data-reason={fallbackReason}>
+        {fallbackMessages[fallbackReason] ?? fallbackMessages['invalid-host']}
+      </p>
+    ) : (
+      <>
+        <div
+          id={containerId}
+          class="remark42"
+          data-url={url}
+          data-title={title}
+          data-page-title={title}
+          data-components="embed"
+          aria-live="polite"
+        ></div>
+        <p id={fallbackId} class="remark42-fallback" hidden></p>
+        <script is:inline>
+          window.remark_config = {{
+            host: {JSON.stringify(resolvedHost)},
+            site_id: {JSON.stringify(remarkSite)},
+            components: ['embed'],
+            locale: {JSON.stringify(locale)},
+            url: {JSON.stringify(url)},
+            title: {JSON.stringify(title)},
+            page_title: {JSON.stringify(title)},
+            theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+          }};
+        </script>
+        <script
+          id={scriptId}
+          async
+          defer
+          src={`${resolvedHost}/web/embed.js`}
+          data-host={resolvedHost}
+          data-site-id={remarkSite}
+          data-no-inline="true"
+        ></script>
+        <script is:inline>
+          (function () {
+            const fallback = document.getElementById({JSON.stringify(fallbackId)});
+            const script = document.getElementById({JSON.stringify(scriptId)});
+            const container = document.getElementById({JSON.stringify(containerId)});
+
+            const messages = {JSON.stringify(fallbackMessages)};
+
+            const showFallback = (reason) => {
+              if (!fallback) return;
+              fallback.hidden = false;
+              fallback.dataset.reason = reason;
+              fallback.textContent = messages[reason] || messages['invalid-host'];
+            };
+
+            if (script) {
+              script.addEventListener('error', () => showFallback('load-failed'));
+            }
+
+            const confirmRendered = () => {
+              if (!container) return;
+              if (container.children.length > 0) {
+                if (fallback) fallback.hidden = true;
+                return;
+              }
+              showFallback('render-timeout');
+            };
+
+            window.addEventListener('load', () => {
+              window.setTimeout(confirmRendered, 2000);
+            });
+
+            document.addEventListener('themechange', (event) => {
+              const nextTheme = (event.detail && event.detail.theme) === 'dark' ? 'dark' : 'light';
+              if (window.remark_config) {
+                window.remark_config.theme = nextTheme;
+              }
+              window.REMARK42?.changeTheme?.(nextTheme);
+            });
+          })();
+        </script>
+      </>
+    )}
+  </div>
+</section>
+---
+<style>
+  .remark42-section {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .remark42-wrapper {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .remark42 {
+    min-height: 260px;
+  }
+
+  .remark42-fallback {
+    font-size: 0.95rem;
+  }
+</style>
