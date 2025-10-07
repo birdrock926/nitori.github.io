@@ -1,0 +1,101 @@
+---
+import { REMARK42 } from '@config/site';
+
+interface Props {
+  slug: string;
+  title: string;
+  url: string;
+}
+
+const { slug, title, url } = Astro.props as Props;
+
+const host = REMARK42.host?.replace(/\/$/, '') ?? '';
+const siteId = REMARK42.siteId?.trim() ?? '';
+const locale = REMARK42.locale ?? 'ja';
+const threadId = slug.replace(/[^a-zA-Z0-9-_]/g, '-') || 'thread';
+const containerId = `remark42-thread-${threadId}`;
+const config = host && siteId
+  ? {
+      host,
+      site_id: siteId,
+      components: ['embed'],
+      url,
+      title,
+      page_title: title,
+      locale,
+    }
+  : null;
+
+const configString = config ? JSON.stringify(config) : 'null';
+const configLiteral = configString
+  .replace(/'/g, "\\'")
+  .replace(/<\//g, '<\\/');
+const safeHost = JSON.stringify(host);
+---
+<section class="card remark42-thread" aria-label="コメント">
+  <h2>コメント</h2>
+  {config ? (
+    <>
+      <div
+        id={containerId}
+        class="remark42"
+        data-url={url}
+        data-title={title}
+        data-page-title={title}
+        data-components="embed"
+        data-locale={locale}
+        data-host={host}
+        data-site-id={siteId}
+        role="region"
+        aria-live="polite"
+      ></div>
+      <script is:inline>
+        (function () {
+          const parsed = JSON.parse('{configLiteral}');
+          if (!parsed) {
+            console.warn('[remark42] Config is not available.');
+            return;
+          }
+          const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+          parsed.theme = theme;
+          window.remark_config = parsed;
+          const scriptId = 'remark42-embed-script';
+          if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.async = true;
+            script.defer = true;
+            script.dataset.noInstant = 'true';
+            script.src = {safeHost} + '/web/embed.js';
+            script.addEventListener('error', () => {
+              console.error('[remark42] Failed to load embed script');
+            });
+            document.body.appendChild(script);
+          }
+          document.addEventListener('themechange', (event) => {
+            const nextTheme = (event.detail && event.detail.theme) === 'dark' ? 'dark' : 'light';
+            try {
+              window.REMARK42?.changeTheme?.(nextTheme);
+            } catch (error) {
+              console.debug('[remark42] Failed to change theme', error);
+            }
+          });
+        })();
+      </script>
+    </>
+  ) : (
+    <p class="muted">コメント機能は現在利用できません。管理者にお問い合わせください。</p>
+  )}
+</section>
+---
+<style>
+  .remark42-thread {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .remark42 {
+    min-height: 220px;
+  }
+</style>
