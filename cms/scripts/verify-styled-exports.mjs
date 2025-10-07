@@ -22,7 +22,13 @@ for (const { id, loader } of checks) {
   if (mod.default !== mod) {
     throw new Error(`Expected ${id} to default-export its styled() factory for CJS consumers.`);
   }
+  if (!Object.prototype.hasOwnProperty.call(mod, 'default')) {
+    throw new Error(`Expected ${id} to expose a default export on the callable factory.`);
+  }
   if (typeof mod.styled !== 'function') {
     throw new Error(`Expected ${id} to expose a styled.styled helper but received ${typeof mod.styled}.`);
+  }
+  if (mod.__esModule !== true) {
+    throw new Error(`Expected ${id} to maintain an __esModule=true flag for bundler interop.`);
   }
 }
