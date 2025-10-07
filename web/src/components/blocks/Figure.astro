@@ -1,0 +1,46 @@
+---
+import type { Media } from '@lib/strapi';
+const { image, alt, caption, credit, displayMode } = Astro.props as {
+  image: Media;
+  alt?: string;
+  caption?: string;
+  credit?: string;
+  displayMode?: 'auto' | 'image' | 'gif';
+};
+const computedAlt = alt ?? image.alternativeText ?? '';
+const desiredMode = displayMode ?? 'auto';
+const mime = image?.mime?.toLowerCase() ?? '';
+const isGif =
+  desiredMode === 'gif' ||
+  (desiredMode === 'auto' && (mime === 'image/gif' || image.url?.toLowerCase().endsWith('.gif')));
+const src = image?.formats?.large?.url ?? image?.formats?.medium?.url ?? image.url;
+const srcset = isGif
+  ? undefined
+  : [
+      image.formats?.thumbnail?.url ? `${image.formats.thumbnail.url} 150w` : null,
+      image.formats?.small?.url ? `${image.formats.small.url} 320w` : null,
+      image.formats?.medium?.url ? `${image.formats.medium.url} 640w` : null,
+      image.formats?.large?.url ? `${image.formats.large.url} 960w` : null,
+      image.url ? `${image.url} ${image.width ?? 1200}w` : null,
+    ]
+        .filter(Boolean)
+        .join(', ');
+---
+<figure style="margin: 2rem 0; text-align: center;">
+  <img
+    src={src}
+    srcset={srcset}
+    sizes="(max-width: 768px) 100vw, 960px"
+    alt={computedAlt}
+    loading="lazy"
+    decoding="async"
+    data-animated={isGif ? 'true' : 'false'}
+    style="max-width: 100%; border-radius: 1rem;"
+  />
+  {(caption || credit) && (
+    <figcaption class="muted" style="font-size: 0.85rem; margin-top: 0.5rem;">
+      {caption}
+      {credit && <span>（{credit}）</span>}
+    </figcaption>
+  )}
+</figure>
