@@ -112,7 +112,7 @@ function walk(directory) {
         `${indent}    }`,
         `${indent}  }`,
         `${indent}  return candidate;`,
-        `${indent})();`
+        `${indent}})();`
       ].join('\n');
     });
 
