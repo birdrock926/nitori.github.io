@@ -1,0 +1,284 @@
+diff --git a/node_modules/@strapi/typescript-utils/lib/compilers/basic.js b/node_modules/@strapi/typescript-utils/lib/compilers/basic.js
+index b4a084c..cd05d75 100644
+--- a/node_modules/@strapi/typescript-utils/lib/compilers/basic.js
++++ b/node_modules/@strapi/typescript-utils/lib/compilers/basic.js
+@@ -1,12 +1,36 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const path = require('path');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      console.warn('[strapi-patch] TypeScript runtime unavailable, skipping type checks.', innerError?.message || innerError);
++      return null;
++    }
++  }
++};
++
++const ts = loadTypeScript();
++
+ const { merge } = require('lodash');
+ 
+ const reportDiagnostics = require('../utils/report-diagnostics');
+ const resolveConfigOptions = require('../utils/resolve-config-options');
+ 
+-module.exports = {
++const fallbackCompiler = {
++  run() {
++    console.warn('[strapi-patch] TypeScript compilation skipped because the TypeScript package is unavailable.');
++    return { emitSkipped: true, diagnostics: [], files: [] };
++  },
++};
++
++const compiler = {
+   /**
+    * Default TS -> JS Compilation for Strapi
+    * @param {string} tsConfigPath
+@@ -16,6 +40,10 @@ module.exports = {
+    * @param {boolean} configOptions.ignoreDiagnostics
+    */
+   run(tsConfigPath, configOptions = {}) {
++    if (!ts) {
++      return fallbackCompiler.run();
++    }
++
+     const { ignoreDiagnostics = false } = configOptions;
+     // Parse the tsconfig.json file & resolve the configuration options
+     const { fileNames, options, projectReferences } = resolveConfigOptions(tsConfigPath);
+@@ -26,10 +54,14 @@ module.exports = {
+       Object.assign(compilerOptions, { noEmit: false, noEmitOnError: false });
+     }
+ 
++    const rootNames = configOptions.fileNames
++      ? configOptions.fileNames.concat(fileNames)
++      : fileNames;
++
+     const program = ts.createProgram({
+-      rootNames: configOptions.fileNames ? configOptions.fileNames : fileNames,
+-      projectReferences,
++      rootNames,
+       options: compilerOptions,
++      projectReferences,
+     });
+ 
+     const emitResults = program.emit();
+@@ -48,3 +80,5 @@ module.exports = {
+     }
+   },
+ };
++
++module.exports = ts ? compiler : fallbackCompiler;
+diff --git a/node_modules/@strapi/typescript-utils/lib/generators/utils.js b/node_modules/@strapi/typescript-utils/lib/generators/utils.js
+index b95e29d..a19fa2d 100644
+--- a/node_modules/@strapi/typescript-utils/lib/generators/utils.js
++++ b/node_modules/@strapi/typescript-utils/lib/generators/utils.js
+@@ -2,7 +2,21 @@
+ 
+ const path = require('path');
+ const assert = require('assert');
+-const ts = require('typescript');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      throw new Error('TypeScript runtime is required for Strapi type generation. Please install the "typescript" package.');
++    }
++  }
++};
++
++const ts = loadTypeScript();
+ const fse = require('fs-extra');
+ const chalk = require('chalk');
+ 
+diff --git a/node_modules/@strapi/typescript-utils/lib/utils/format-host.js b/node_modules/@strapi/typescript-utils/lib/utils/format-host.js
+index 7b33c20..b6f2a66 100644
+--- a/node_modules/@strapi/typescript-utils/lib/utils/format-host.js
++++ b/node_modules/@strapi/typescript-utils/lib/utils/format-host.js
+@@ -1,15 +1,37 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const path = require('path');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      console.warn('[strapi-patch] TypeScript host utilities unavailable.');
++      return null;
++    }
++  }
++};
++
++const ts = loadTypeScript();
+ const { identity } = require('lodash/fp');
+ 
+ /**
+  * @type {ts.FormatDiagnosticsHost}
+  */
+-const formatHost = {
+-  getCanonicalFileName: identity,
+-  getCurrentDirectory: ts.sys.getCurrentDirectory,
+-  getNewLine: () => ts.sys.newLine,
+-};
++const formatHost = ts
++  ? {
++      getCanonicalFileName: identity,
++      getCurrentDirectory: ts.sys.getCurrentDirectory,
++      getNewLine: () => ts.sys.newLine,
++    }
++  : {
++      getCanonicalFileName: identity,
++      getCurrentDirectory: () => process.cwd(),
++      getNewLine: () => '\n',
++    };
+ 
+ module.exports = formatHost;
+diff --git a/node_modules/@strapi/typescript-utils/lib/utils/get-config-path.js b/node_modules/@strapi/typescript-utils/lib/utils/get-config-path.js
+index 7606fa0..0384825 100644
+--- a/node_modules/@strapi/typescript-utils/lib/utils/get-config-path.js
++++ b/node_modules/@strapi/typescript-utils/lib/utils/get-config-path.js
+@@ -1,7 +1,22 @@
+ 'use strict';
+ 
+ const path = require('path');
+-const ts = require('typescript');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      console.warn('[strapi-patch] TypeScript configuration discovery skipped.');
++      return null;
++    }
++  }
++};
++
++const ts = loadTypeScript();
+ 
+ const DEFAULT_TS_CONFIG_FILENAME = 'tsconfig.json';
+ 
+@@ -16,6 +31,10 @@ const DEFAULT_TS_CONFIG_FILENAME = 'tsconfig.json';
+  * @return {string | undefined}
+  */
+ module.exports = (dir, { filename = DEFAULT_TS_CONFIG_FILENAME, ancestorsLookup = false } = {}) => {
++  if (!ts) {
++    return undefined;
++  }
++
+   const dirAbsolutePath = path.resolve(dir);
+   let configFilePath = ts.findConfigFile(dirAbsolutePath, ts.sys.fileExists, filename);
+ 
+diff --git a/node_modules/@strapi/typescript-utils/lib/utils/report-diagnostics.js b/node_modules/@strapi/typescript-utils/lib/utils/report-diagnostics.js
+index c748b45..4f96281 100644
+--- a/node_modules/@strapi/typescript-utils/lib/utils/report-diagnostics.js
++++ b/node_modules/@strapi/typescript-utils/lib/utils/report-diagnostics.js
+@@ -1,6 +1,22 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const path = require('path');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      console.warn('[strapi-patch] Unable to format TypeScript diagnostics because the TypeScript package is unavailable.');
++      return null;
++    }
++  }
++};
++
++const ts = loadTypeScript();
+ 
+ const formatHost = require('./format-host');
+ 
+@@ -9,6 +25,13 @@ const formatHost = require('./format-host');
+  * @param {ts.Diagnostic[] | ts.Diagnostic} diagnostics
+  */
+ module.exports = (diagnostics) => {
++  if (!ts) {
++    if (Array.isArray(diagnostics) && diagnostics.length) {
++      console.error('[strapi-patch] Diagnostics reported without TypeScript formatter:', diagnostics);
++    }
++    return;
++  }
++
+   const formattedDiagnostics = ts.formatDiagnosticsWithColorAndContext(
+     Array.isArray(diagnostics) ? diagnostics : [diagnostics],
+     formatHost
+diff --git a/node_modules/@strapi/typescript-utils/lib/utils/resolve-config-options.js b/node_modules/@strapi/typescript-utils/lib/utils/resolve-config-options.js
+index c072cc7..b6e189d 100644
+--- a/node_modules/@strapi/typescript-utils/lib/utils/resolve-config-options.js
++++ b/node_modules/@strapi/typescript-utils/lib/utils/resolve-config-options.js
+@@ -1,10 +1,35 @@
+ 'use strict';
+ 
+-const ts = require('typescript');
++const path = require('path');
++
++const loadTypeScript = () => {
++  try {
++    return require('typescript');
++  } catch (error) {
++    try {
++      const fallback = require.resolve('typescript', { paths: [path.resolve(__dirname, '../../../..')] });
++      return require(fallback);
++    } catch (innerError) {
++      console.warn('[strapi-patch] TypeScript config resolver unavailable.');
++      return null;
++    }
++  }
++};
++
++const ts = loadTypeScript();
+ 
+ const logDiagnostics = require('./report-diagnostics');
+ 
+ module.exports = (configPath) => {
++  if (!ts) {
++    return {
++      fileNames: [],
++      options: {},
++      projectReferences: [],
++      errors: [],
++    };
++  }
++
+   // Parse the tsconfig.json file and resolve every file name & compiler options
+   const { errors, ...configOptions } = ts.getParsedCommandLineOfConfigFile(
+     configPath,
+@@ -12,8 +37,7 @@ module.exports = (configPath) => {
+     ts.sys
+   );
+ 
+-  // If there are errors in the tsconfig.json
+-  // file, report them and exit early
++  // If there are errors in the tsconfig.json file, report them and exit early
+   if (errors.length > 0) {
+     logDiagnostics(errors);
+     process.exit(1);

@@ -1,0 +1,48 @@
+---
+import InlineAd from '../ads/InlineAd.astro';
+
+const { slot, placement, label, note, instanceId } = Astro.props as {
+  slot: string;
+  placement?: string;
+  label?: string;
+  note?: string;
+  instanceId?: string;
+};
+---
+<section class="inline-ad-block" aria-label={label ?? '広告'}>
+  {label && <p class="inline-ad-block__label">{label}</p>}
+  <InlineAd slot={slot} placement={placement} instanceId={instanceId} />
+  {note && <p class="inline-ad-block__note">{note}</p>}
+</section>
+
+<style>
+.inline-ad-block {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: var(--surface-frosted);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-soft);
+}
+
+.inline-ad-block__label {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.inline-ad-block__note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+@media (max-width: 720px) {
+  .inline-ad-block {
+    padding: 1rem;
+  }
+}
+</style>
