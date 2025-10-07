@@ -31,6 +31,9 @@ for (const { id, loader } of cases) {
   if (mod.__esModule !== true) {
     throw new Error(`Expected ${id} to maintain an __esModule=true flag for bundler interop.`);
   }
+  if (typeof mod.ThemeProvider !== 'function') {
+    throw new Error(`Expected ${id} to retain component exports like ThemeProvider after harmonization.`);
+  }
 }
 
 const esm = await import('styled-components');
