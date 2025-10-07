@@ -1,0 +1,12 @@
+node_modules
+.DS_Store
+.env
+.env.*
+!.env.sample
+web/node_modules
+cms/node_modules
+web/dist
+cms/.strapi
+infrastructure/*.log
+public/dist
+**/package-lock.json

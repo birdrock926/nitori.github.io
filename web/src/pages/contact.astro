@@ -1,0 +1,13 @@
+---
+import BaseLayout from '@layouts/BaseLayout.astro';
+---
+<BaseLayout title="お問い合わせ" description="お問い合わせフォーム" canonical={Astro.url.href}>
+  <article class="card" style="gap: 1.5rem;">
+    <h1 style="margin: 0;">お問い合わせ</h1>
+    <p>以下のメールアドレスまでご連絡ください。</p>
+    <p>
+      <a href="mailto:contact@example.com" class="tag-chip">contact@example.com</a>
+    </p>
+    <p class="muted">返信まで数日いただく場合があります。予めご了承ください。</p>
+  </article>
+</BaseLayout>
