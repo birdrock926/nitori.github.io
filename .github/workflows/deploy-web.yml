@@ -1,0 +1,47 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'web/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: web
+        run: npm install
+      - name: Build
+        working-directory: web
+        env:
+          STRAPI_API_URL: ${{ secrets.STRAPI_API_URL }}
+          STRAPI_API_TOKEN: ${{ secrets.STRAPI_API_TOKEN }}
+          STRAPI_MEDIA_URL: ${{ secrets.STRAPI_MEDIA_URL }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          ADSENSE_CLIENT_ID: ${{ secrets.ADSENSE_CLIENT_ID }}
+          ADSENSE_SLOT_IN_ARTICLE: ${{ secrets.ADSENSE_SLOT_IN_ARTICLE }}
+          ADSENSE_SLOT_FEED: ${{ secrets.ADSENSE_SLOT_FEED }}
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+          DELETE_REQUEST_FORM_URL: ${{ secrets.DELETE_REQUEST_FORM_URL }}
+          PUBLIC_TWITCH_PARENT_HOSTS: ${{ secrets.PUBLIC_TWITCH_PARENT_HOSTS }}
+          CONSENT_DEFAULT_REGION: ${{ secrets.CONSENT_DEFAULT_REGION }}
+        run: npm run build
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          directory: web/dist
+          wranglerVersion: '3'
+          branch: ${{ secrets.CLOUDFLARE_PAGES_BRANCH || github.ref_name }}
