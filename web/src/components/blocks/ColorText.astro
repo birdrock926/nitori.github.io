@@ -1,0 +1,16 @@
+---
+const { text, color, background = 'transparent', isInline = false } = Astro.props as {
+  text: string;
+  color: string;
+  background?: string;
+  isInline?: boolean;
+};
+
+const style = {
+  '--color-text-foreground': color,
+  '--color-text-background': background,
+} satisfies Record<string, string>;
+---
+<div class={`color-text ${isInline ? 'color-text--inline' : ''}`} style={style}>
+  <span class="color-text__content">{text}</span>
+</div>
