@@ -1,0 +1,36 @@
+---
+import { HEADER_BIDDING } from '@config/site';
+
+const { placement, instanceId } = Astro.props as { placement: string; instanceId?: string };
+const unit = HEADER_BIDDING.adUnits.find((candidate) => candidate.code === placement);
+const networkCode = HEADER_BIDDING.gpt.networkCode;
+const adUnitPrefix = HEADER_BIDDING.gpt.adUnitPrefix;
+const enabled = HEADER_BIDDING.enabled && !!unit && !!networkCode;
+const slotId =
+  instanceId ??
+  `hb-${placement.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+const config = enabled
+  ? {
+      elementId: slotId,
+      unit,
+      timeoutMs: HEADER_BIDDING.timeoutMs,
+      networkCode,
+      adUnitPrefix,
+    }
+  : null;
+const modulePath = enabled ? Astro.resolve('../../scripts/header-bidding.ts') : '';
+const scriptContent =
+  enabled && config
+    ? `import { mountHeaderBiddingSlot } from '${modulePath}';\n` +
+      `const config = ${JSON.stringify(config)};\n` +
+      'mountHeaderBiddingSlot(config);'
+    : '';
+---
+{enabled && unit ? (
+  <aside class="ad-panel card" role="complementary" aria-label="広告">
+    <div id={slotId} class="ad-slot" data-placement={placement}></div>
+    <script is:inline type="module">{Astro.raw(scriptContent)}</script>
+  </aside>
+) : null}
