@@ -138,13 +138,90 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const escapeAttribute = (value: string) =>
+  escapeHtml(value).replace(/`/g, '&#96;');
+
+const renderMarkdownInline = (value: string) => {
+  const pattern =
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
+  let cursor = 0;
+  let output = '';
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(value)) !== null) {
+    const [full] = match;
+    const start = match.index;
+    if (start > cursor) {
+      output += escapeHtml(value.slice(cursor, start));
+    }
+
+    if (match[1] !== undefined) {
+      const alt = match[1] ?? '';
+      const url = match[2] ?? '';
+      const title = match[3] ?? '';
+      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+      if (!resolvedUrl) {
+        output += escapeHtml(full);
+      } else {
+        const altAttr = escapeAttribute(alt);
+        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
+      }
+    } else {
+      const label = match[4] ?? '';
+      const url = match[5] ?? '';
+      const title = match[6] ?? '';
+      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+      if (!resolvedUrl) {
+        output += escapeHtml(full);
+      } else {
+        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
+      }
+    }
+
+    cursor = start + full.length;
+  }
+
+  if (cursor < value.length) {
+    output += escapeHtml(value.slice(cursor));
+  }
+
+  return output;
+};
+
 const convertPlainTextToHtml = (value: string) => {
   const normalized = value.replace(/\r\n?/g, '\n').trim();
   if (!normalized) return '';
-  const paragraphs = normalized
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`);
-  return paragraphs.join('\n');
+
+  const paragraphs = normalized.split(/\n{2,}/);
+  const rendered = paragraphs
+    .map((paragraph) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return '';
+
+      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
+      if (figureMatch) {
+        const alt = figureMatch[1] ?? '';
+        const url = figureMatch[2] ?? '';
+        const title = figureMatch[3] ?? '';
+        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+        if (!resolvedUrl) {
+          return `<p>${escapeHtml(trimmed)}</p>`;
+        }
+        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
+        const altAttr = escapeAttribute(alt);
+        const urlAttr = escapeAttribute(resolvedUrl);
+        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
+        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
+      }
+
+      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
+      return `<p>${lines.join('<br />')}</p>`;
+    })
+    .filter((paragraph) => paragraph.length > 0);
+
+  return rendered.join('\n');
 };
 
 const normalizeRichMarkup = (value: string) => {
@@ -296,26 +373,48 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
   }
 
   if (block.__component === 'media.gallery') {
-    const items = Array.isArray(block.items)
+    const rawItems = Array.isArray(block.items)
       ? block.items
-          .map((item: any) => {
-            const media = normalizeMedia(parseMedia(item.image));
-            if (!media) return undefined;
-            const displayMode =
-              typeof item.displayMode === 'string' && item.displayMode.length
-                ? item.displayMode
-                : 'auto';
-            return {
-              image: media,
-              alt: item.alt ?? media.alternativeText ?? '',
-              displayMode: displayMode === 'gif' || displayMode === 'image' ? displayMode : 'auto',
-            };
-          })
-          .filter(Boolean)
+      : Array.isArray(block.items?.data)
+      ? block.items.data
+      : Array.isArray(block.images)
+      ? block.images
+      : Array.isArray(block.images?.data)
+      ? block.images.data
+      : Array.isArray(block.gallery)
+      ? block.gallery
+      : Array.isArray(block.gallery?.data)
+      ? block.gallery.data
       : [];
+    const items = rawItems
+      .map((item: any) => {
+        const base = item?.attributes ?? item;
+        const mediaSource = base?.image ?? base?.media ?? base;
+        const media = normalizeMedia(parseMedia(mediaSource));
+        if (!media) return undefined;
+        const displayMode =
+          typeof base.displayMode === 'string' && base.displayMode.length
+            ? base.displayMode
+            : typeof base.mode === 'string' && base.mode.length
+            ? base.mode
+            : 'auto';
+        const altCandidate =
+          typeof base.alt === 'string'
+            ? base.alt
+            : typeof base.caption === 'string'
+            ? base.caption
+            : media.alternativeText ?? '';
+        const alt = typeof altCandidate === 'string' ? altCandidate.trim() : '';
+        return {
+          image: media,
+          alt,
+          displayMode: displayMode === 'gif' || displayMode === 'image' ? displayMode : 'auto',
+        } satisfies { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' };
+      })
+      .filter((entry): entry is { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' } => Boolean(entry));
     return {
       __component: 'media.gallery',
-      items: items as { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' }[],
+      items,
     };
   }
 

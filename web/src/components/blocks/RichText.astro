@@ -6,6 +6,25 @@ const { body } = Astro.props as { body: string };
 .richtext :global(p) {
   margin: 0 0 1rem;
 }
+.richtext :global(figure.richtext-figure) {
+  margin: 0 0 1.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.richtext :global(figure.richtext-figure img) {
+  width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  display: block;
+}
+.richtext :global(img) {
+  max-width: 100%;
+  height: auto;
+}
+.richtext :global(figure.richtext-figure figcaption) {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
 .richtext :global(h2) {
   font-size: 1.75rem;
   margin: 2rem 0 1rem;
