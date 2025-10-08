@@ -42,10 +42,11 @@
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
 
 ### 匿名コメント（Strapi Comments）
-- **任意の表示名 + メール（オプション）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。
+- **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
 - **Strapi 管理画面**内のプラグインタブからコメントの承認／削除／エディット／通報確認／エクスポートを一元管理。
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
 - **REST API**：`/api/comments/api::post.post:<documentId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供。
+- **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
 
 ### SEO / 収益
 - `NewsArticle`/`Article` **JSON-LD**、OGP 自動生成、サイトマップ/RSS
@@ -204,7 +205,7 @@
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
 4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<documentId>` です。Astro 側は `documentId` をスレッドキーとして利用し、React 製のコメント UI が投稿・返信・ツリー表示を行います。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
-6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
+6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます（メール欄は任意入力で、未入力の場合は通知されません）。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
 
 ##### トラブルシューティング
 
@@ -344,6 +345,7 @@ npm run preview
 - Strapi 管理 UI の左メニュー **Plugins → Comments** でコメント一覧、レポート、設定にアクセスできます。`Overview`（全件）/`Pending`（承認待ち）/`Approved`/`Rejected`/`Reported` のタブを使い分けて状況を確認します。
 - 匿名投稿を受け付けるには `Settings → Users & Permissions Plugin → Roles → Public` で `plugin::comments.client-comments` の `find` / `findOne` / `create` / `report` にチェックが入っていることを確認します。権限を絞りたい場合は `report` のみ `Authenticated` ロールへ移すなどの運用が可能です。
 - `Settings → Configuration → General` では自動モデレーションの閾値（禁止語、最大スレッド深度、レートリミット）やメール通知先を設定できます。`.env` の `COMMENTS_CONTACT_EMAIL` に指定したアドレスへ通報メールが送られます。
+- コメントのステータスは一覧の右端メニュー（⋯）から **Change status** を選ぶか、詳細ドロワーの `Status` ドロップダウンで `Approved` / `Pending` / `Rejected` を切り替えられます。公開後に再度 `Pending` へ戻して差し戻すことも可能です。
 
 ### 推奨ワークフロー（例）
 
@@ -364,6 +366,7 @@ npm run preview
 ### 通報・監視とバックアップ
 
 - `Reported` タブでは読者の通報を一覧できます。対応後は **Report resolved** を押して履歴を残してください。Slack やメールに転送したい場合は Strapi Webhook を利用すると自動連携できます。
+- フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
 - SMTP を設定しておくと、新着コメントや通報をメールで即時受け取れます。SPF/DKIM を整備し、迷惑メール判定されないようにしてください。
 - コメントデータのバックアップは **Content Manager → plugin::comments.comment → Export** で CSV/JSON を取得できます。月次のエクスポートと DB スナップショットを併用すると、誤削除時のリカバリが容易になります。
 

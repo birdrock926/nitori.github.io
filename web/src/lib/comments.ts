@@ -129,6 +129,17 @@ const commentsPath = (documentId: string) => {
   return `/api/comments/${relation}`;
 };
 
+const commentActionPath = (documentId: string, commentId: number, action?: string) => {
+  const base = commentsPath(documentId);
+  if (!Number.isFinite(commentId)) {
+    throw new Error('commentId must be a finite number');
+  }
+
+  const suffix = action ? `${action}` : '';
+  const actionSegment = suffix.length > 0 ? `/${suffix}` : '';
+  return `${base}/comment/${commentId}${actionSegment}`;
+};
+
 const request = async (path: string, init?: RequestInit) => {
   if (!apiBase) {
     throw new Error('Strapi API URL is not configured');
@@ -339,4 +350,38 @@ export const submitComment = async (
 
   const normalized = normalizeComment(data);
   return normalized;
+};
+
+export type CommentReportPayload = {
+  reason?: string;
+  content?: string;
+};
+
+export const reportComment = async (
+  documentId: string,
+  commentId: number,
+  payload: CommentReportPayload,
+): Promise<void> => {
+  if (!documentId) {
+    throw new Error('documentId is required');
+  }
+
+  if (!Number.isFinite(commentId) || commentId <= 0) {
+    throw new Error('commentId must be a positive number');
+  }
+
+  const body: Record<string, unknown> = {};
+
+  if (payload.reason && payload.reason.trim().length > 0) {
+    body.reason = payload.reason.trim();
+  }
+
+  if (payload.content && payload.content.trim().length > 0) {
+    body.content = payload.content.trim();
+  }
+
+  await request(commentActionPath(documentId, commentId, 'report-abuse'), {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 };

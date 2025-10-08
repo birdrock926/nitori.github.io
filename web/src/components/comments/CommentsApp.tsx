@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { CommentNode } from '@lib/comments';
-import { fetchComments, submitComment } from '@lib/comments';
+import { fetchComments, reportComment, submitComment } from '@lib/comments';
 
 export type CommentsConfig = {
   enabled?: boolean;
@@ -9,6 +9,15 @@ export type CommentsConfig = {
   pageSize?: number;
   maxLength?: number;
 };
+
+const REPORT_REASONS = [
+  { value: 'spam', label: 'スパム・宣伝' },
+  { value: 'abuse', label: '中傷・ハラスメント' },
+  { value: 'illegal', label: '違法または危険な内容' },
+  { value: 'other', label: 'その他' },
+];
+
+const DEFAULT_REPORT_REASON = REPORT_REASONS[0]?.value ?? 'other';
 
 type Props = {
   headingId: string;
@@ -66,6 +75,14 @@ const resolveErrorMessage = (error: unknown, fallback: string) => {
     return 'コメントにアクセスできません。時間をおいて再度お試しください。';
   }
 
+  if (/forbiddenerror/i.test(message) || /e_forbidden/i.test(message)) {
+    return 'コメントへのアクセスが拒否されました。時間をおいて再度お試しください。';
+  }
+
+  if (/not allowed/i.test(message) || /permission/i.test(message)) {
+    return '権限がない操作です。ログイン状態や権限を確認してください。';
+  }
+
   if (/unauthori[sz]ed/i.test(message) || /\(401\)/.test(message)) {
     return 'コメント機能にアクセスできませんでした。ページを再読み込みしてから再度お試しください。';
   }
@@ -120,6 +137,10 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
   const [replyContent, setReplyContent] = useState('');
   const [replyTarget, setReplyTarget] = useState<CommentNode | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [reportTarget, setReportTarget] = useState<CommentNode | null>(null);
+  const [reportReason, setReportReason] = useState(DEFAULT_REPORT_REASON);
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [page, setPage] = useState(1);
 
   const applyComments = useCallback(
@@ -433,6 +454,21 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     }
   }, [comments, replyTarget]);
 
+  useEffect(() => {
+    if (!reportTarget) {
+      return;
+    }
+
+    const findComment = (nodes: CommentNode[]): boolean =>
+      nodes.some((node) => node.id === reportTarget.id || (node.children ? findComment(node.children) : false));
+
+    if (!findComment(comments)) {
+      setReportTarget(null);
+      setReportDetails('');
+      setReportReason(DEFAULT_REPORT_REASON);
+    }
+  }, [comments, reportTarget]);
+
   const handlePageChange = useCallback(
     (nextPage: number) => {
       const safeNext = Math.min(Math.max(1, nextPage), pageCount);
@@ -442,9 +478,76 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
       setPage(safeNext);
       setReplyTarget(null);
       setReplyContent('');
+      setReportTarget(null);
+      setReportDetails('');
+      setReportReason(DEFAULT_REPORT_REASON);
       setSuccessMessage(null);
     },
-    [page, pageCount, setReplyContent, setReplyTarget, setSuccessMessage],
+    [page, pageCount, setReplyContent, setReplyTarget, setReportDetails, setReportReason, setReportTarget, setSuccessMessage],
+  );
+
+  const handleReportClick = useCallback(
+    (comment: CommentNode) => {
+      if (!isEnabled || relationId.length === 0) {
+        return;
+      }
+
+      if (reportTarget?.id === comment.id) {
+        setReportTarget(null);
+        setReportDetails('');
+        setReportReason(DEFAULT_REPORT_REASON);
+        return;
+      }
+
+      setReportTarget(comment);
+      setReportDetails('');
+      setReportReason(DEFAULT_REPORT_REASON);
+      setSuccessMessage(null);
+      setError(null);
+    },
+    [isEnabled, relationId.length, reportTarget?.id],
+  );
+
+  const handleReportCancel = useCallback(() => {
+    setReportTarget(null);
+    setReportDetails('');
+    setReportReason(DEFAULT_REPORT_REASON);
+  }, []);
+
+  const handleReportSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>, commentId: number) => {
+      event.preventDefault();
+
+      if (!isEnabled || relationId.length === 0) {
+        setError('コメント機能が無効化されています。');
+        return;
+      }
+
+      if (!reportReason) {
+        setError('通報理由を選択してください。');
+        return;
+      }
+
+      setReportSubmitting(true);
+      setError(null);
+
+      try {
+        await reportComment(relationId, commentId, {
+          reason: reportReason,
+          content: sanitizeContent(reportDetails),
+        });
+
+        setSuccessMessage('通報を受け付けました。モデレーターが確認します。');
+        setReportTarget(null);
+        setReportDetails('');
+        setReportReason(DEFAULT_REPORT_REASON);
+      } catch (err) {
+        setError(resolveErrorMessage(err, '通報の送信に失敗しました。'));
+      } finally {
+        setReportSubmitting(false);
+      }
+    },
+    [isEnabled, relationId, reportDetails, reportReason],
   );
 
   const renderStatusPill = useCallback((comment: CommentNode) => {
@@ -470,6 +573,11 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         !comment.blockedThread &&
         !isHidden &&
         relationId.length > 0;
+      const canReport =
+        isEnabled &&
+        relationId.length > 0 &&
+        !reportSubmitting &&
+        isPubliclyVisible(comment);
 
       return (
         <div key={comment.id} className="comment-item">
@@ -501,6 +609,15 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
             {canReply ? (
               <button type="button" onClick={() => handleReplyClick(comment)}>
                 返信する
+              </button>
+            ) : null}
+            {canReport ? (
+              <button
+                type="button"
+                onClick={() => handleReportClick(comment)}
+                disabled={reportSubmitting}
+              >
+                {reportTarget?.id === comment.id ? '通報フォームを閉じる' : '通報する'}
               </button>
             ) : null}
           </div>
@@ -539,6 +656,53 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
               </div>
             </form>
           )}
+          {reportTarget?.id === comment.id && (
+            <form
+              className="comment-report-form"
+              onSubmit={(event) => handleReportSubmit(event, comment.id)}
+              aria-label={`「${comment.author?.name || 'ゲスト'}」を通報するフォーム`}
+            >
+              <div className="comments-field">
+                <label htmlFor={`${headingId}-report-reason-${comment.id}`}>通報理由</label>
+                <select
+                  id={`${headingId}-report-reason-${comment.id}`}
+                  value={reportReason}
+                  onChange={(event) => setReportReason(event.target.value)}
+                  disabled={reportSubmitting}
+                >
+                  {REPORT_REASONS.map((reason) => (
+                    <option key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="comments-field">
+                <label htmlFor={`${headingId}-report-details-${comment.id}`}>詳細（任意）</label>
+                <textarea
+                  id={`${headingId}-report-details-${comment.id}`}
+                  value={reportDetails}
+                  onChange={(event) => setReportDetails(event.target.value)}
+                  disabled={reportSubmitting}
+                  placeholder="不適切だと感じた理由や補足情報があればご記入ください。"
+                />
+                <span className="comments-hint">個人情報は記入しないでください。</span>
+              </div>
+              <div className="comments-form-actions">
+                <button type="submit" className="comments-submit" disabled={reportSubmitting}>
+                  {reportSubmitting ? '送信中…' : '通報を送信'}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--small"
+                  onClick={handleReportCancel}
+                  disabled={reportSubmitting}
+                >
+                  キャンセル
+                </button>
+              </div>
+            </form>
+          )}
           {comment.children && comment.children.length > 0 ? (
             <div className="comment-children">
               {comment.children.map((child) => (
@@ -549,7 +713,25 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         </div>
       );
     },
-    [handleReplyClick, handleReplySubmit, headingId, isEnabled, mergedConfig.maxLength, relationId.length, renderStatusPill, replyContent, replyTarget?.id, submitting]
+    [
+      handleReplyClick,
+      handleReplySubmit,
+      handleReportCancel,
+      handleReportClick,
+      handleReportSubmit,
+      headingId,
+      isEnabled,
+      mergedConfig.maxLength,
+      relationId.length,
+      renderStatusPill,
+      replyContent,
+      replyTarget?.id,
+      reportDetails,
+      reportReason,
+      reportSubmitting,
+      reportTarget?.id,
+      submitting,
+    ],
   );
 
   return (

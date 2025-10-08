@@ -196,6 +196,7 @@ npm run dev
 4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
+7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
 
 
 ### 6-4. ブロックエディタで装飾する
@@ -216,10 +217,12 @@ npm run dev
 
 ### 6-5. VirtusLab Comments 管理のコツ
 - 管理画面の **Comments → Overview / Pending / Approved / Rejected / Reported** を使い分けると、承認待ち・公開済み・却下済み・通報中のステータスを一目で確認できます。承認制の場合は `Pending` から **Approve** / **Reject** を実行すると、フロントの表示も数秒で更新されます。
+- コメントのステータスは行末メニューの **Change status** か詳細ドロワーの `Status` セレクトで切り替えます。公開済みコメントを `Pending` に戻して差し戻すこともできます。
 - 推奨オペレーション例：
   1. **毎朝** `Pending` を確認して保留コメントを裁き、必要なら `Block user` や `Block thread` でスパムを封じます。
   2. **通報が来たら** `Reported` タブで内容を確認し、対応後に **Report resolved** を押下。`COMMENTS_CONTACT_EMAIL` に通知先を設定し、SMTP を構成しておくとメールで即時把握できます。
   3. **週次**で `Overview` をエクスポート（CSV/JSON）し、NG ワードやリンクスパムの傾向を分析。`COMMENTS_BAD_WORDS` や自動モデレーション設定の改善に役立ててください。
+- フロントエンドの「通報する」ボタンから送られたレポートは `Reported` タブに即時追加されます。`reason`（通報理由）と `content`（詳細）が届くので、必要に応じて `Block user` / `Block thread` / `Delete` を実行して対応してください。
 - 各コメントのアクションメニューから「Block thread」「Block user」「Edit」などを実行できます。`COMMENTS_BLOCKED_AUTHOR_PROPS` に `email` や `ip` を含めておくと、指定フィールドをキーに投稿を拒否できます。
 - **Settings → Plugin configuration** で `Bad words filter` や `Validation rules` を調整し、承認フローと組み合わせてガイドラインを運用します。レートリミットを厳しめに設定するとボット連投を防ぎやすくなります。
 - コメントデータは Strapi の DB に保存されます。月次で Content Manager のエクスポート機能や `strapi export` を使ってバックアップし、必要に応じて OCI のスナップショットとも併用してください。
