@@ -368,7 +368,8 @@ npm run preview
 ### 通報・監視とバックアップ
 
 - `Reported` タブでは読者の通報を一覧できます。対応後は **Report resolved** を押して履歴を残してください。Slack やメールに転送したい場合は Strapi Webhook を利用すると自動連携できます。
-- フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
+- コメントは Strapi 管理画面の **Comments → All** で確認できます。記事の `documentId` が一致しない場合でも、投稿後に自動的に紐付けられるため、リロードすれば該当記事のスレッドが表示されます。
+- フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。`スパム` など独自の理由はバックエンドで `OTHER / BAD_LANGUAGE / DISCRIMINATION` のいずれかに正規化され、元の入力内容はメモとして追記されるため、管理画面で迷子になりません。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
 - SMTP を設定しておくと、新着コメントや通報をメールで即時受け取れます。SPF/DKIM を整備し、迷惑メール判定されないようにしてください。
 - コメントデータのバックアップは **Content Manager → plugin::comments.comment → Export** で CSV/JSON を取得できます。月次のエクスポートと DB スナップショットを併用すると、誤削除時のリカバリが容易になります。
 

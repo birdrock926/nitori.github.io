@@ -432,8 +432,10 @@ export const submitComment = async (
   return normalized;
 };
 
+export type CommentReportReason = 'BAD_LANGUAGE' | 'DISCRIMINATION' | 'OTHER';
+
 export type CommentReportPayload = {
-  reason?: string;
+  reason?: CommentReportReason | string;
   content?: string;
 };
 

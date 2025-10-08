@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { CommentNode } from '@lib/comments';
+import type { CommentNode, CommentReportReason } from '@lib/comments';
 import { fetchComments, reportComment, submitComment } from '@lib/comments';
 
 export type CommentsConfig = {
@@ -11,14 +11,29 @@ export type CommentsConfig = {
   defaultAuthorName?: string;
 };
 
-const REPORT_REASONS = [
-  { value: 'spam', label: 'スパム・宣伝' },
-  { value: 'abuse', label: '中傷・ハラスメント' },
-  { value: 'illegal', label: '違法または危険な内容' },
-  { value: 'other', label: 'その他' },
+type ReportReasonOption = {
+  value: string;
+  label: string;
+  code: CommentReportReason;
+};
+
+const REPORT_REASONS: ReportReasonOption[] = [
+  { value: 'spam', label: 'スパム・宣伝', code: 'OTHER' },
+  { value: 'abuse', label: '中傷・ハラスメント', code: 'BAD_LANGUAGE' },
+  { value: 'discrimination', label: '差別的な表現', code: 'DISCRIMINATION' },
+  { value: 'illegal', label: '違法または危険な内容', code: 'OTHER' },
+  { value: 'other', label: 'その他', code: 'OTHER' },
 ];
 
 const DEFAULT_REPORT_REASON = REPORT_REASONS[0]?.value ?? 'other';
+
+const resolveReportReasonCode = (value: string): CommentReportReason => {
+  const option = REPORT_REASONS.find((item) => item.value === value);
+  return option?.code ?? 'OTHER';
+};
+
+const resolveReportReasonLabel = (value: string): string | undefined =>
+  REPORT_REASONS.find((item) => item.value === value)?.label;
 
 type Props = {
   headingId: string;
@@ -605,9 +620,22 @@ const CommentsApp = ({ headingId, documentId, slug, config, defaultAuthorName }:
       setError(null);
 
       try {
+        const normalizedReason = resolveReportReasonCode(reportReason);
+        const baseDetails = sanitizeContent(reportDetails);
+        const reasonLabel = resolveReportReasonLabel(reportReason);
+        const detailSegments: string[] = [];
+
+        if (baseDetails.length > 0) {
+          detailSegments.push(baseDetails);
+        }
+
+        if (reasonLabel && !baseDetails.includes(reasonLabel)) {
+          detailSegments.push(`選択した理由: ${reasonLabel}`);
+        }
+
         await reportComment(relationId, commentId, {
-          reason: reportReason,
-          content: sanitizeContent(reportDetails),
+          reason: normalizedReason,
+          content: detailSegments.length > 0 ? detailSegments.join('\n\n') : undefined,
         });
 
         setSuccessMessage('通報を受け付けました。モデレーターが確認します。');
