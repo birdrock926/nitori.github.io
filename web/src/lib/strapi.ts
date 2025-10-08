@@ -98,6 +98,7 @@ export type DynamicZoneBlock =
 
 export type Post = {
   id: number;
+  documentId: string;
   title: string;
   slug: string;
   summary: string;
@@ -107,6 +108,7 @@ export type Post = {
   author?: string;
   source?: string;
   publishedAt: string;
+  commentDefaultAuthor: string;
 };
 
 export type RankingItem = {
@@ -459,6 +461,7 @@ export type PostListResponse = {
       publishedAt: string;
       author?: string;
       source?: string;
+      commentDefaultAuthor?: string;
       cover?: {
         data: { attributes: Media } | null;
       } | null;
@@ -489,12 +492,14 @@ const extractArray = <T>(value: unknown): T[] => {
 
 const fallbackPost = (): Post => ({
   id: 0,
+  documentId: '',
   title: '',
   slug: '',
   summary: '',
   publishedAt: '',
   tags: [],
   blocks: [],
+  commentDefaultAuthor: '名無しのユーザーさん',
 });
 
 const mapPost = (apiPost: PostListResponse['data'][number]) => {
@@ -514,10 +519,24 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
     const blockSource = attr.blocks ?? base.blocks;
     const rawBlocks = Array.isArray(blockSource) ? blockSource : [];
     const defaults = fallbackPost();
+    const commentDefaultSource =
+      attr.commentDefaultAuthor ??
+      attr.comment_default_author ??
+      base.commentDefaultAuthor ??
+      base.comment_default_author;
+    const commentDefaultAuthor =
+      typeof commentDefaultSource === 'string' && commentDefaultSource.trim().length > 0
+        ? commentDefaultSource.trim()
+        : defaults.commentDefaultAuthor;
 
     return {
       ...defaults,
       id: Number.isFinite(Number(base.id)) ? Number(base.id) : defaults.id,
+      documentId:
+        (typeof base.documentId === 'string' && base.documentId) ||
+        (typeof base.document_id === 'string' && base.document_id) ||
+        (typeof attr.documentId === 'string' && attr.documentId) ||
+        defaults.documentId,
       title: typeof attr.title === 'string' ? attr.title : '',
       slug: typeof attr.slug === 'string' ? attr.slug : '',
       summary: typeof attr.summary === 'string' ? attr.summary : '',
@@ -527,6 +546,7 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       cover,
       tags: tagsArray,
       blocks: rawBlocks.map(normalizeBlock),
+      commentDefaultAuthor,
     } satisfies Post;
   } catch (error) {
     console.warn('[strapi] Failed to map post payload', error);

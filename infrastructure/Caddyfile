@@ -2,8 +2,3 @@ cms.example.com {
   encode gzip
   reverse_proxy strapi:1337
 }
-
-comments.example.com {
-  encode gzip
-  reverse_proxy remark42:8080
-}
