@@ -3,6 +3,7 @@ import { triggerWorkflow } from './utils/github.js';
 const COMMENT_ACTIONS = [
   'plugin::comments.client.findAllInHierarchy',
   'plugin::comments.client.post',
+  'plugin::comments.client.reportAbuse',
 ];
 
 const COMMENT_ROLES = ['public', 'authenticated'];

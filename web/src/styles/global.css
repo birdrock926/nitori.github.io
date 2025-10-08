@@ -7,6 +7,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.65) 100%);
   --surface-glass: rgba(255, 255, 255, 0.78);
   --surface-strong: rgba(255, 255, 255, 0.92);
+  --surface-subtle: rgba(255, 255, 255, 0.65);
   --layer-glass: rgba(255, 255, 255, 0.82);
   --layer-raised: rgba(255, 255, 255, 0.96);
   --stroke-soft: rgba(99, 102, 241, 0.18);
@@ -32,6 +33,7 @@
     linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.78) 100%);
   --surface-glass: rgba(15, 23, 42, 0.68);
   --surface-strong: rgba(15, 23, 42, 0.82);
+  --surface-subtle: rgba(15, 23, 42, 0.7);
   --layer-glass: rgba(15, 23, 42, 0.72);
   --layer-raised: rgba(15, 23, 42, 0.88);
   --stroke-soft: rgba(148, 163, 184, 0.25);
@@ -1174,7 +1176,8 @@ main > * {
 }
 
 .comments-field input,
-.comments-field textarea {
+.comments-field textarea,
+.comments-field select {
   width: 100%;
   border-radius: var(--border-radius-md);
   border: 1px solid var(--stroke-soft);
@@ -1191,7 +1194,8 @@ main > * {
 }
 
 .comments-field input:focus,
-.comments-field textarea:focus {
+.comments-field textarea:focus,
+.comments-field select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
   outline: none;
@@ -1533,6 +1537,7 @@ main > * {
   background: var(--surface-subtle);
   display: grid;
   gap: 0.75rem;
+  color: var(--text-primary);
 }
 
 .comment-report-form select,
@@ -1542,12 +1547,23 @@ main > * {
   font-size: 0.95rem;
   border-radius: 0.5rem;
   border: 1px solid var(--stroke-soft);
-  background: #fff;
+  background: var(--layer-raised);
+  color: var(--text-primary);
+  transition: border-color var(--transition-default), box-shadow var(--transition-default),
+    background-color var(--transition-default);
+}
+
+.comment-report-form select {
+  resize: none;
 }
 
 .comment-report-form textarea {
   min-height: 5rem;
   resize: vertical;
+}
+
+.comment-report-form textarea::placeholder {
+  color: var(--text-muted);
 }
 
 .comments-guidelines {
