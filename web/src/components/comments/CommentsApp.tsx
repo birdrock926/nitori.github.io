@@ -27,6 +27,7 @@ type Props = {
 };
 
 const AUTHOR_STORAGE_KEY = 'knn-comments-author';
+const LONG_COMMENT_PREVIEW = 320;
 
 const isPubliclyVisible = (comment: CommentNode) => {
   if (comment.removed || comment.blocked) {
@@ -98,15 +99,14 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const renderBody = (content: string) => {
-  const normalized = sanitizeContent(content);
+const renderSanitizedBody = (normalized: string, options?: { collapsed?: boolean }) => {
   if (!normalized.length) {
     return <p className="comment-content">(本文がありません)</p>;
   }
 
   const paragraphs = normalized.split(/\n{2,}/);
   return (
-    <div className="comment-content">
+    <div className={`comment-content${options?.collapsed ? ' comment-content--collapsed' : ''}`}>
       {paragraphs.map((paragraph, index) => (
         <p key={index} dangerouslySetInnerHTML={{ __html: escapeHtml(paragraph).replace(/\n/g, '<br />') }} />
       ))}
@@ -125,6 +125,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
   const mergedConfig = { ...defaultConfig, ...(config ?? {}) } satisfies Required<CommentsConfig>;
   const relationId = documentId?.trim() ?? '';
   const isEnabled = mergedConfig.enabled !== false && relationId.length > 0;
+  const guidelinesId = useMemo(() => `${headingId}-guidelines`, [headingId]);
 
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
@@ -142,6 +143,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
   const [reportDetails, setReportDetails] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [page, setPage] = useState(1);
+  const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
 
   const applyComments = useCallback(
     (data: CommentNode[], options?: { goToLastPage?: boolean }) => {
@@ -469,6 +471,42 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     }
   }, [comments, reportTarget]);
 
+  useEffect(() => {
+    const activeIds = new Set<number>();
+
+    const collect = (nodes: CommentNode[]) => {
+      nodes.forEach((node) => {
+        activeIds.add(node.id);
+        if (node.children) {
+          collect(node.children);
+        }
+      });
+    };
+
+    collect(comments);
+
+    setExpandedComments((previous) => {
+      let changed = false;
+      const next: Record<number, boolean> = {};
+
+      Object.entries(previous).forEach(([key, value]) => {
+        const numericId = Number(key);
+        if (!Number.isFinite(numericId) || !activeIds.has(numericId)) {
+          changed = true;
+          return;
+        }
+
+        next[numericId] = value;
+      });
+
+      if (!changed && Object.keys(previous).length === Object.keys(next).length) {
+        return previous;
+      }
+
+      return next;
+    });
+  }, [comments]);
+
   const handlePageChange = useCallback(
     (nextPage: number) => {
       const safeNext = Math.min(Math.max(1, nextPage), pageCount);
@@ -485,6 +523,24 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     },
     [page, pageCount, setReplyContent, setReplyTarget, setReportDetails, setReportReason, setReportTarget, setSuccessMessage],
   );
+
+  const toggleCommentExpansion = useCallback((commentId: number, expand?: boolean) => {
+    setExpandedComments((previous) => {
+      const current = previous[commentId] ?? false;
+      const nextState = typeof expand === 'boolean' ? expand : !current;
+
+      if (nextState === current) {
+        return previous;
+      }
+
+      if (!nextState) {
+        const { [commentId]: _removed, ...rest } = previous;
+        return rest;
+      }
+
+      return { ...previous, [commentId]: true };
+    });
+  }, []);
 
   const handleReportClick = useCallback(
     (comment: CommentNode) => {
@@ -550,6 +606,33 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     [isEnabled, relationId, reportDetails, reportReason],
   );
 
+  const isModeratorComment = useCallback((comment: CommentNode) => {
+    const author = comment.author;
+    if (!author) {
+      return false;
+    }
+
+    if (author.moderator === true) {
+      return true;
+    }
+
+    const candidateValues = [
+      typeof author.badge === 'string' ? author.badge : undefined,
+      ...(author.badges ?? []),
+      author.role,
+      ...(author.roles ?? []),
+      author.type,
+    ]
+      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+      .filter((value) => value.length > 0);
+
+    if (candidateValues.some((value) => /moderator|モデレーター|admin|staff|管理者|editor/.test(value))) {
+      return true;
+    }
+
+    return false;
+  }, []);
+
   const renderStatusPill = useCallback((comment: CommentNode) => {
     if (comment.removed || comment.blocked) {
       return <span className="comment-status-pill comment-status-pill--blocked">非表示</span>;
@@ -579,10 +662,38 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         !reportSubmitting &&
         isPubliclyVisible(comment);
 
+      const isModerator = isModeratorComment(comment);
+      const sanitizedContent = sanitizeContent(comment.content || '');
+      const isLongComment = sanitizedContent.length > LONG_COMMENT_PREVIEW;
+      const isExpanded = expandedComments[comment.id] ?? false;
+      const isCollapsed = isLongComment && !isExpanded;
+      const showContent = !isHidden && !isPending;
+      const showReadMore = showContent && isLongComment;
+      const moderatorLabel = comment.author?.badge || comment.author?.badges?.[0] || 'モデレーター';
+
+      let displayContent = sanitizedContent;
+      if (isCollapsed) {
+        displayContent = sanitizedContent.slice(0, LONG_COMMENT_PREVIEW).replace(/\s+$/u, '');
+        if (!displayContent.endsWith('…')) {
+          displayContent = `${displayContent}…`;
+        }
+      }
+
       return (
-        <div key={comment.id} className="comment-item">
+        <div
+          key={comment.id}
+          className={`comment-item${isModerator ? ' comment-item--moderator' : ''}`}
+          data-comment-id={comment.id}
+        >
           <div className="comment-header">
-            <div className="comment-author">{comment.author?.name || 'ゲスト'}</div>
+            <div className="comment-author">
+              <span className={`comment-author__name${isModerator ? ' comment-author__name--moderator' : ''}`}>
+                {comment.author?.name || 'ゲスト'}
+              </span>
+              {isModerator ? (
+                <span className="comment-moderator-badge" aria-label="モデレーターの返信">{moderatorLabel}</span>
+              ) : null}
+            </div>
             <div className="comment-meta">
               {comment.createdAt && (
                 <time dateTime={comment.createdAt}>
@@ -603,7 +714,19 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
           ) : isPending ? (
             <p className="comment-content">このコメントは承認待ちです。</p>
           ) : (
-            renderBody(comment.content)
+            <>
+              {renderSanitizedBody(displayContent, { collapsed: isCollapsed })}
+              {showReadMore ? (
+                <button
+                  type="button"
+                  className="comment-expand"
+                  onClick={() => toggleCommentExpansion(comment.id)}
+                  aria-expanded={isExpanded}
+                >
+                  {isExpanded ? '折りたたむ' : '…続きを読む'}
+                </button>
+              ) : null}
+            </>
           )}
           <div className="comment-actions">
             {canReply ? (
@@ -714,12 +837,14 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
       );
     },
     [
+      expandedComments,
       handleReplyClick,
       handleReplySubmit,
       handleReportCancel,
       handleReportClick,
       handleReportSubmit,
       headingId,
+      isModeratorComment,
       isEnabled,
       mergedConfig.maxLength,
       relationId.length,
@@ -730,6 +855,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
       reportReason,
       reportSubmitting,
       reportTarget?.id,
+      toggleCommentExpansion,
       submitting,
     ],
   );
@@ -885,6 +1011,15 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
               <span className="comments-hint">ガイドラインに沿った丁寧なコメントを心掛けましょう。</span>
             </div>
           </form>
+          <section className="comments-guidelines" aria-labelledby={guidelinesId}>
+            <h3 id={guidelinesId}>コメントガイドライン</h3>
+            <ul>
+              <li>他の読者や執筆者を尊重し、攻撃的な言葉づかいや差別的な表現は避けてください。</li>
+              <li>個人情報や他者を特定できる情報は書き込まず、プライバシーを守りましょう。</li>
+              <li>事実に基づいた内容を意識し、引用や参考情報には出典を添えてください。</li>
+              <li>迷惑行為や不適切な投稿を見つけた場合は通報機能を利用し、ルールづくりにご協力ください。</li>
+            </ul>
+          </section>
         </>
       )}
     </div>

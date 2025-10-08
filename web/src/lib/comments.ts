@@ -5,6 +5,12 @@ export type CommentAuthor = {
   name?: string;
   email?: string;
   avatar?: string | null;
+  moderator?: boolean;
+  badge?: string;
+  badges?: string[];
+  role?: string;
+  roles?: string[];
+  type?: string;
 };
 
 export type CommentNode = {
@@ -50,13 +56,87 @@ const normalizeAuthor = (value: any): CommentAuthor | null => {
   const nameValue = value.name ?? value.username ?? value.displayName;
   const emailValue = value.email;
   const avatarValue = value.avatar ?? value.picture ?? value.image;
+  const moderatorValue = parseBoolean(value.moderator ?? value.isModerator ?? value.admin);
+  const badgeValue = typeof value.badge === 'string' ? value.badge : undefined;
+  const badgesValue = Array.isArray(value.badges)
+    ? value.badges
+        .map((badge) => {
+          if (typeof badge === 'string') {
+            return badge;
+          }
+          if (badge && typeof badge === 'object') {
+            if (typeof badge.name === 'string') {
+              return badge.name;
+            }
+            if (typeof badge.label === 'string') {
+              return badge.label;
+            }
+            if (typeof badge.title === 'string') {
+              return badge.title;
+            }
+          }
+          return null;
+        })
+        .filter((badge): badge is string => typeof badge === 'string' && badge.trim().length > 0)
+    : undefined;
+  const roleValue = typeof value.role === 'string' ? value.role : undefined;
+  const rolesValue = Array.isArray(value.roles)
+    ? value.roles
+        .map((role) => {
+          if (typeof role === 'string') {
+            return role;
+          }
+          if (role && typeof role === 'object') {
+            if (typeof role.name === 'string') {
+              return role.name;
+            }
+            if (typeof role.type === 'string') {
+              return role.type;
+            }
+          }
+          return null;
+        })
+        .filter((role): role is string => typeof role === 'string' && role.trim().length > 0)
+    : undefined;
+  const typeValue = typeof value.type === 'string' ? value.type : undefined;
 
-  return {
+  const author: CommentAuthor = {
     id: typeof idValue === 'number' || typeof idValue === 'string' ? String(idValue) : undefined,
     name: typeof nameValue === 'string' && nameValue.trim().length > 0 ? nameValue.trim() : undefined,
     email: typeof emailValue === 'string' && emailValue.trim().length > 0 ? emailValue.trim() : undefined,
     avatar: typeof avatarValue === 'string' ? avatarValue : null,
   };
+
+  if (moderatorValue !== null) {
+    author.moderator = moderatorValue;
+  }
+
+  const normalizedBadges = Array.from(
+    new Set(
+      [badgeValue, ...(badgesValue ?? [])]
+        .filter((badge): badge is string => typeof badge === 'string' && badge.trim().length > 0)
+        .map((badge) => badge.trim())
+    )
+  );
+
+  if (normalizedBadges.length > 0) {
+    author.badges = normalizedBadges;
+    author.badge = normalizedBadges[0];
+  }
+
+  if (typeof roleValue === 'string' && roleValue.trim().length > 0) {
+    author.role = roleValue.trim();
+  }
+
+  if (rolesValue && rolesValue.length > 0) {
+    author.roles = Array.from(new Set(rolesValue.map((role) => role.trim())));
+  }
+
+  if (typeof typeValue === 'string' && typeValue.trim().length > 0) {
+    author.type = typeValue.trim();
+  }
+
+  return author;
 };
 
 const parseBoolean = (value: any): boolean | null => {
