@@ -67,6 +67,10 @@
     "heroHighlight": {
       "type": "boolean",
       "default": false
+    },
+    "commentDefaultAuthor": {
+      "type": "string",
+      "default": "名無しのユーザーさん"
     }
   }
 }

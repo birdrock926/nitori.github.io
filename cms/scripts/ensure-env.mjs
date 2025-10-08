@@ -108,6 +108,20 @@ const main = () => {
   ensureValue('SMTP_FROM', () => 'Kininatta News <noreply@example.com>', state, changes);
   ensureValue('SMTP_REPLY_TO', () => 'contact@example.com', state, changes);
 
+  ensureValue('COMMENTS_CLIENT_URL', () => process.env.COMMENTS_CLIENT_URL || 'http://localhost:4321', state, changes);
+  ensureValue(
+    'COMMENTS_CONTACT_EMAIL',
+    () => process.env.COMMENTS_CONTACT_EMAIL || process.env.SMTP_REPLY_TO || 'contact@example.com',
+    state,
+    changes,
+  );
+  ensureValue('COMMENTS_ENABLED_COLLECTIONS', () => 'api::post.post', state, changes);
+  ensureValue('COMMENTS_APPROVAL_FLOW', () => 'api::post.post', state, changes);
+  ensureValue('COMMENTS_MODERATOR_ROLES', () => 'Authenticated', state, changes);
+  ensureValue('COMMENTS_BLOCKED_AUTHOR_PROPS', () => 'email', state, changes);
+  ensureValue('COMMENTS_BAD_WORDS', () => 'true', state, changes);
+  ensureValue('COMMENTS_VALIDATION_ENABLED', () => 'true', state, changes);
+
   if (changes.length > 0 && !isBuildLike) {
     writeEnvFile(state);
     console.info(`Generated development secrets for: ${changes.join(', ')}`);
