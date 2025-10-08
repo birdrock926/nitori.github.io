@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "pretest": "node ./scripts/ensure-env.mjs",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test jest --config=jest.config.cjs --runInBand",
-    "postinstall": "node ./scripts/postinstall-fix-typescript.mjs && patch-package && node ./scripts/normalize-admin-styled.mjs"
+    "postinstall": "node ./scripts/postinstall-fix-typescript.mjs && patch-package"
   },
   "dependencies": {
     "@elastic/elasticsearch": "8.11.0",
