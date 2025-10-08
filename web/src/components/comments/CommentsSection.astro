@@ -7,11 +7,19 @@ interface Props {
   documentId?: string;
   slug: string;
   config?: CommentsConfig;
+  defaultAuthorName?: string;
 }
 
-const { documentId, slug, config } = Astro.props as Props;
+const { documentId, slug, config, defaultAuthorName } = Astro.props as Props;
 const headingId = `comments-${slug.replace(/[^a-z0-9-]/gi, '-') || 'thread'}`;
-const resolvedConfig = config ?? COMMENTS;
+const configOverride = config
+  ? (Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)) as CommentsConfig)
+  : {};
+const resolvedConfig = { ...COMMENTS, ...configOverride } satisfies CommentsConfig;
+const resolvedDefaultAuthorName =
+  typeof defaultAuthorName === 'string' && defaultAuthorName.trim().length > 0
+    ? defaultAuthorName.trim()
+    : resolvedConfig.defaultAuthorName;
 ---
 <section class="comments-section" aria-labelledby={headingId}>
   <CommentsApp
@@ -20,5 +28,6 @@ const resolvedConfig = config ?? COMMENTS;
     documentId={documentId}
     slug={slug}
     config={resolvedConfig}
+    defaultAuthorName={resolvedDefaultAuthorName}
   />
 </section>

@@ -108,6 +108,7 @@ export type Post = {
   author?: string;
   source?: string;
   publishedAt: string;
+  commentDefaultAuthor: string;
 };
 
 export type RankingItem = {
@@ -460,6 +461,7 @@ export type PostListResponse = {
       publishedAt: string;
       author?: string;
       source?: string;
+      commentDefaultAuthor?: string;
       cover?: {
         data: { attributes: Media } | null;
       } | null;
@@ -497,6 +499,7 @@ const fallbackPost = (): Post => ({
   publishedAt: '',
   tags: [],
   blocks: [],
+  commentDefaultAuthor: '名無しのユーザーさん',
 });
 
 const mapPost = (apiPost: PostListResponse['data'][number]) => {
@@ -516,6 +519,15 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
     const blockSource = attr.blocks ?? base.blocks;
     const rawBlocks = Array.isArray(blockSource) ? blockSource : [];
     const defaults = fallbackPost();
+    const commentDefaultSource =
+      attr.commentDefaultAuthor ??
+      attr.comment_default_author ??
+      base.commentDefaultAuthor ??
+      base.comment_default_author;
+    const commentDefaultAuthor =
+      typeof commentDefaultSource === 'string' && commentDefaultSource.trim().length > 0
+        ? commentDefaultSource.trim()
+        : defaults.commentDefaultAuthor;
 
     return {
       ...defaults,
@@ -534,6 +546,7 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       cover,
       tags: tagsArray,
       blocks: rawBlocks.map(normalizeBlock),
+      commentDefaultAuthor,
     } satisfies Post;
   } catch (error) {
     console.warn('[strapi] Failed to map post payload', error);

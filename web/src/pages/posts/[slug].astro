@@ -232,5 +232,9 @@ const jsonLd = {
     </div>
   </section>
   <InlineAd slot={ADSENSE.slots.feed} placement="feed" />
-  <CommentsSection documentId={post.documentId} slug={post.slug} />
+  <CommentsSection
+    documentId={post.documentId}
+    slug={post.slug}
+    defaultAuthorName={post.commentDefaultAuthor}
+  />
 </BaseLayout>

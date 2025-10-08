@@ -8,6 +8,7 @@ export type CommentsConfig = {
   requireApproval?: boolean;
   pageSize?: number;
   maxLength?: number;
+  defaultAuthorName?: string;
 };
 
 const REPORT_REASONS = [
@@ -24,10 +25,12 @@ type Props = {
   documentId?: string;
   slug: string;
   config?: CommentsConfig;
+  defaultAuthorName?: string;
 };
 
 const AUTHOR_STORAGE_KEY = 'knn-comments-author';
 const LONG_COMMENT_PREVIEW = 320;
+const GLOBAL_DEFAULT_AUTHOR = '名無しのユーザーさん';
 
 const isPubliclyVisible = (comment: CommentNode) => {
   if (comment.removed || comment.blocked) {
@@ -119,13 +122,30 @@ const defaultConfig: Required<CommentsConfig> = {
   requireApproval: true,
   pageSize: 50,
   maxLength: 1200,
+  defaultAuthorName: GLOBAL_DEFAULT_AUTHOR,
 };
 
-const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
-  const mergedConfig = { ...defaultConfig, ...(config ?? {}) } satisfies Required<CommentsConfig>;
+const CommentsApp = ({ headingId, documentId, slug, config, defaultAuthorName }: Props) => {
+  const mergedConfig = useMemo(() => {
+    if (!config) {
+      return defaultConfig;
+    }
+
+    const sanitized = Object.fromEntries(
+      Object.entries(config).filter(([, value]) => value !== undefined)
+    ) as CommentsConfig;
+
+    return { ...defaultConfig, ...sanitized } satisfies Required<CommentsConfig>;
+  }, [config]);
   const relationId = documentId?.trim() ?? '';
   const isEnabled = mergedConfig.enabled !== false && relationId.length > 0;
   const guidelinesId = useMemo(() => `${headingId}-guidelines`, [headingId]);
+  const fallbackAuthorName = useMemo(() => {
+    const candidates = [defaultAuthorName, mergedConfig.defaultAuthorName, GLOBAL_DEFAULT_AUTHOR]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0);
+    return candidates[0] || GLOBAL_DEFAULT_AUTHOR;
+  }, [defaultAuthorName, mergedConfig.defaultAuthorName]);
 
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
@@ -290,11 +310,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
       const trimmedName = author.name.trim();
       const trimmedContent = sanitizeContent(body);
       const trimmedEmail = author.email.trim();
-
-      if (!trimmedName.length) {
-        setError('ニックネームを入力してください。');
-        return false;
-      }
+      const resolvedName = trimmedName.length > 0 ? trimmedName : fallbackAuthorName;
 
       if (!trimmedContent.length) {
         setError('コメント本文を入力してください。');
@@ -314,8 +330,8 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
           content: trimmedContent,
           threadOf: threadOf ?? undefined,
           author: {
-            id: buildAuthorId(trimmedName, trimmedEmail || undefined) || `${trimmedName}-${slug}`,
-            name: trimmedName,
+            id: buildAuthorId(resolvedName, trimmedEmail || undefined) || `${resolvedName}-${slug}`,
+            name: resolvedName,
             email: trimmedEmail || undefined,
           },
         });
@@ -338,6 +354,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     [
       author.email,
       author.name,
+      fallbackAuthorName,
       isEnabled,
       mergedConfig.requireApproval,
       mergedConfig.maxLength,
@@ -670,6 +687,9 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
       const showContent = !isHidden && !isPending;
       const showReadMore = showContent && isLongComment;
       const moderatorLabel = comment.author?.badge || comment.author?.badges?.[0] || 'モデレーター';
+      const displayAuthorName = comment.author?.name?.trim().length
+        ? comment.author.name.trim()
+        : fallbackAuthorName;
 
       let displayContent = sanitizedContent;
       if (isCollapsed) {
@@ -688,7 +708,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
           <div className="comment-header">
             <div className="comment-author">
               <span className={`comment-author__name${isModerator ? ' comment-author__name--moderator' : ''}`}>
-                {comment.author?.name || 'ゲスト'}
+                {displayAuthorName}
               </span>
               {isModerator ? (
                 <span className="comment-moderator-badge" aria-label="モデレーターの返信">{moderatorLabel}</span>
@@ -748,7 +768,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
             <form
               className="comment-reply-form"
               onSubmit={(event) => handleReplySubmit(event, comment.id)}
-              aria-label={`「${comment.author?.name || 'ゲスト'}」への返信フォーム`}
+              aria-label={`「${displayAuthorName}」への返信フォーム`}
             >
               <div className="comments-field">
                 <label htmlFor={`${headingId}-reply-${comment.id}`}>返信内容</label>
@@ -760,7 +780,9 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
                   disabled={submitting}
                   required
                 />
-                <div className="comments-hint">残り {mergedConfig.maxLength - replyContent.length} 文字</div>
+                <div className="comments-hint">
+                  残り {Math.max(0, mergedConfig.maxLength - replyContent.length)} 文字
+                </div>
               </div>
               <div className="comments-form-actions">
                 <button type="submit" className="comments-submit" disabled={submitting}>
@@ -783,7 +805,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
             <form
               className="comment-report-form"
               onSubmit={(event) => handleReportSubmit(event, comment.id)}
-              aria-label={`「${comment.author?.name || 'ゲスト'}」を通報するフォーム`}
+              aria-label={`「${displayAuthorName}」を通報するフォーム`}
             >
               <div className="comments-field">
                 <label htmlFor={`${headingId}-report-reason-${comment.id}`}>通報理由</label>
@@ -838,6 +860,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
     },
     [
       expandedComments,
+      fallbackAuthorName,
       handleReplyClick,
       handleReplySubmit,
       handleReportCancel,
@@ -973,8 +996,11 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
                   value={author.name}
                   onChange={(event) => setAuthor((prev) => ({ ...prev, name: event.target.value }))}
                   disabled={submitting}
-                  required
+                  placeholder={`未入力の場合は「${fallbackAuthorName}」になります`}
                 />
+                <span className="comments-hint">
+                  空欄のまま投稿すると「{fallbackAuthorName}」として表示されます。
+                </span>
               </div>
               <div className="comments-field">
                 <label htmlFor={`${headingId}-email`}>メールアドレス（任意）</label>
@@ -1002,7 +1028,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
                 maxLength={mergedConfig.maxLength}
                 required
               />
-              <div className="comments-hint">残り {mergedConfig.maxLength - content.length} 文字</div>
+              <div className="comments-hint">残り {Math.max(0, mergedConfig.maxLength - content.length)} 文字</div>
             </div>
             <div className="comments-form-actions">
               <button type="submit" className="comments-submit" disabled={submitting}>

@@ -50,6 +50,56 @@ const attachDocumentId = (sanitized, raw) => {
   };
 };
 
+const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
+
+const readCommentDefaultAuthor = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_COMMENT_AUTHOR;
+  }
+
+  const direct = entity.commentDefaultAuthor ?? entity.comment_default_author;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim();
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.commentDefaultAuthor ?? attributes.comment_default_author;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      return attributeValue.trim();
+    }
+  }
+
+  return DEFAULT_COMMENT_AUTHOR;
+};
+
+const enrichPostEntity = (sanitized, raw) => {
+  const withDocument = attachDocumentId(sanitized, raw);
+
+  if (Array.isArray(withDocument)) {
+    if (Array.isArray(raw)) {
+      return withDocument.map((item, index) => enrichPostEntity(item, raw[index]));
+    }
+    return withDocument.map((item) => enrichPostEntity(item, raw));
+  }
+
+  if (!withDocument || typeof withDocument !== 'object') {
+    return withDocument;
+  }
+
+  const commentDefaultAuthor = readCommentDefaultAuthor(raw);
+
+  if (withDocument.commentDefaultAuthor === commentDefaultAuthor) {
+    return withDocument;
+  }
+
+  return {
+    ...withDocument,
+    commentDefaultAuthor,
+  };
+};
+
 const ensurePublishedFilter = (filters = {}) => {
   const base = filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {};
   const publishedCondition = {
@@ -170,7 +220,7 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
-    const enrichedResults = attachDocumentId(sanitizedResults, results);
+    const enrichedResults = enrichPostEntity(sanitizedResults, results);
     return this.transformResponse(enrichedResults, { pagination });
   },
 
@@ -185,7 +235,7 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    const enrichedEntity = attachDocumentId(sanitizedEntity, entity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
     return this.transformResponse(enrichedEntity);
   },
 
@@ -217,7 +267,7 @@ export default factories.createCoreController('api::post.post', () => ({
     }
 
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    const enrichedEntity = attachDocumentId(sanitizedEntity, entity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
     return this.transformResponse(enrichedEntity);
   },
 

@@ -60,7 +60,7 @@
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
 
 ## データモデル（抜粋）
-- **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt`
+- **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
@@ -183,8 +183,9 @@
    | `SITE_URL` | Cloudflare Pages や独自ドメインの公開 URL。 | `https://example.pages.dev` |
    | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
    | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。未設定時は `localhost` を自動追加します。 | `example.pages.dev,www.example.com` |
-   | `PUBLIC_COMMENTS_ENABLED` | コメント UI の表示フラグ。`false` にするとコメント欄を非表示にできます。 | `true` |
-   | `PUBLIC_COMMENTS_PAGE_SIZE` / `PUBLIC_COMMENTS_MAX_LENGTH` | コメント取得件数（1 ページに表示するスレッド数）/ 投稿の最大文字数 | `50` / `1200` |
+| `PUBLIC_COMMENTS_ENABLED` | コメント UI の表示フラグ。`false` にするとコメント欄を非表示にできます。 | `true` |
+| `PUBLIC_COMMENTS_PAGE_SIZE` / `PUBLIC_COMMENTS_MAX_LENGTH` | コメント取得件数（1 ページに表示するスレッド数）/ 投稿の最大文字数 | `50` / `1200` |
+| `PUBLIC_COMMENTS_DEFAULT_AUTHOR` | ニックネーム未入力時に使うデフォルト表示名。記事側で個別に上書きできます。 | `名無しのユーザーさん` |
    | `GA_MEASUREMENT_ID` | Google Analytics 4 の測定 ID（利用しない場合は空欄可）。 | `G-XXXXXXXXXX` |
    | `ADSENSE_CLIENT_ID`, `ADSENSE_SLOT_*` | Google AdSense のクライアント ID と広告ユニット ID。未導入の場合は空欄で OK。 | `ca-pub-...` |
    | `PUBLIC_ADS_HEADER_BIDDING_ENABLED` | ヘッダービディング（Prebid.js）の有効化フラグ。 | `false`（開発時）/`true`（本番） |
@@ -204,8 +205,9 @@
 2. Strapi 管理画面へログインし、左メニューの **Plugins → Comments** でモデレーションポリシー（承認フロー、禁止ワード、通知先など）を調整します。承認フローを有効にするとコメントは「保留」として保存され、公開操作を行うまでフロントには表示されません。
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
 4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<documentId>` です。Astro 側は `documentId` をスレッドキーとして利用し、React 製のコメント UI が投稿・返信・ツリー表示を行います。
-5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
+5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。ニックネーム欄は空欄でも投稿でき、その場合は記事に設定したデフォルト名（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値）が自動で表示に使われます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
 6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます（メール欄は任意入力で、未入力の場合は通知されません）。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
+7. Post コンテンツタイプには「コメント用デフォルト名」フィールドを追加しています。記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。
 
 ##### トラブルシューティング
 

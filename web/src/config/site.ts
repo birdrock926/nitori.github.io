@@ -170,9 +170,15 @@ const parsePositiveInteger = (value: string | undefined, fallback: number) => {
   return fallback;
 };
 
+const sanitizeDefaultAuthorName = (value: string | undefined) => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '名無しのユーザーさん';
+};
+
 export const COMMENTS = {
   enabled: parseBoolean(import.meta.env.PUBLIC_COMMENTS_ENABLED, true),
   requireApproval: parseBoolean(import.meta.env.PUBLIC_COMMENTS_REQUIRE_APPROVAL, true),
   pageSize: parsePositiveInteger(import.meta.env.PUBLIC_COMMENTS_PAGE_SIZE, 50),
   maxLength: parsePositiveInteger(import.meta.env.PUBLIC_COMMENTS_MAX_LENGTH, 1200),
+  defaultAuthorName: sanitizeDefaultAuthorName(import.meta.env.PUBLIC_COMMENTS_DEFAULT_AUTHOR),
 };

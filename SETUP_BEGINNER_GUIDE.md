@@ -85,6 +85,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | `PUBLIC_COMMENTS_ENABLED` | コメント UI の有効 / 無効 | `true` |
    | `PUBLIC_COMMENTS_REQUIRE_APPROVAL` | コメントを承認制で公開するか | `true` / `false` |
   | `PUBLIC_COMMENTS_PAGE_SIZE` / `PUBLIC_COMMENTS_MAX_LENGTH` | 1 ページあたりのスレッド数 / 投稿の最大文字数 | `50` / `1200` |
+  | `PUBLIC_COMMENTS_DEFAULT_AUTHOR` | ニックネーム未入力時の表示名（記事側で上書き可能） | `名無しのユーザーさん` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
 4. 編集後は `cd ..` でルートに戻ります。
@@ -197,6 +198,7 @@ npm run dev
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
 7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
+8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名を変えたい場合は Post エディタでフィールドを更新してください。
 
 
 ### 6-4. ブロックエディタで装飾する
