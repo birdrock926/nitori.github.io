@@ -201,13 +201,14 @@
 
 1. `.env` の `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` を実運用の URL / 連絡先に更新します（開発では `scripts/ensure-env.mjs` がプレースホルダーを自動生成します）。
 2. Strapi 管理画面へログインし、左メニューの **Plugins → Comments** でモデレーションポリシー（承認フロー、禁止ワード、通知先など）を調整します。承認フローを有効にするとコメントは「保留」として保存され、公開操作を行うまでフロントには表示されません。
-3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が自動付与しますが、権限を変更した場合は再設定してください）。
+3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
 4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<documentId>` です。Astro 側は `documentId` をスレッドキーとして利用し、React 製のコメント UI が投稿・返信・ツリー表示を行います。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
+6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
 
 ##### トラブルシューティング
 
-- **コメントが取得できない**：Strapi の `Public` 役割に `Comments: Read` / `Comments: Create` が付与されているか確認し、API レスポンスの HTTP ステータスをチェックします。
+- **コメントが取得できない / 「Forbidden」と表示される**：`Public` 役割に `Comments: Read` / `Comments: Create` が付与されているか確認します。bootstrap が自動同期しますが、権限を削除した場合は `npm run develop` で Strapi を再起動して反映させてください。
 - **メール通知が届かない**：`COMMENTS_CONTACT_EMAIL` と `SMTP_*` の設定を見直し、Strapi の `Settings → Email` でテスト送信してください。
 - **CORS/CSRF エラー**：フロントエンドから `STRAPI_API_URL` へアクセスできるか、CORS 設定と Cloudflare/Caddy のリバースプロキシ設定を確認します。
 

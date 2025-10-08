@@ -45,6 +45,34 @@ const buildAuthorId = (name: string, email?: string) => {
 
 const sanitizeContent = (value: string) => value.replace(/\r\n?/g, '\n').trim();
 
+const resolveErrorMessage = (error: unknown, fallback: string) => {
+  if (!error) {
+    return fallback;
+  }
+
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+      ? error
+      : String(error);
+
+  const message = raw?.toString().trim();
+  if (!message) {
+    return fallback;
+  }
+
+  if (/forbidden/i.test(message) || /\(403\)/.test(message)) {
+    return 'コメントにアクセスできません。時間をおいて再度お試しください。';
+  }
+
+  if (/unauthori[sz]ed/i.test(message) || /\(401\)/.test(message)) {
+    return 'コメント機能にアクセスできませんでした。ページを再読み込みしてから再度お試しください。';
+  }
+
+  return message;
+};
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, '&amp;')
@@ -161,8 +189,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         if (cancelled) {
           return;
         }
-        const message = err instanceof Error ? err.message : 'コメントの読み込みに失敗しました。';
-        setError(message);
+        setError(resolveErrorMessage(err, 'コメントの読み込みに失敗しました。'));
         setStatus('error');
       }
     };
@@ -223,8 +250,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         applyComments(data, { goToLastPage: options?.goToLastPage });
         setStatus('ready');
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'コメントの読み込みに失敗しました。';
-        setError(message);
+        setError(resolveErrorMessage(err, 'コメントの読み込みに失敗しました。'));
         setStatus('error');
       }
     },
@@ -280,8 +306,7 @@ const CommentsApp = ({ headingId, documentId, slug, config }: Props) => {
         await refreshComments({ goToLastPage: true });
         return true;
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'コメントの送信に失敗しました。';
-        setError(message);
+        setError(resolveErrorMessage(err, 'コメントの送信に失敗しました。'));
         return false;
       } finally {
         setSubmitting(false);
