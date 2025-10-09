@@ -2,6 +2,10 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
+const ensureEnvModulePath = new URL('./ensure-env.mjs', import.meta.url);
+
+await import(ensureEnvModulePath);
+
 const require = createRequire(import.meta.url);
 const packagePath = require.resolve('@strapi/strapi/package.json');
 const strapiBin = path.join(path.dirname(packagePath), 'bin', 'strapi.js');

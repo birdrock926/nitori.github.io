@@ -34,8 +34,32 @@ const parseLines = (content) => {
   return { lines, map, order };
 };
 
+const PLACEHOLDER_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev|pages\.dev)$/i;
+
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const randomKeys = () => Array.from({ length: 4 }, () => randomHex(16)).join(',');
+
+const isPlaceholderUrl = (value) => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  try {
+    const { hostname } = new URL(trimmed);
+    if (PLACEHOLDER_HOST_PATTERN.test(hostname)) {
+      return true;
+    }
+  } catch {
+    // Ignore parse failures and fall back to pattern matching against the raw string.
+  }
+
+  return PLACEHOLDER_HOST_PATTERN.test(trimmed);
+};
 
 const ensureValue = (key, generator, state, changes, options = {}) => {
   const { treatAsMissing } = options;
@@ -91,10 +115,7 @@ const main = () => {
     () => process.env.PUBLIC_URL || 'http://localhost:1337',
     state,
     changes,
-    {
-      treatAsMissing: (value) =>
-        typeof value === 'string' && /(^|\.)example\.com\b/i.test(value),
-    },
+    { treatAsMissing: isPlaceholderUrl },
   );
   ensureValue('APP_KEYS', randomKeys, state, changes);
   ensureValue('API_TOKEN_SALT', () => randomHex(16), state, changes);
@@ -127,7 +148,13 @@ const main = () => {
   ensureValue('SMTP_FROM', () => 'Kininatta News <noreply@example.com>', state, changes);
   ensureValue('SMTP_REPLY_TO', () => 'contact@example.com', state, changes);
 
-  ensureValue('COMMENTS_CLIENT_URL', () => process.env.COMMENTS_CLIENT_URL || 'http://localhost:4321', state, changes);
+  ensureValue(
+    'COMMENTS_CLIENT_URL',
+    () => process.env.COMMENTS_CLIENT_URL || 'http://localhost:4321',
+    state,
+    changes,
+    { treatAsMissing: isPlaceholderUrl },
+  );
   ensureValue(
     'COMMENTS_CONTACT_EMAIL',
     () => process.env.COMMENTS_CONTACT_EMAIL || process.env.SMTP_REPLY_TO || 'contact@example.com',
