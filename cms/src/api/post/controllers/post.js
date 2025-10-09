@@ -196,46 +196,9 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
-const MEDIA_POPULATE = { populate: '*' };
+const buildDefaultPopulate = () => '*';
 
-const ensureBlocksPopulate = () => '*';
-
-const buildDefaultPopulate = () => ({
-  cover: MEDIA_POPULATE,
-  tags: { populate: '*' },
-  blocks: ensureBlocksPopulate(),
-});
-
-const normalizePopulate = (populate) => {
-  const base = buildDefaultPopulate();
-
-  if (!populate || populate === '*' || populate === 'deep') {
-    return base;
-  }
-
-  if (Array.isArray(populate)) {
-    return populate.reduce((acc, key) => {
-      if (typeof key === 'string' && key) {
-        if (key === 'blocks') {
-          acc.blocks = ensureBlocksPopulate();
-        } else {
-          acc[key] = base[key] ?? true;
-        }
-      }
-      return acc;
-    }, { ...base });
-  }
-
-  if (typeof populate !== 'object') {
-    return base;
-  }
-
-  const next = { ...base, ...populate };
-  next.blocks = ensureBlocksPopulate(populate.blocks ?? populate);
-  return next;
-};
-
-const mergePopulate = (incoming) => normalizePopulate(incoming);
+const mergePopulate = () => buildDefaultPopulate();
 
 const applyDefaultSort = (query = {}) => {
   if (!query.sort) {
