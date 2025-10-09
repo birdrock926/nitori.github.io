@@ -196,10 +196,48 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
+const BLOCK_COMPONENT_POPULATE = {
+  'content.rich-text': '*',
+  'content.colored-text': '*',
+  'media.figure': '*',
+  'media.gallery': {
+    populate: {
+      items: {
+        populate: '*',
+      },
+    },
+  },
+  'embed.twitch-live': '*',
+  'embed.twitch-vod': '*',
+  'embed.youtube': '*',
+  'layout.callout': {
+    populate: {
+      body: {
+        populate: '*',
+      },
+    },
+  },
+  'layout.columns': {
+    populate: {
+      columns: {
+        populate: {
+          body: {
+            populate: '*',
+          },
+        },
+      },
+    },
+  },
+  'layout.separator': '*',
+  'ads.inline-slot': '*',
+};
+
 const DEFAULT_POPULATE = {
   cover: '*',
   tags: '*',
-  blocks: '*',
+  blocks: {
+    on: BLOCK_COMPONENT_POPULATE,
+  },
 };
 
 const clonePopulate = (source) => JSON.parse(JSON.stringify(source));
