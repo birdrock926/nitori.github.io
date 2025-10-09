@@ -1,10 +1,36 @@
 ---
-const { body } = Astro.props as { body: string };
+import RichTextContent from './RichTextContent';
+
+const { body, fontScale } = Astro.props as { body: string; fontScale?: number };
 ---
-<div class="richtext" set:html={body}></div>
+<RichTextContent body={body} fontScale={fontScale} />
 <style>
+.richtext {
+  --richtext-scale: 1;
+  font-size: calc(var(--article-font-size) * var(--richtext-scale));
+  line-height: calc(var(--article-line-height) * clamp(0.9, var(--richtext-scale), 1.35));
+}
 .richtext :global(p) {
   margin: 0 0 1rem;
+}
+.richtext :global(figure.richtext-figure) {
+  margin: 0 0 1.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.richtext :global(figure.richtext-figure img) {
+  width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  display: block;
+}
+.richtext :global(img) {
+  max-width: 100%;
+  height: auto;
+}
+.richtext :global(figure.richtext-figure figcaption) {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 .richtext :global(h2) {
   font-size: 1.75rem;

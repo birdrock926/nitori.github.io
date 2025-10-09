@@ -31,6 +31,7 @@ export type DynamicZoneBlock =
   | {
       __component: 'content.rich-text';
       body: string;
+      fontScale?: number;
     }
   | {
       __component: 'content.colored-text';
@@ -98,6 +99,7 @@ export type DynamicZoneBlock =
 
 export type Post = {
   id: number;
+  documentId: string;
   title: string;
   slug: string;
   summary: string;
@@ -107,6 +109,8 @@ export type Post = {
   author?: string;
   source?: string;
   publishedAt: string;
+  commentDefaultAuthor: string;
+  bodyFontScale: 'default' | 'large' | 'xlarge';
 };
 
 export type RankingItem = {
@@ -115,6 +119,10 @@ export type RankingItem = {
   slug: string;
   score: number;
 };
+
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
+const RICH_TEXT_FONT_SCALE_MIN = 0.7;
+const RICH_TEXT_FONT_SCALE_MAX = 1.8;
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
@@ -136,13 +144,90 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const escapeAttribute = (value: string) =>
+  escapeHtml(value).replace(/`/g, '&#96;');
+
+const renderMarkdownInline = (value: string) => {
+  const pattern =
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
+  let cursor = 0;
+  let output = '';
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(value)) !== null) {
+    const [full] = match;
+    const start = match.index;
+    if (start > cursor) {
+      output += escapeHtml(value.slice(cursor, start));
+    }
+
+    if (match[1] !== undefined) {
+      const alt = match[1] ?? '';
+      const url = match[2] ?? '';
+      const title = match[3] ?? '';
+      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+      if (!resolvedUrl) {
+        output += escapeHtml(full);
+      } else {
+        const altAttr = escapeAttribute(alt);
+        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
+      }
+    } else {
+      const label = match[4] ?? '';
+      const url = match[5] ?? '';
+      const title = match[6] ?? '';
+      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+      if (!resolvedUrl) {
+        output += escapeHtml(full);
+      } else {
+        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
+      }
+    }
+
+    cursor = start + full.length;
+  }
+
+  if (cursor < value.length) {
+    output += escapeHtml(value.slice(cursor));
+  }
+
+  return output;
+};
+
 const convertPlainTextToHtml = (value: string) => {
   const normalized = value.replace(/\r\n?/g, '\n').trim();
   if (!normalized) return '';
-  const paragraphs = normalized
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br />')}</p>`);
-  return paragraphs.join('\n');
+
+  const paragraphs = normalized.split(/\n{2,}/);
+  const rendered = paragraphs
+    .map((paragraph) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return '';
+
+      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
+      if (figureMatch) {
+        const alt = figureMatch[1] ?? '';
+        const url = figureMatch[2] ?? '';
+        const title = figureMatch[3] ?? '';
+        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+        if (!resolvedUrl) {
+          return `<p>${escapeHtml(trimmed)}</p>`;
+        }
+        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
+        const altAttr = escapeAttribute(alt);
+        const urlAttr = escapeAttribute(resolvedUrl);
+        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
+        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
+      }
+
+      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
+      return `<p>${lines.join('<br />')}</p>`;
+    })
+    .filter((paragraph) => paragraph.length > 0);
+
+  return rendered.join('\n');
 };
 
 const normalizeRichMarkup = (value: string) => {
@@ -217,6 +302,35 @@ const extractRichBody = (value: any): string => {
 
 const toObject = (value: any) => (value && typeof value === 'object' ? value : {});
 
+const clampRichTextScale = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    const clamped = Math.min(RICH_TEXT_FONT_SCALE_MAX, Math.max(RICH_TEXT_FONT_SCALE_MIN, value));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number.parseFloat(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    const clamped = Math.min(RICH_TEXT_FONT_SCALE_MAX, Math.max(RICH_TEXT_FONT_SCALE_MIN, parsed));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  return null;
+};
+
 const slugify = (value: string) =>
   value
     .trim()
@@ -250,10 +364,15 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
   }
 
   if (block.__component === 'content.rich-text') {
-    return {
+    const fontScale = clampRichTextScale(block.fontScale ?? block.font_scale);
+    const normalized: DynamicZoneBlock = {
       __component: 'content.rich-text',
       body: extractRichBody(block.body ?? block.content ?? block.value),
     };
+    if (fontScale !== null) {
+      normalized.fontScale = fontScale;
+    }
+    return normalized;
   }
 
   if (block.__component === 'content.colored-text') {
@@ -294,26 +413,48 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
   }
 
   if (block.__component === 'media.gallery') {
-    const items = Array.isArray(block.items)
+    const rawItems = Array.isArray(block.items)
       ? block.items
-          .map((item: any) => {
-            const media = normalizeMedia(parseMedia(item.image));
-            if (!media) return undefined;
-            const displayMode =
-              typeof item.displayMode === 'string' && item.displayMode.length
-                ? item.displayMode
-                : 'auto';
-            return {
-              image: media,
-              alt: item.alt ?? media.alternativeText ?? '',
-              displayMode: displayMode === 'gif' || displayMode === 'image' ? displayMode : 'auto',
-            };
-          })
-          .filter(Boolean)
+      : Array.isArray(block.items?.data)
+      ? block.items.data
+      : Array.isArray(block.images)
+      ? block.images
+      : Array.isArray(block.images?.data)
+      ? block.images.data
+      : Array.isArray(block.gallery)
+      ? block.gallery
+      : Array.isArray(block.gallery?.data)
+      ? block.gallery.data
       : [];
+    const items = rawItems
+      .map((item: any) => {
+        const base = item?.attributes ?? item;
+        const mediaSource = base?.image ?? base?.media ?? base;
+        const media = normalizeMedia(parseMedia(mediaSource));
+        if (!media) return undefined;
+        const displayMode =
+          typeof base.displayMode === 'string' && base.displayMode.length
+            ? base.displayMode
+            : typeof base.mode === 'string' && base.mode.length
+            ? base.mode
+            : 'auto';
+        const altCandidate =
+          typeof base.alt === 'string'
+            ? base.alt
+            : typeof base.caption === 'string'
+            ? base.caption
+            : media.alternativeText ?? '';
+        const alt = typeof altCandidate === 'string' ? altCandidate.trim() : '';
+        return {
+          image: media,
+          alt,
+          displayMode: displayMode === 'gif' || displayMode === 'image' ? displayMode : 'auto',
+        } satisfies { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' };
+      })
+      .filter((entry): entry is { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' } => Boolean(entry));
     return {
       __component: 'media.gallery',
-      items: items as { image: Media; alt: string; displayMode?: 'auto' | 'image' | 'gif' }[],
+      items,
     };
   }
 
@@ -459,6 +600,7 @@ export type PostListResponse = {
       publishedAt: string;
       author?: string;
       source?: string;
+      commentDefaultAuthor?: string;
       cover?: {
         data: { attributes: Media } | null;
       } | null;
@@ -489,12 +631,15 @@ const extractArray = <T>(value: unknown): T[] => {
 
 const fallbackPost = (): Post => ({
   id: 0,
+  documentId: '',
   title: '',
   slug: '',
   summary: '',
   publishedAt: '',
   tags: [],
   blocks: [],
+  commentDefaultAuthor: '名無しのユーザーさん',
+  bodyFontScale: 'default',
 });
 
 const mapPost = (apiPost: PostListResponse['data'][number]) => {
@@ -514,10 +659,36 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
     const blockSource = attr.blocks ?? base.blocks;
     const rawBlocks = Array.isArray(blockSource) ? blockSource : [];
     const defaults = fallbackPost();
+    const commentDefaultSource =
+      attr.commentDefaultAuthor ??
+      attr.comment_default_author ??
+      base.commentDefaultAuthor ??
+      base.comment_default_author;
+    const commentDefaultAuthor =
+      typeof commentDefaultSource === 'string' && commentDefaultSource.trim().length > 0
+        ? commentDefaultSource.trim()
+        : defaults.commentDefaultAuthor;
+    const fontScaleSource =
+      attr.bodyFontScale ??
+      attr.body_font_scale ??
+      base.bodyFontScale ??
+      base.body_font_scale;
+    const normalizedFontScale =
+      typeof fontScaleSource === 'string' && fontScaleSource.trim().length > 0
+        ? fontScaleSource.trim().toLowerCase()
+        : defaults.bodyFontScale;
+    const bodyFontScale = BODY_FONT_SCALE_VALUES.has(normalizedFontScale)
+      ? (normalizedFontScale as Post['bodyFontScale'])
+      : defaults.bodyFontScale;
 
     return {
       ...defaults,
       id: Number.isFinite(Number(base.id)) ? Number(base.id) : defaults.id,
+      documentId:
+        (typeof base.documentId === 'string' && base.documentId) ||
+        (typeof base.document_id === 'string' && base.document_id) ||
+        (typeof attr.documentId === 'string' && attr.documentId) ||
+        defaults.documentId,
       title: typeof attr.title === 'string' ? attr.title : '',
       slug: typeof attr.slug === 'string' ? attr.slug : '',
       summary: typeof attr.summary === 'string' ? attr.summary : '',
@@ -527,6 +698,8 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       cover,
       tags: tagsArray,
       blocks: rawBlocks.map(normalizeBlock),
+      commentDefaultAuthor,
+      bodyFontScale,
     } satisfies Post;
   } catch (error) {
     console.warn('[strapi] Failed to map post payload', error);
