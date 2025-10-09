@@ -51,7 +51,11 @@ const TypographyScaleInput = ({
   value,
 }) => {
   const { formatMessage } = useIntl();
-  const options = attribute?.options ?? {};
+  const rawOptions = attribute?.options ?? {};
+  const options =
+    rawOptions && typeof rawOptions === 'object'
+      ? { ...(typeof rawOptions.options === 'object' ? rawOptions.options : {}), ...rawOptions }
+      : {};
   const min = typeof options.min === 'number' ? options.min : DEFAULT_MIN;
   const max = typeof options.max === 'number' ? options.max : DEFAULT_MAX;
   const step = typeof options.step === 'number' && options.step > 0 ? options.step : DEFAULT_STEP;
