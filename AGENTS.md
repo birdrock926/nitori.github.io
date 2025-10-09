@@ -123,6 +123,12 @@
 5. **Typography Scale プラグインのオプション検証失敗**
    - Strapi 5.26 で `options.default` 等の形式が必須になり、旧形式のままでは管理画面がクラッシュ。
    - 対応: `register.js` で `options.` プレフィックスを付与し、`TypographyScaleInput` が旧データをマージするよう更新。
+6. **Rich Text ブロックで Typography Scale Input が即時クラッシュ** *(2025-10-02 追加調査着手 → 2025-10-09 対応完了)*
+   - 症状: 管理画面の Dynamic Zone で Rich Text ブロックの「Rich text」タブを開くと `TypeError: Cannot destructure property 'attribute' of 'undefined' as it is undefined.` で白画面化。
+   - 状況: Strapi 5.26 のフォームビルダーがカスタムフィールドを初期化するときに props を未定義のままレンダーするケースがあり、`TypographyScaleInput` が `({ attribute, ... })` の分割代入で即座に落ちる。
+   - 影響: Rich Text ブロックで Typography Scale を設定できず、既存記事の編集も不能。コンポーネントのオプション読み込みも `attribute?.options` への依存が強いため、`attributeOptions` など新スキーマにも非対応。
+   - 対応: `TypographyScaleInput` を `rawProps = {}` で初期化するよう変更し、`attribute` が無い場合でも分割代入が発火しないよう保護。`mergeOptions()` ヘルパーで `attribute?.options`・`attributeOptions`・`options` の各形式を統合しつつ、`intlLabel`/`description` のフォールバックと `onChange` の noop ガードを追加して API 変更に耐性を持たせた。
+   - 検証: `cd cms && npm run develop`（Strapi Admin が正常起動）および `CI=1 npm run build`（管理画面ビルド成功）を実行し、コンソールエラーが再現しないことを確認。詳細ログは `0a96ff†L1-L23`、`d5ea11†L1-L4`、`cfe164†L1-L2` を参照。
 
 これらの対応により、Strapi 管理画面が真っ白になる既知の原因はすべて封じ込め済み。今後同様の症状が出た場合は、上記順序で再点検すること。
 

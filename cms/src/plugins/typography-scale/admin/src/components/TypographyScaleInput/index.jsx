@@ -38,29 +38,52 @@ const clampScale = (value, min, max) => {
   return Math.round(clamped * 100) / 100;
 };
 
-const TypographyScaleInput = ({
-  attribute,
-  description,
-  disabled,
-  error,
-  intlLabel,
-  labelAction,
-  name,
-  onChange,
-  required,
-  value,
-}) => {
+const extractOptionObject = (candidate) => {
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  const nested = typeof candidate.options === 'object' ? candidate.options : {};
+
+  return { ...nested, ...candidate };
+};
+
+const mergeOptions = (...candidates) => {
+  return candidates.reduce((acc, candidate) => {
+    const extracted = extractOptionObject(candidate);
+    if (!extracted) {
+      return acc;
+    }
+
+    return { ...acc, ...extracted };
+  }, {});
+};
+
+const TypographyScaleInput = (rawProps = {}) => {
+  const {
+    attribute,
+    attributeOptions,
+    description,
+    disabled = false,
+    error,
+    intlLabel,
+    labelAction,
+    name = 'typography-scale',
+    onChange: rawOnChange,
+    options: directOptions,
+    required = false,
+    value,
+  } = rawProps;
+
   const { formatMessage } = useIntl();
-  const rawOptions = attribute?.options ?? {};
-  const options =
-    rawOptions && typeof rawOptions === 'object'
-      ? { ...(typeof rawOptions.options === 'object' ? rawOptions.options : {}), ...rawOptions }
-      : {};
+  const onChange = typeof rawOnChange === 'function' ? rawOnChange : () => {};
+  const options = mergeOptions(attribute?.options, attributeOptions, directOptions);
   const min = typeof options.min === 'number' ? options.min : DEFAULT_MIN;
   const max = typeof options.max === 'number' ? options.max : DEFAULT_MAX;
   const step = typeof options.step === 'number' && options.step > 0 ? options.step : DEFAULT_STEP;
   const defaultScaleOption =
     typeof options.defaultScale === 'number' ? clampScale(options.defaultScale, min, max) : DEFAULT_SCALE;
+  const resolvedLabel = intlLabel ?? { id: getTrad('field.label'), defaultMessage: '文字サイズ倍率' };
 
   const [pendingValue, setPendingValue] = React.useState(() => toNullableNumber(value));
   const [internal, setInternal] = React.useState(() => {
@@ -110,13 +133,13 @@ const TypographyScaleInput = ({
 
   const isDefault = pendingValue === null;
   const displayScale = clampScale(internal, min, max) ?? defaultScaleOption;
-  const hint = description ?? attribute?.description ?? null;
+  const hint = description ?? attribute?.description ?? attributeOptions?.description ?? null;
 
   return (
     <Field.Root id={name} name={name} hint={hint} error={error} required={required}>
       <Flex direction="column" gap={3}>
         <Flex justifyContent="space-between" alignItems="center" gap={2}>
-          <Field.Label action={labelAction}>{formatMessage(intlLabel)}</Field.Label>
+          <Field.Label action={labelAction}>{formatMessage(resolvedLabel)}</Field.Label>
           <Button variant="tertiary" size="S" onClick={handleReset} disabled={disabled}>
             {formatMessage({ id: getTrad('field.reset'), defaultMessage: '既定値に戻す' })}
           </Button>
