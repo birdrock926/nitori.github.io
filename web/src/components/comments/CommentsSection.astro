@@ -1,0 +1,35 @@
+---
+import CommentsApp from './CommentsApp.tsx';
+import type { CommentsConfig } from './CommentsApp.tsx';
+import { COMMENTS } from '@config/site';
+
+interface Props {
+  documentId?: string;
+  entryId?: number | string;
+  slug: string;
+  config?: CommentsConfig;
+  defaultAuthorName?: string;
+}
+
+const { documentId, entryId, slug, config, defaultAuthorName } = Astro.props as Props;
+const headingId = `comments-${slug.replace(/[^a-z0-9-]/gi, '-') || 'thread'}`;
+const configOverride = config
+  ? (Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)) as CommentsConfig)
+  : {};
+const resolvedConfig = { ...COMMENTS, ...configOverride } satisfies CommentsConfig;
+const resolvedDefaultAuthorName =
+  typeof defaultAuthorName === 'string' && defaultAuthorName.trim().length > 0
+    ? defaultAuthorName.trim()
+    : resolvedConfig.defaultAuthorName;
+---
+<section class="comments-section" aria-labelledby={headingId}>
+  <CommentsApp
+    client:load
+    headingId={headingId}
+    documentId={documentId}
+    entryId={entryId}
+    slug={slug}
+    config={resolvedConfig}
+    defaultAuthorName={resolvedDefaultAuthorName}
+  />
+</section>

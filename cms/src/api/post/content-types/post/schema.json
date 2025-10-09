@@ -55,6 +55,11 @@
         "ads.inline-slot"
       ]
     },
+    "bodyFontScale": {
+      "type": "enumeration",
+      "enum": ["default", "large", "xlarge"],
+      "default": "default"
+    },
     "author": {
       "type": "string"
     },
@@ -67,6 +72,10 @@
     "heroHighlight": {
       "type": "boolean",
       "default": false
+    },
+    "commentDefaultAuthor": {
+      "type": "string",
+      "default": "名無しのユーザーさん"
     }
   }
 }

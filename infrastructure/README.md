@@ -1,29 +1,29 @@
 # インフラ構成
 
-このディレクトリには OCI Always Free 上で Strapi v5 と Remark42 を稼働させるための Docker Compose とリバースプロキシ設定を格納
-しています。
+このディレクトリには OCI Always Free 上で Strapi v5 を稼働させるための Docker Compose とリバースプロキシ設定を格納しています。
+コメント機能は Strapi 本体に導入した [VirtusLab – Comments プラグイン](https://market.strapi.io/plugins/virtuslab-comments) が提供するため、外部サービス用の追加コンテナは不要です。
 
 ## 構成
-- `docker-compose.yml` — Strapi + PostgreSQL + Remark42 + Caddy
+- `docker-compose.yml` — Strapi + PostgreSQL + Caddy
 - `Caddyfile` — HTTPS 終端とリバースプロキシ
 - `strapi.service` — systemd から Docker Compose を起動するユニットファイル例
 
 ## 利用手順
 1. サーバーにリポジトリを配置し、`.env` を `/cms` に設定
-2. `cp remark42.env.sample remark42.env`（初期化用。サンプルは README 参照）
-3. `docker compose -f infrastructure/docker-compose.yml pull remark42`
-4. `docker compose -f infrastructure/docker-compose.yml up -d`
+2. `docker compose -f infrastructure/docker-compose.yml pull`
+3. `docker compose -f infrastructure/docker-compose.yml up -d`
    - 付属の Compose ファイルは `node:20-alpine` ベースのコンテナで `scripts/run-strapi.mjs` を介して Strapi をビルド・起動します。Node
      20 + Alpine 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` や `Bus error` が発生しないようパッチ適用済みですが、メモリが 2GB 未満だとビ
      ルドが落ちる場合があります。その際は `strapi/strapi:5` をベースにするか、ローカルで `npm run build` 済みの `build/` ディレク
      トリをマウントする運用に切り替えてください。
-   - Remark42 コンテナは `remark42.env` の `SITE` / `SECRET` / `ADMIN_PASSWD` を読み込みます。初期値のまま起動すると `http://<host>:8080`
-     で動作確認ができ、`http://<host>:8080/web` から管理 GUI にサインインできます。
-   - データボリュームはコンテナ内の `/srv/var` にマウントされます。既存の `/srv/remark42` バックアップから移行する際はディレクトリ構成を `/srv/var` に合わせてください。
+   - Comments プラグインは Strapi 本体に組み込まれており、管理 UI も Strapi 管理画面（`/admin/plugins/comments`）からアクセスします。
+     公開 API へコメント投稿を許可するには、Strapi 起動後に管理画面で `Public` ロールに対して `plugin::comments.client-comments.create`
+     などの権限を付与してください。
+   - `cms/.env` の `COMMENTS_CLIENT_URL` や `COMMENTS_CONTACT_EMAIL` を Strapi 起動前に設定しておくと、プラグインの通知・公開設定が適切に反映されます。
 4. DNS をサーバーに向け、Caddy の TLS 設定を更新
 5. `systemctl enable --now strapi.service` で自動起動を設定
 
 ## バックアップ
 - データベース: `strapi_db` ボリュームを定期的にバックアップ
 - アップロード: `strapi_uploads` ボリュームをオブジェクトストレージへ同期
-- コメント: `remark42_data` ボリュームを定期的にバックアップ
+- コメント: コメントデータは Strapi のデータベース（`strapi_db`）に保存されるため、DB バックアップに含まれます。

@@ -50,6 +50,9 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | DB | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` など | `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は `OCI_*` を設定 | `oci` |
    | メール | `SMTP_*` | 通知メール設定 | Gmail や SendGrid 等 |
+   | コメント | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメント通知に使用するサイト URL と通知先メールアドレス | `https://example.pages.dev` / `contact@example.com` |
+   | コメント | `COMMENTS_ENABLED_COLLECTIONS` / `COMMENTS_APPROVAL_FLOW` | コメントを許可するコンテンツタイプと承認フロー設定 | `api::post.post` |
+   | コメント | `COMMENTS_MODERATOR_ROLES` / `COMMENTS_BAD_WORDS` | 通知を受け取るロール / NG ワードフィルタの有効・無効 | `Authenticated` / `true` |
 
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
 
@@ -79,8 +82,10 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | `PUBLIC_ADS_GPT_NETWORK_CODE` / `PUBLIC_ADS_GPT_AD_UNIT_PREFIX` | Google Ad Manager のネットワークコードとスロットパス | `1234567` / `/1234567/game-news` |
    | `CONSENT_DEFAULT_REGION` | 同意モードの初期判定地域 | `JP` |
    | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みの parent 候補（カンマ区切り）。未設定時は `localhost` を自動追加 | `example.pages.dev,www.example.com` |
-   | `PUBLIC_REMARK42_HOST` | Remark42 を公開している URL | `https://comments.example.com` |
-   | `PUBLIC_REMARK42_SITE_ID` / `PUBLIC_REMARK42_LOCALE` | コメントスレッドで利用するサイト ID とロケール | `game-news` / `ja` |
+   | `PUBLIC_COMMENTS_ENABLED` | コメント UI の有効 / 無効 | `true` |
+   | `PUBLIC_COMMENTS_REQUIRE_APPROVAL` | コメントを承認制で公開するか | `true` / `false` |
+  | `PUBLIC_COMMENTS_PAGE_SIZE` / `PUBLIC_COMMENTS_MAX_LENGTH` | 1 ページあたりのスレッド数 / 投稿の最大文字数 | `50` / `1200` |
+  | `PUBLIC_COMMENTS_DEFAULT_AUTHOR` | ニックネーム未入力時の表示名（記事側で上書き可能） | `名無しのユーザーさん` |
 
 3. `STRAPI_API_TOKEN` は Strapi 管理画面の「設定 > API トークン」で `Read-only` トークンを作成して貼り付けます。
 4. 編集後は `cd ..` でルートに戻ります。
@@ -176,38 +181,25 @@ npm run dev
 
 - Strapi がまだ起動していなくてもコマンドが自動で待機し、CMS が利用可能になり次第サーバーが立ち上がります（既定ではタイムアウトなし。必要に応じて `STRAPI_WAIT_TIMEOUT_MS` で上限ミリ秒を指定できます）。
 - ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
-- コメント欄は Remark42 が応答し、`PUBLIC_REMARK42_HOST` が空欄でも `http://localhost:8080` へ自動接続します。ウィジェットが表示されない場合は以下を確認してください。
-  - `PUBLIC_REMARK42_HOST` / `PUBLIC_REMARK42_SITE_ID` と `infrastructure/remark42.env` の `SITE` が一致しているか。
-  - サイトが HTTPS の場合にコメントホストが HTTP のままになっていないか（混在コンテンツでブロックされます）。
-  - CDN やリバースプロキシで独自の CSP/CORS を付与している場合に `https://{コメント用ホスト}/web/embed.js` と `.../api/v1` が許可されているか。
-  - ページ内に「コメントを読み込めませんでした」の表示が出ている場合は `data-reason` 属性（`missing-config` / `mixed-content` / `load-failed` など）とブラウザのコンソール出力を確認し、設定値や CSP を修正してください。
+- コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
+  - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
+  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
+  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
+  - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
+  - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
-### 6-3. Remark42 を立ち上げてコメントを確認する
-1. まだ `remark42.env` を作成していない場合は、`infrastructure/remark42.env.sample` をコピーしてシークレット類を設定します。
-   ```bash
-   cd infrastructure
-   cp remark42.env.sample remark42.env
-   # SECRET は openssl rand -hex 32 などで生成
-   ```
-2. 別ターミナルで以下を実行し、コメントサーバーを起動します。
-   ```bash
-   cd infrastructure
-   docker compose pull remark42  # まず最新のコンテナイメージを取得
-   docker compose up -d remark42
-   docker compose logs -f remark42  # 起動ログの確認（Ctrl + C で終了）
-   ```
-   - 既定では `http://localhost:8080` がコメント API、`http://localhost:8080/web` が管理 GUI です。
-   - ボリュームはコンテナ内の `/srv/var` にマウントされます。過去に `/srv/remark42` へマウントしていた場合は、バックアップを `/srv/var` へ移してから起動してください。
-   - `docker-compose.yml` の `SITE` / `SECRET` / `ADMIN_PASSWD` はプレースホルダーなので、動作確認後は本番値に置き換えてください。
-3. Astro の記事ページを再読み込みし、コメント欄が表示されることを確認します。初回アクセス時に slug + URL をキーにしたスレッドが自
-   動生成されます。投稿数が多い場合でも Remark42 が 1 ページあたりの件数とページ送り UI を自動で表示するため追加設定は不要です。
-4. 管理 GUI を開いてログインします。
-   - **User** … `SITE` と同じ値（`ADMIN_SHARED_ID` を指定している場合はその値）
-   - **Password** … `ADMIN_PASSWD`
-   - ログイン後は **Settings → Basic** で pre-moderation や自動クローズ、置換ワードなどを調整できます。
-5. コメントが保存されない場合は `docker compose logs remark42` でエラーを確認し、`SECRET` が 32 文字以上か・`SITE` とフロントの `PUBLIC_REMARK42_SITE_ID` が一致しているかをチェックしてください。
+### 6-3. Comments プラグインを有効化してコメントを確認する
+1. Strapi 管理画面で **Settings → Comments** を開き、`Posts (api::post.post)` が **Enabled Collections** に追加されていることを確認します。承認制にしたい場合は **Approval Flow** にも `api::post.post` を登録し、`/web/.env` の `PUBLIC_COMMENTS_REQUIRE_APPROVAL` と一致させてください。
+2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。返信が付くと入力されたメールアドレス宛に通知が飛ぶため、送信テストで迷惑メール扱いにならないかも確認しましょう。
+3. Strapi 起動時の bootstrap が `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` を自動付与します。ロールを手動で編集した後は、必要に応じて再起動して権限が復元されたかをチェックしてください。
+4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
+5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
+6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
+7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
+8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
+
 
 ### 6-4. ブロックエディタで装飾する
 - Strapi の記事フォームでは **Dynamic Zone** を利用しており、`Rich Text` のほかに以下のブロックが追加済みです。
@@ -217,6 +209,7 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
+- Rich Text ブロックにはカスタムフィールド「文字サイズ倍率」があり、スライダー（0.7〜1.8 倍）または数値入力で記事全体の既定値に対する倍率を調整できます。空欄のまま保存すると記事の `bodyFontScale` 設定を継承します。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。
@@ -225,14 +218,18 @@ npm run dev
 - 関連記事ウィジェットは「記事 3 件：広告 1 枠」の配列になるよう自動整列します。AdSense の関連コンテンツ枠 ID を `.env` の `ADSENSE_SLOT_RELATED` に設定したうえで、Strapi 側で関連記事を 3 件以上紐付けると自然なカード列になります。
 - 記事詳細の右上には「削除依頼」「共有」メニューが表示されます。フォーム URL は `DELETE_REQUEST_FORM_URL` を変更、SNS 共有テキストは記事タイトルとサイト名を自動結合します。公開前にフォームの公開範囲と URL を確認してください。
 
-### 6-5. Remark42 管理のコツ
-- 管理 GUI の **Dashboard → Streams** で記事ごとのスレッドを一覧できます。pre-moderation を有効にすると未承認コメントが `pending` ラベルで強調されます。
-- **Comments** 画面では All / Pending / Verified / Deleted などのフィルターで状態別に絞り込み、各コメントの右端メニューから公開・削除・固定表示を切り替えられます。
-- **Settings → Basic → Pre-moderation** を `all` にすると全件承認制、`verified` にすると OAuth ログイン済みユーザーのみ自動公開、`off` にすると即時公開になります。運用ポリシーに合わせて調整してください。
-- **Settings → Blocklist** で禁止語や IP マスクを登録すると、該当投稿を自動的に拒否または保留にできます。レビューが必要な語句だけを `On demand` で保留にする運用も可能です。
-- **Email** タブで SMTP を設定すると、新着コメントやモデレーション待ち通知をメールで受け取れます。通知が不要な場合は空欄のままで問題ありません。
-- コメントをバックアップしたい場合は **Export** をクリックすると JSON / ZIP をダウンロードできます。`remark42_data` ボリュームの定期スナップショットも併用すると安心です。
-- サイト URL を変更するときは **Migrator** で旧 URL と新 URL のマッピングを登録し、スレッドキーを一括置換してください。
+### 6-5. VirtusLab Comments 管理のコツ
+- 管理画面の **Comments → Overview / Pending / Approved / Rejected / Reported** を使い分けると、承認待ち・公開済み・却下済み・通報中のステータスを一目で確認できます。承認制の場合は `Pending` から **Approve** / **Reject** を実行すると、フロントの表示も数秒で更新されます。
+- コメントのステータスは行末メニューの **Change status** か詳細ドロワーの `Status` セレクトで切り替えます。公開済みコメントを `Pending` に戻して差し戻すこともできます。
+- 推奨オペレーション例：
+  1. **毎朝** `Pending` を確認して保留コメントを裁き、必要なら `Block user` や `Block thread` でスパムを封じます。
+  2. **通報が来たら** `Reported` タブで内容を確認し、対応後に **Report resolved** を押下。`COMMENTS_CONTACT_EMAIL` に通知先を設定し、SMTP を構成しておくとメールで即時把握できます。
+  3. **週次**で `Overview` をエクスポート（CSV/JSON）し、NG ワードやリンクスパムの傾向を分析。`COMMENTS_BAD_WORDS` や自動モデレーション設定の改善に役立ててください。
+- フロントエンドの「通報する」ボタンから送られたレポートは `Reported` タブに即時追加されます。`reason`（通報理由）と `content`（詳細）が届くので、必要に応じて `Block user` / `Block thread` / `Delete` を実行して対応してください。
+- 各コメントのアクションメニューから「Block thread」「Block user」「Edit」などを実行できます。`COMMENTS_BLOCKED_AUTHOR_PROPS` に `email` や `ip` を含めておくと、指定フィールドをキーに投稿を拒否できます。
+- **Settings → Plugin configuration** で `Bad words filter` や `Validation rules` を調整し、承認フローと組み合わせてガイドラインを運用します。レートリミットを厳しめに設定するとボット連投を防ぎやすくなります。
+- コメントデータは Strapi の DB に保存されます。月次で Content Manager のエクスポート機能や `strapi export` を使ってバックアップし、必要に応じて OCI のスナップショットとも併用してください。
+
 
 
 ## 7. OCI Always Free で CMS を公開する
