@@ -37,17 +37,27 @@ const parseLines = (content) => {
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const randomKeys = () => Array.from({ length: 4 }, () => randomHex(16)).join(',');
 
-const ensureValue = (key, generator, state, changes) => {
-  const current = process.env[key] ?? state.map.get(key);
-  if (!current || /replace-with/i.test(current) || current.trim() === '') {
+const ensureValue = (key, generator, state, changes, options = {}) => {
+  const { treatAsMissing } = options;
+  const rawValue = process.env[key] ?? state.map.get(key);
+  const current = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+
+  const isMissing =
+    !current ||
+    (typeof current === 'string' && current.length === 0) ||
+    (typeof current === 'string' && /replace-with/i.test(current)) ||
+    (typeof treatAsMissing === 'function' && treatAsMissing(current));
+
+  if (isMissing) {
     const next = generator();
     state.map.set(key, next);
     process.env[key] = next;
     changes.push(key);
-  } else {
-    state.map.set(key, current.trim());
-    process.env[key] = current.trim();
+    return;
   }
+
+  state.map.set(key, current);
+  process.env[key] = current;
 };
 
 const writeEnvFile = (state) => {
@@ -76,7 +86,16 @@ const main = () => {
 
   ensureValue('HOST', () => '0.0.0.0', state, changes);
   ensureValue('PORT', () => '1337', state, changes);
-  ensureValue('PUBLIC_URL', () => process.env.PUBLIC_URL || 'http://localhost:1337', state, changes);
+  ensureValue(
+    'PUBLIC_URL',
+    () => process.env.PUBLIC_URL || 'http://localhost:1337',
+    state,
+    changes,
+    {
+      treatAsMissing: (value) =>
+        typeof value === 'string' && /(^|\.)example\.com\b/i.test(value),
+    },
+  );
   ensureValue('APP_KEYS', randomKeys, state, changes);
   ensureValue('API_TOKEN_SALT', () => randomHex(16), state, changes);
   ensureValue('ADMIN_JWT_SECRET', () => randomHex(32), state, changes);
