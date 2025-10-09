@@ -1,5 +1,129 @@
 import { factories } from '@strapi/strapi';
 
+const readDocumentId = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return undefined;
+  }
+
+  if (typeof entity.documentId === 'string' && entity.documentId.trim().length > 0) {
+    return entity.documentId;
+  }
+
+  if (typeof entity.document_id === 'string' && entity.document_id.trim().length > 0) {
+    return entity.document_id;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+  if (attributes && typeof attributes.documentId === 'string' && attributes.documentId.trim().length > 0) {
+    return attributes.documentId;
+  }
+
+  return undefined;
+};
+
+const attachDocumentId = (sanitized, raw) => {
+  if (!sanitized) {
+    return sanitized;
+  }
+
+  if (Array.isArray(sanitized) && Array.isArray(raw)) {
+    return sanitized.map((item, index) => attachDocumentId(item, raw[index]));
+  }
+
+  if (Array.isArray(sanitized)) {
+    return sanitized;
+  }
+
+  const documentId = readDocumentId(raw);
+
+  if (!documentId || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+
+  if ('documentId' in sanitized && sanitized.documentId) {
+    return sanitized;
+  }
+
+  return {
+    ...sanitized,
+    documentId,
+  };
+};
+
+const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
+const DEFAULT_BODY_FONT_SCALE = 'default';
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
+
+const readCommentDefaultAuthor = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_COMMENT_AUTHOR;
+  }
+
+  const direct = entity.commentDefaultAuthor ?? entity.comment_default_author;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim();
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.commentDefaultAuthor ?? attributes.comment_default_author;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      return attributeValue.trim();
+    }
+  }
+
+  return DEFAULT_COMMENT_AUTHOR;
+};
+
+const readBodyFontScale = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const direct = entity.bodyFontScale ?? entity.body_font_scale;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    const normalized = direct.trim().toLowerCase();
+    return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.bodyFontScale ?? attributes.body_font_scale;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      const normalized = attributeValue.trim().toLowerCase();
+      return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+    }
+  }
+
+  return DEFAULT_BODY_FONT_SCALE;
+};
+
+const enrichPostEntity = (sanitized, raw) => {
+  const withDocument = attachDocumentId(sanitized, raw);
+
+  if (Array.isArray(withDocument)) {
+    if (Array.isArray(raw)) {
+      return withDocument.map((item, index) => enrichPostEntity(item, raw[index]));
+    }
+    return withDocument.map((item) => enrichPostEntity(item, raw));
+  }
+
+  if (!withDocument || typeof withDocument !== 'object') {
+    return withDocument;
+  }
+
+  const commentDefaultAuthor = readCommentDefaultAuthor(raw);
+  const bodyFontScale = readBodyFontScale(raw);
+
+  return {
+    ...withDocument,
+    commentDefaultAuthor,
+    bodyFontScale,
+  };
+};
+
 const ensurePublishedFilter = (filters = {}) => {
   const base = filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {};
   const publishedCondition = {
@@ -72,33 +196,68 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
+const MEDIA_POPULATE = { populate: '*' };
+
 const DEFAULT_POPULATE = {
-  cover: { populate: '*' },
+  cover: MEDIA_POPULATE,
   tags: { populate: '*' },
-  blocks: { populate: '*' },
+  blocks: '*',
 };
 
 const mergePopulate = (incoming) => {
   if (!incoming || incoming === 'deep' || incoming === '*') {
-    return DEFAULT_POPULATE;
+    return { ...DEFAULT_POPULATE };
   }
 
   if (Array.isArray(incoming)) {
-    const base = Array.from(new Set(incoming));
-    DEFAULT_POPULATE.cover && base.push('cover');
-    DEFAULT_POPULATE.tags && base.push('tags');
-    DEFAULT_POPULATE.blocks && base.push('blocks');
-    return Array.from(new Set(base));
-  }
+    const overrides = incoming.reduce((acc, key) => {
+      if (typeof key !== 'string' || !key) {
+        return acc;
+      }
+      if (DEFAULT_POPULATE[key]) {
+        acc[key] = DEFAULT_POPULATE[key];
+      } else {
+        acc[key] = true;
+      }
+      return acc;
+    }, {});
+    if (overrides.blocks && overrides.blocks !== '*') {
+      overrides.blocks = '*';
+    }
 
-  if (typeof incoming === 'object') {
     return {
       ...DEFAULT_POPULATE,
-      ...incoming,
+      ...overrides,
     };
   }
 
-  return incoming;
+  if (typeof incoming === 'string') {
+    const merged = {
+      ...DEFAULT_POPULATE,
+      [incoming]: DEFAULT_POPULATE[incoming] ?? true,
+    };
+
+    if (merged.blocks && merged.blocks !== '*') {
+      merged.blocks = '*';
+    }
+
+    return merged;
+  }
+
+  if (typeof incoming === 'object') {
+    const merged = {
+      ...DEFAULT_POPULATE,
+      ...incoming,
+    };
+
+    if (merged.blocks && merged.blocks !== '*') {
+      merged.blocks = '*';
+    }
+
+    return merged;
+  }
+
+  return { ...DEFAULT_POPULATE };
 };
 
 const applyDefaultSort = (query = {}) => {
@@ -120,7 +279,8 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
-    return this.transformResponse(sanitizedResults, { pagination });
+    const enrichedResults = enrichPostEntity(sanitizedResults, results);
+    return this.transformResponse(enrichedResults, { pagination });
   },
 
   async findOne(ctx) {
@@ -134,7 +294,8 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async findBySlug(ctx) {
@@ -165,7 +326,8 @@ export default factories.createCoreController('api::post.post', () => ({
     }
 
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async slugs(ctx) {

@@ -145,13 +145,40 @@ export const TWITCH = {
   parentHosts: twitchHosts,
 };
 
-const remarkHostRaw = import.meta.env.PUBLIC_REMARK42_HOST?.trim();
-const remarkHost = remarkHostRaw && remarkHostRaw.length > 0 ? remarkHostRaw : 'http://localhost:8080';
+export const CONSENT_DEFAULT_REGION = import.meta.env.CONSENT_DEFAULT_REGION ?? 'JP';
 
-export const REMARK42 = {
-  host: remarkHost,
-  siteId: import.meta.env.PUBLIC_REMARK42_SITE_ID ?? 'game-news',
-  locale: import.meta.env.PUBLIC_REMARK42_LOCALE ?? 'ja',
+const parseBoolean = (value: string | undefined, fallback: boolean) => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return fallback;
 };
 
-export const CONSENT_DEFAULT_REGION = import.meta.env.CONSENT_DEFAULT_REGION ?? 'JP';
+const parsePositiveInteger = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return fallback;
+};
+
+const sanitizeDefaultAuthorName = (value: string | undefined) => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : '名無しのユーザーさん';
+};
+
+export const COMMENTS = {
+  enabled: parseBoolean(import.meta.env.PUBLIC_COMMENTS_ENABLED, true),
+  requireApproval: parseBoolean(import.meta.env.PUBLIC_COMMENTS_REQUIRE_APPROVAL, true),
+  pageSize: parsePositiveInteger(import.meta.env.PUBLIC_COMMENTS_PAGE_SIZE, 50),
+  maxLength: parsePositiveInteger(import.meta.env.PUBLIC_COMMENTS_MAX_LENGTH, 1200),
+  defaultAuthorName: sanitizeDefaultAuthorName(import.meta.env.PUBLIC_COMMENTS_DEFAULT_AUTHOR),
+};
