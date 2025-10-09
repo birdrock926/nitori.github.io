@@ -198,50 +198,50 @@ const buildSlugFilter = (candidates = []) => {
 
 const MEDIA_POPULATE = { populate: '*' };
 
-const DEFAULT_BLOCKS_POPULATE = {
-  on: {
-    'content.rich-text': {},
-    'content.colored-text': {},
-    'media.figure': {
-      populate: {
-        image: MEDIA_POPULATE,
-      },
+const BLOCK_COMPONENT_POPULATE = {
+  'content.rich-text': {},
+  'content.colored-text': {},
+  'media.figure': {
+    populate: {
+      image: MEDIA_POPULATE,
     },
-    'media.gallery': {
-      populate: {
-        items: {
-          populate: {
-            image: MEDIA_POPULATE,
-          },
-        },
-      },
-    },
-    'embed.twitch-live': {},
-    'embed.twitch-vod': {},
-    'embed.youtube': {},
-    'layout.callout': {
-      populate: {
-        body: true,
-      },
-    },
-    'layout.columns': {
-      populate: {
-        columns: {
-          populate: {
-            body: true,
-          },
-        },
-      },
-    },
-    'layout.separator': {},
-    'ads.inline-slot': {},
   },
+  'media.gallery': {
+    populate: {
+      items: {
+        populate: {
+          image: MEDIA_POPULATE,
+        },
+      },
+    },
+  },
+  'embed.twitch-live': {},
+  'embed.twitch-vod': {},
+  'embed.youtube': {},
+  'layout.callout': {
+    populate: {
+      body: true,
+    },
+  },
+  'layout.columns': {
+    populate: {
+      columns: {
+        populate: {
+          body: true,
+        },
+      },
+    },
+  },
+  'layout.separator': {},
+  'ads.inline-slot': {},
 };
 
 const ensureBlocksPopulate = (value) => {
   const base = {
-    on: {
-      ...DEFAULT_BLOCKS_POPULATE.on,
+    populate: {
+      on: {
+        ...BLOCK_COMPONENT_POPULATE,
+      },
     },
   };
 
@@ -249,75 +249,85 @@ const ensureBlocksPopulate = (value) => {
     return base;
   }
 
-  const { on: onValue, populate, ...rest } = value;
-  const overrides = onValue && typeof onValue === 'object' && !Array.isArray(onValue) ? onValue : {};
+  const next = { ...base };
 
-  return {
-    ...rest,
-    on: {
-      ...DEFAULT_BLOCKS_POPULATE.on,
-      ...overrides,
-    },
+  if (value.count !== undefined) {
+    next.count = value.count;
+  }
+
+  if (value.fields) {
+    next.fields = value.fields;
+  }
+
+  if (value.filters) {
+    next.filters = value.filters;
+  }
+
+  if (value.sort) {
+    next.sort = value.sort;
+  }
+
+  const populateSection = (() => {
+    if (value.populate && typeof value.populate === 'object' && !Array.isArray(value.populate)) {
+      return value.populate;
+    }
+
+    if (value.on && typeof value.on === 'object' && !Array.isArray(value.on)) {
+      return { on: value.on };
+    }
+
+    return {};
+  })();
+
+  const overrides =
+    populateSection.on && typeof populateSection.on === 'object' && !Array.isArray(populateSection.on)
+      ? populateSection.on
+      : {};
+
+  next.populate.on = {
+    ...BLOCK_COMPONENT_POPULATE,
+    ...overrides,
   };
+
+  return next;
 };
 
-const DEFAULT_POPULATE = {
+const buildDefaultPopulate = () => ({
   cover: MEDIA_POPULATE,
   tags: { populate: '*' },
   blocks: ensureBlocksPopulate(),
-};
-
-const mergePopulate = (incoming) => {
-  if (!incoming || incoming === 'deep' || incoming === '*') {
-    return normalizePopulate({ ...DEFAULT_POPULATE });
-  }
-
-  if (Array.isArray(incoming)) {
-    const overrides = incoming.reduce((acc, key) => {
-      if (typeof key !== 'string' || !key) {
-        return acc;
-      }
-      if (DEFAULT_POPULATE[key]) {
-        acc[key] = DEFAULT_POPULATE[key];
-      } else {
-        acc[key] = true;
-      }
-      return acc;
-    }, {});
-    return normalizePopulate({
-      ...DEFAULT_POPULATE,
-      ...overrides,
-    });
-  }
-
-  if (typeof incoming === 'string') {
-    const merged = {
-      ...DEFAULT_POPULATE,
-      [incoming]: DEFAULT_POPULATE[incoming] ?? true,
-    };
-    return normalizePopulate(merged);
-  }
-
-  if (typeof incoming === 'object') {
-    const merged = {
-      ...DEFAULT_POPULATE,
-      ...incoming,
-    };
-    return normalizePopulate(merged);
-  }
-
-  return normalizePopulate({ ...DEFAULT_POPULATE });
-};
+});
 
 const normalizePopulate = (populate) => {
-  if (!populate || typeof populate !== 'object' || Array.isArray(populate)) {
-    return { ...DEFAULT_POPULATE };
+  const base = buildDefaultPopulate();
+
+  if (!populate || populate === '*' || populate === 'deep') {
+    return base;
   }
 
-  const next = { ...populate };
-  next.blocks = ensureBlocksPopulate(next.blocks);
+  if (Array.isArray(populate)) {
+    return populate.reduce((acc, key) => {
+      if (typeof key === 'string' && key) {
+        if (key === 'blocks') {
+          acc.blocks = ensureBlocksPopulate();
+        } else {
+          acc[key] = base[key] ?? true;
+        }
+      }
+      return acc;
+    }, { ...base });
+  }
+
+  if (typeof populate !== 'object') {
+    return base;
+  }
+
+  const next = { ...base, ...populate };
+  next.blocks = ensureBlocksPopulate(populate.blocks ?? populate);
   return next;
 };
+
+const mergePopulate = (incoming) => normalizePopulate(incoming);
 
 const applyDefaultSort = (query = {}) => {
   if (!query.sort) {
@@ -330,13 +340,18 @@ export default factories.createCoreController('api::post.post', () => ({
   async find(ctx) {
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
-    ctx.query.populate = mergePopulate(ctx.query.populate);
+    const populate = mergePopulate(ctx.query.populate);
+    ctx.query.populate = populate;
     ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
+    const finalQuery = {
+      ...sanitizedQuery,
+      populate,
+    };
 
-    const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
+    const { results, pagination } = await strapi.service('api::post.post').find(finalQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
     const enrichedResults = enrichPostEntity(sanitizedResults, results);
     return this.transformResponse(enrichedResults, { pagination });
@@ -345,13 +360,18 @@ export default factories.createCoreController('api::post.post', () => ({
   async findOne(ctx) {
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
-    ctx.query.populate = mergePopulate(ctx.query.populate);
+    const populate = mergePopulate(ctx.query.populate);
+    ctx.query.populate = populate;
     ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
+    const finalQuery = {
+      ...sanitizedQuery,
+      populate,
+    };
 
-    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
+    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, finalQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
     const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
     return this.transformResponse(enrichedEntity);
@@ -373,7 +393,7 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const query = {
       filters: ensurePublishedFilter(slugFilter),
-      populate: normalizePopulate({ ...DEFAULT_POPULATE }),
+      populate: buildDefaultPopulate(),
       limit: 1,
     };
 
