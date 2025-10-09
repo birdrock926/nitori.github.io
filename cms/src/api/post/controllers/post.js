@@ -199,17 +199,17 @@ const buildSlugFilter = (candidates = []) => {
 const MEDIA_POPULATE = { populate: '*' };
 
 const BLOCK_COMPONENT_POPULATE = {
-  'content.rich-text': true,
-  'content.colored-text': true,
-  'media.figure': MEDIA_POPULATE,
-  'media.gallery': { populate: '*' },
-  'embed.twitch-live': true,
-  'embed.twitch-vod': true,
-  'embed.youtube': true,
-  'layout.callout': { populate: '*' },
-  'layout.columns': { populate: '*' },
-  'layout.separator': true,
-  'ads.inline-slot': true,
+  'content.rich-text': '*',
+  'content.colored-text': '*',
+  'media.figure': '*',
+  'media.gallery': '*',
+  'embed.twitch-live': '*',
+  'embed.twitch-vod': '*',
+  'embed.youtube': '*',
+  'layout.callout': '*',
+  'layout.columns': '*',
+  'layout.separator': '*',
+  'ads.inline-slot': '*',
 };
 
 const ensureBlocksPopulate = (value) => {
@@ -260,10 +260,33 @@ const ensureBlocksPopulate = (value) => {
       ? populateSection.on
       : {};
 
-  next.populate.on = {
+  next.populate.on = Object.entries({
     ...BLOCK_COMPONENT_POPULATE,
     ...overrides,
-  };
+  }).reduce((acc, [component, populateValue]) => {
+    if (populateValue === undefined || populateValue === null) {
+      return acc;
+    }
+
+    if (populateValue === '*' || populateValue === 'count') {
+      acc[component] = populateValue;
+      return acc;
+    }
+
+    if (typeof populateValue === 'object' && !Array.isArray(populateValue)) {
+      const normalized = { ...populateValue };
+
+      if (normalized.populate && normalized.populate !== '*' && normalized.populate !== 'count') {
+        normalized.populate = '*';
+      }
+
+      acc[component] = normalized;
+      return acc;
+    }
+
+    acc[component] = '*';
+    return acc;
+  }, {});
 
   return next;
 };
