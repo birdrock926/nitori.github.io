@@ -198,15 +198,78 @@ const buildSlugFilter = (candidates = []) => {
 
 const MEDIA_POPULATE = { populate: '*' };
 
+const DEFAULT_BLOCKS_POPULATE = {
+  on: {
+    'content.rich-text': {},
+    'content.colored-text': {},
+    'media.figure': {
+      populate: {
+        image: MEDIA_POPULATE,
+      },
+    },
+    'media.gallery': {
+      populate: {
+        items: {
+          populate: {
+            image: MEDIA_POPULATE,
+          },
+        },
+      },
+    },
+    'embed.twitch-live': {},
+    'embed.twitch-vod': {},
+    'embed.youtube': {},
+    'layout.callout': {
+      populate: {
+        body: true,
+      },
+    },
+    'layout.columns': {
+      populate: {
+        columns: {
+          populate: {
+            body: true,
+          },
+        },
+      },
+    },
+    'layout.separator': {},
+    'ads.inline-slot': {},
+  },
+};
+
+const ensureBlocksPopulate = (value) => {
+  const base = {
+    on: {
+      ...DEFAULT_BLOCKS_POPULATE.on,
+    },
+  };
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return base;
+  }
+
+  const { on: onValue, populate, ...rest } = value;
+  const overrides = onValue && typeof onValue === 'object' && !Array.isArray(onValue) ? onValue : {};
+
+  return {
+    ...rest,
+    on: {
+      ...DEFAULT_BLOCKS_POPULATE.on,
+      ...overrides,
+    },
+  };
+};
+
 const DEFAULT_POPULATE = {
   cover: MEDIA_POPULATE,
   tags: { populate: '*' },
-  blocks: '*',
+  blocks: ensureBlocksPopulate(),
 };
 
 const mergePopulate = (incoming) => {
   if (!incoming || incoming === 'deep' || incoming === '*') {
-    return { ...DEFAULT_POPULATE };
+    return normalizePopulate({ ...DEFAULT_POPULATE });
   }
 
   if (Array.isArray(incoming)) {
@@ -221,14 +284,10 @@ const mergePopulate = (incoming) => {
       }
       return acc;
     }, {});
-    if (overrides.blocks && overrides.blocks !== '*') {
-      overrides.blocks = '*';
-    }
-
-    return {
+    return normalizePopulate({
       ...DEFAULT_POPULATE,
       ...overrides,
-    };
+    });
   }
 
   if (typeof incoming === 'string') {
@@ -236,12 +295,7 @@ const mergePopulate = (incoming) => {
       ...DEFAULT_POPULATE,
       [incoming]: DEFAULT_POPULATE[incoming] ?? true,
     };
-
-    if (merged.blocks && merged.blocks !== '*') {
-      merged.blocks = '*';
-    }
-
-    return merged;
+    return normalizePopulate(merged);
   }
 
   if (typeof incoming === 'object') {
@@ -249,15 +303,20 @@ const mergePopulate = (incoming) => {
       ...DEFAULT_POPULATE,
       ...incoming,
     };
-
-    if (merged.blocks && merged.blocks !== '*') {
-      merged.blocks = '*';
-    }
-
-    return merged;
+    return normalizePopulate(merged);
   }
 
-  return { ...DEFAULT_POPULATE };
+  return normalizePopulate({ ...DEFAULT_POPULATE });
+};
+
+const normalizePopulate = (populate) => {
+  if (!populate || typeof populate !== 'object' || Array.isArray(populate)) {
+    return { ...DEFAULT_POPULATE };
+  }
+
+  const next = { ...populate };
+  next.blocks = ensureBlocksPopulate(next.blocks);
+  return next;
 };
 
 const applyDefaultSort = (query = {}) => {
@@ -314,7 +373,7 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const query = {
       filters: ensurePublishedFilter(slugFilter),
-      populate: DEFAULT_POPULATE,
+      populate: normalizePopulate({ ...DEFAULT_POPULATE }),
       limit: 1,
     };
 
