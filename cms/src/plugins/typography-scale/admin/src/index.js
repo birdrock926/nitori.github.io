@@ -2,7 +2,7 @@ import pluginPkg from '../../package.json';
 import pluginId from './pluginId';
 import register from './register';
 import bootstrap from './bootstrap';
-import { prefixPluginTranslations } from '@strapi/helper-plugin';
+import prefixPluginTranslations from './utils/prefixPluginTranslations';
 
 const name = pluginPkg.strapi?.name || pluginPkg.name;
 

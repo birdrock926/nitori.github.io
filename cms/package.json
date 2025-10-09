@@ -23,7 +23,6 @@
     "@codemirror/theme-one-dark": "6.1.2",
     "@codemirror/view": "6.28.3",
     "@strapi/icons": "2.0.0-rc.30",
-    "@strapi/helper-plugin": "5.26.0",
     "@strapi/admin": "5.26.0",
     "@strapi/content-manager": "5.26.0",
     "@strapi/content-type-builder": "5.26.0",
