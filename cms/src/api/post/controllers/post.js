@@ -196,7 +196,37 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
-const buildDefaultPopulate = () => '*';
+const BLOCK_COMPONENTS = [
+  'content.rich-text',
+  'content.colored-text',
+  'media.figure',
+  'media.gallery',
+  'embed.twitch-live',
+  'embed.twitch-vod',
+  'embed.youtube',
+  'layout.callout',
+  'layout.columns',
+  'layout.separator',
+  'ads.inline-slot',
+];
+
+const DEFAULT_BLOCK_POPULATE = BLOCK_COMPONENTS.reduce((acc, component) => {
+  acc[component] = '*';
+  return acc;
+}, {});
+
+const DEFAULT_POPULATE = {
+  cover: '*',
+  tags: '*',
+  blocks: {
+    populate: '*',
+    on: DEFAULT_BLOCK_POPULATE,
+  },
+};
+
+const clonePopulate = (source) => JSON.parse(JSON.stringify(source));
+
+const buildDefaultPopulate = () => clonePopulate(DEFAULT_POPULATE);
 
 const mergePopulate = () => buildDefaultPopulate();
 
