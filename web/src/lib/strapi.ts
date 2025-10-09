@@ -31,6 +31,7 @@ export type DynamicZoneBlock =
   | {
       __component: 'content.rich-text';
       body: string;
+      fontScale?: number;
     }
   | {
       __component: 'content.colored-text';
@@ -120,6 +121,8 @@ export type RankingItem = {
 };
 
 const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
+const RICH_TEXT_FONT_SCALE_MIN = 0.7;
+const RICH_TEXT_FONT_SCALE_MAX = 1.8;
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
@@ -299,6 +302,35 @@ const extractRichBody = (value: any): string => {
 
 const toObject = (value: any) => (value && typeof value === 'object' ? value : {});
 
+const clampRichTextScale = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    const clamped = Math.min(RICH_TEXT_FONT_SCALE_MAX, Math.max(RICH_TEXT_FONT_SCALE_MIN, value));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number.parseFloat(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    const clamped = Math.min(RICH_TEXT_FONT_SCALE_MAX, Math.max(RICH_TEXT_FONT_SCALE_MIN, parsed));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  return null;
+};
+
 const slugify = (value: string) =>
   value
     .trim()
@@ -332,10 +364,15 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
   }
 
   if (block.__component === 'content.rich-text') {
-    return {
+    const fontScale = clampRichTextScale(block.fontScale ?? block.font_scale);
+    const normalized: DynamicZoneBlock = {
       __component: 'content.rich-text',
       body: extractRichBody(block.body ?? block.content ?? block.value),
     };
+    if (fontScale !== null) {
+      normalized.fontScale = fontScale;
+    }
+    return normalized;
   }
 
   if (block.__component === 'content.colored-text') {

@@ -10,6 +10,76 @@ const sanitizeSlug = (value = '') =>
 const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
 const DEFAULT_BODY_FONT_SCALE = 'default';
 const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
+const RICH_TEXT_SCALE_MIN = 0.7;
+const RICH_TEXT_SCALE_MAX = 1.8;
+
+const parseScaleValue = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number.parseFloat(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const clampScaleValue = (value) => {
+  const numeric = parseScaleValue(value);
+  if (numeric === null) {
+    return null;
+  }
+
+  const clamped = Math.min(RICH_TEXT_SCALE_MAX, Math.max(RICH_TEXT_SCALE_MIN, numeric));
+  return Math.round(clamped * 100) / 100;
+};
+
+const normalizeRichTextBlock = (block) => {
+  if (!block || typeof block !== 'object') {
+    return block;
+  }
+
+  if (block.__component !== 'content.rich-text') {
+    return block;
+  }
+
+  const next = { ...block };
+  const normalizedScale = clampScaleValue(next.fontScale ?? next.font_scale ?? null);
+
+  if (normalizedScale === null) {
+    delete next.fontScale;
+  } else {
+    next.fontScale = normalizedScale;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(next, 'font_scale')) {
+    delete next.font_scale;
+  }
+
+  return next;
+};
+
+const applyRichTextFontScale = (data) => {
+  if (!data || typeof data !== 'object') {
+    return;
+  }
+
+  if (!Array.isArray(data.blocks)) {
+    return;
+  }
+
+  data.blocks = data.blocks.map((block) => normalizeRichTextBlock(block));
+};
 
 const normalizeId = (value) => {
   if (typeof value === 'number') return value;
@@ -146,10 +216,12 @@ export default {
     await ensureUniqueSlug(event);
     applyDefaultCommentAuthor(event?.params?.data);
     applyBodyFontScale(event?.params?.data);
+    applyRichTextFontScale(event?.params?.data);
   },
   async beforeUpdate(event) {
     await ensureUniqueSlug(event);
     applyDefaultCommentAuthor(event?.params?.data, { requireExistingField: true });
     applyBodyFontScale(event?.params?.data, { requireExistingField: true });
+    applyRichTextFontScale(event?.params?.data);
   },
 };

@@ -59,12 +59,14 @@
 - テーマ（ライト/ダーク）・読みやすいタイポ・スケルトン/LQIP・アクセシビリティ AA 準拠  
 - トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング  
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
+  - Rich Text ブロックごとに Strapi 管理画面の「文字サイズ倍率」スライダーで本文サイズを調整でき、未設定時は記事既定値を自動適用
 
 ## データモデル（抜粋）
 - **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
+  - RichText ブロックはカスタムフィールド「文字サイズ倍率」で記事既定値（default/large/xlarge）に対する倍率を 0.7〜1.8 倍の範囲で設定できます
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー

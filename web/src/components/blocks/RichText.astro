@@ -1,8 +1,23 @@
+const MIN_SCALE = 0.7;
+const MAX_SCALE = 1.8;
+
+const { body, fontScale } = Astro.props as { body: string; fontScale?: number };
+
+const clampScale = (value: number) => Math.round(Math.min(MAX_SCALE, Math.max(MIN_SCALE, value)) * 100) / 100;
+const normalizedScale =
+  typeof fontScale === 'number' && Number.isFinite(fontScale) ? clampScale(fontScale) : null;
 ---
-const { body } = Astro.props as { body: string };
----
-<div class="richtext" set:html={body}></div>
+<div
+  class="richtext"
+  style={normalizedScale !== null ? { '--richtext-scale': normalizedScale } : undefined}
+  set:html={body}
+></div>
 <style>
+.richtext {
+  --richtext-scale: 1;
+  font-size: calc(var(--article-font-size) * var(--richtext-scale));
+  line-height: calc(var(--article-line-height) * clamp(0.9, var(--richtext-scale), 1.35));
+}
 .richtext :global(p) {
   margin: 0 0 1rem;
 }
