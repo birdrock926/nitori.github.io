@@ -21,7 +21,7 @@
 - **フロント（/web）**：Astro SSG
   - 記事は**Strapi の published のみ**をビルド時取得
   - **Dynamic Zone**を React コンポーネントにマップ（RichText / ColoredText / Figure / Gallery / Columns / Callout / Separator / Twitch / YouTube / Inline Ad Slot）
-- **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事の Document ID をスレッドキーとして利用（数値 ID や slug で保存されていた既存レコードも起動時に Document ID へ自動補正）。React 島がフォームとツリー UI を提供。
+- **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事のエントリー ID をスレッドキーとして利用（Document ID や slug で保存されていた既存レコードも起動時にエントリー ID へ自動補正）。React 島がフォームとツリー UI を提供。
 - **CMS（/cms）**：Strapi v5
   - 記事・タグ・メディア・埋め込みブロックを GUI で管理
   - **Webhook** が GitHub Actions を起動し、Cloudflare Pages へ再デプロイ
@@ -45,7 +45,7 @@
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
 - **Strapi 管理画面**内のプラグインタブからコメントの承認／削除／エディット／通報確認／エクスポートを一元管理。
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
-- **REST API**：`/api/comments/api::post.post:<documentId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（数値 ID や slug を指定した古い投稿は起動時に自動で Document ID へ補正）。
+- **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Document ID や slug を指定した古い投稿は自動でエントリー ID へ補正し、必要に応じてフォールバックします）。
 - **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
 - **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。
 
@@ -61,11 +61,11 @@
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
 
 ## データモデル（抜粋）
-- **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor`
+- **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-- **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) の Document ID と紐付け
+- **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー
 1. **編集**：Strapi GUI で記事作成 → 画像アップ → ブロック配置 → 下書き保存  
@@ -205,10 +205,10 @@
 1. `.env` の `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` を実運用の URL / 連絡先に更新します（開発では `scripts/ensure-env.mjs` がプレースホルダーを自動生成します）。
 2. Strapi 管理画面へログインし、左メニューの **Plugins → Comments** でモデレーションポリシー（承認フロー、禁止ワード、通知先など）を調整します。承認フローを有効にするとコメントは「保留」として保存され、公開操作を行うまでフロントには表示されません。
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` / `Comments: Report abuse` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
-4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<documentId>` です。Astro 側は Strapi の Document ID をスレッドキーとして利用し、React 製のコメント UI が投稿・返信・ツリー表示を行います（数値 ID や slug を指定した古い投稿は起動時に自動補正されます）。
+4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<entryId>` です。Astro 側は投稿のエントリー ID をスレッドキーとして利用し、Document ID や slug が渡された場合でもバックエンドが自動的に補正して処理します。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。ニックネーム欄は空欄でも投稿でき、その場合は記事に設定したデフォルト名（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値）が自動で表示に使われます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
 6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます（メール欄は任意入力で、未入力の場合は通知されません）。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
-7. Post コンテンツタイプには「コメント用デフォルト名」フィールドを追加しています。記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。
+7. Post コンテンツタイプには「コメント用デフォルト名」と「本文フォントサイズ」フィールドを追加しています。前者は記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。後者は本文全体のフォント倍率（標準/やや大きい/大きい）を CMS から選択でき、視認性を記事単位で調整できます。
 
 ##### トラブルシューティング
 
@@ -369,7 +369,7 @@ npm run preview
 ### 通報・監視とバックアップ
 
 - `Reported` タブでは読者の通報を一覧できます。対応後は **Report resolved** を押して履歴を残してください。Slack やメールに転送したい場合は Strapi Webhook を利用すると自動連携できます。
-- コメントは Strapi 管理画面の **Comments → All** で確認できます。数値 ID や slug で投稿されていた古いコメントも、起動時の正規化処理によって Document ID に変換されるため、リロードすれば該当記事のスレッドが表示されます。
+- コメントは Strapi 管理画面の **Comments → All** で確認できます。Document ID や slug で投稿されていた古いコメントも、起動時の正規化処理によってエントリー ID に変換されるため、リロードすれば該当記事のスレッドが表示されます。
 - フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。`スパム` など独自の理由はバックエンドで `OTHER / BAD_LANGUAGE / DISCRIMINATION` のいずれかに正規化され、元の入力内容はメモとして追記されるため、管理画面で迷子になりません。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
 - SMTP を設定しておくと、新着コメントや通報をメールで即時受け取れます。SPF/DKIM を整備し、迷惑メール判定されないようにしてください。
 - コメントデータのバックアップは **Content Manager → plugin::comments.comment → Export** で CSV/JSON を取得できます。月次のエクスポートと DB スナップショットを併用すると、誤削除時のリカバリが容易になります。
@@ -433,7 +433,7 @@ Cloudflare Pages ではプロジェクト設定から独自ドメインを追加
 - **Strapi が起動しない**：`npm run build -- --clean` を実行し、`node_modules` を削除後再インストール
 - **Webhook が失敗する**：Strapi ログと GitHub Actions の `workflow_dispatch` イベントログを確認
 - **コメントが投稿できない／フォームが表示されない**：Strapi の `Public` 役割に `Comments: Read` / `Comments: Create` が付与されているか、`STRAPI_API_URL` がフロントの `.env` に設定されているかを確認してください。ブラウザの開発者ツールで `/api/comments/...` へのリクエストが 401 / 403 になっていないか、CORS ヘッダーが正しく返っているかを併せて確認します。
-- **Comments タブに投稿が表示されない**：Strapi を再起動すると bootstrap が `api::post.post:<documentId>` 形式の `related` へ自動正規化します。ログに `Normalized ... comment relations` が出力されるまで待機し、管理画面をリロードしてください。
+- **Comments タブに投稿が表示されない**：Strapi を再起動すると bootstrap が `api::post.post:<entryId>` 形式の `related` へ自動正規化します。ログに `Normalized ... comment relations` が出力されるまで待機し、管理画面をリロードしてください。
 - **Strapi ビルド時の `Bus error` (SIGBUS)**：Node 20 + Alpine でも動作するよう CLI をパッチ済みですが、メモリ 2GB 未満の環境では Vite が落ちる可能性があります。`npm run build` 実行前にメモリ割り当てを増やすか、公式 `strapi/strapi:5`（Node 18 ベース）でビルドする方法、またはローカルでビルド済み成果物をマウントする方法に切り替えてください。
 - **`ERR_UNSUPPORTED_DIR_IMPORT: lodash/fp`**：本リポジトリでは `patch-package` と `scripts/run-strapi.mjs` により解消済みです。もし再発した場合は `npm install` でパッチが適用されているか確認し、独自に Strapi をアップグレードした際は `NODE_OPTIONS=--experimental-specifier-resolution=node npm run develop` を一時的に指定するか、Docker/Node 18 での実行を検討してください。
 - **npm error ENOENT: Cannot cd into ... typescript**：`/cms/package.json` の `devDependencies` に `"typescript": "5.4.5"` を追加し、`rm -rf node_modules package-lock.json && npm install` を実行してください。本リポジトリには修正済みの定義が含まれています。

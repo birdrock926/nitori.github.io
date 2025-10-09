@@ -20,6 +20,20 @@ const coerceDocumentId = (post) => {
   return null;
 };
 
+const coerceRelationId = (post) => {
+  if (!post) {
+    return null;
+  }
+
+  const value = post.id ?? post.entryId ?? post.entry_id;
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.trunc(parsed);
+  }
+
+  return null;
+};
+
 const fetchPostByWhere = async (where) => {
   try {
     return await strapi.db.query(POST_UID).findOne({ where, select: ['id', 'documentId', 'document_id', 'slug'] });
@@ -29,7 +43,7 @@ const fetchPostByWhere = async (where) => {
   }
 };
 
-const resolveDocumentId = async (identifier) => {
+const resolveRelationId = async (identifier) => {
   if (!identifier) {
     return null;
   }
@@ -38,14 +52,14 @@ const resolveDocumentId = async (identifier) => {
     return relationCache.get(identifier);
   }
 
-  let documentId = null;
+  let relationId = null;
 
   if (NUMERIC_PATTERN.test(identifier)) {
     const post = await fetchPostByWhere({ id: Number(identifier) });
-    documentId = coerceDocumentId(post);
+    relationId = coerceRelationId(post);
   }
 
-  if (!documentId) {
+  if (!relationId) {
     const direct = await fetchPostByWhere({
       $or: [
         { documentId: identifier },
@@ -54,17 +68,23 @@ const resolveDocumentId = async (identifier) => {
     });
 
     if (direct) {
-      documentId = coerceDocumentId(direct) || identifier;
+      relationId = coerceRelationId(direct);
+      if (!relationId) {
+        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
+        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
+          relationId = Math.trunc(Number(fallbackDocumentId));
+        }
+      }
     }
   }
 
-  if (!documentId) {
+  if (!relationId) {
     const bySlug = await fetchPostByWhere({ slug: identifier });
-    documentId = coerceDocumentId(bySlug);
+    relationId = coerceRelationId(bySlug);
   }
 
-  relationCache.set(identifier, documentId);
-  return documentId;
+  relationCache.set(identifier, relationId);
+  return relationId;
 };
 
 const normalizeRelation = async (relation) => {
@@ -77,12 +97,12 @@ const normalizeRelation = async (relation) => {
     return relation;
   }
 
-  const documentId = await resolveDocumentId(identifier);
-  if (!documentId) {
+  const relationId = await resolveRelationId(identifier);
+  if (!relationId) {
     return relation;
   }
 
-  return `${RELATION_PREFIX}${documentId}`;
+  return `${RELATION_PREFIX}${relationId}`;
 };
 
 const mapReportReason = (value) => {
@@ -171,6 +191,10 @@ export default (plugin) => {
         if (typeof originalReason === 'string' && canonicalOriginal !== mapped) {
           normalizedParams.content = annotateContent(normalizedParams.content, originalReason.trim());
         }
+      }
+
+      if (typeof normalizedParams.relation === 'string') {
+        normalizedParams.relation = await normalizeRelation(normalizedParams.relation);
       }
 
       return baseReportAbuse.call(this, normalizedParams, user);

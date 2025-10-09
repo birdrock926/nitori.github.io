@@ -9,6 +9,7 @@ const COMMENT_ACTIONS = [
 const COMMENT_ROLES = ['public', 'authenticated'];
 const COMMENT_RELATION_PREFIX = 'api::post.post:';
 const POST_UID = 'api::post.post';
+const NUMERIC_PATTERN = /^\d+$/;
 
 const coerceDocumentId = (post) => {
   if (!post) {
@@ -26,16 +27,32 @@ const coerceDocumentId = (post) => {
   return null;
 };
 
+const coerceRelationId = (post) => {
+  if (!post) {
+    return null;
+  }
+
+  const idValue = post.id ?? post.entryId ?? post.entry_id;
+  const parsed = Number(idValue);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.trunc(parsed);
+  }
+
+  return null;
+};
+
 const fetchPostByWhere = async (strapi, where) => {
   try {
-    return await strapi.db.query(POST_UID).findOne({ where, select: ['id', 'documentId', 'document_id', 'slug'] });
+    return await strapi.db
+      .query(POST_UID)
+      .findOne({ where, select: ['id', 'documentId', 'document_id', 'slug'] });
   } catch (error) {
     strapi.log.error('[comments] Failed to resolve post for relation normalization.', error);
     return null;
   }
 };
 
-const resolvePostDocumentId = async (strapi, identifier, cache) => {
+const resolvePostRelationId = async (strapi, identifier, cache) => {
   if (!identifier) {
     return null;
   }
@@ -44,15 +61,18 @@ const resolvePostDocumentId = async (strapi, identifier, cache) => {
     return cache.get(identifier);
   }
 
-  let documentId = null;
+  let relationId = null;
 
-  const numeric = Number(identifier);
-  if (Number.isFinite(numeric) && numeric > 0) {
-    const post = await fetchPostByWhere(strapi, { id: Math.trunc(numeric) });
-    documentId = coerceDocumentId(post);
+  if (NUMERIC_PATTERN.test(identifier)) {
+    const post = await fetchPostByWhere(strapi, { id: Math.trunc(Number(identifier)) });
+    relationId = coerceRelationId(post);
+    if (relationId) {
+      cache.set(identifier, relationId);
+      return relationId;
+    }
   }
 
-  if (!documentId) {
+  if (!relationId) {
     const direct = await fetchPostByWhere(strapi, {
       $or: [
         { documentId: identifier },
@@ -61,18 +81,24 @@ const resolvePostDocumentId = async (strapi, identifier, cache) => {
     });
 
     if (direct) {
-      documentId = coerceDocumentId(direct) || identifier;
+      relationId = coerceRelationId(direct);
+      if (!relationId) {
+        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
+        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
+          relationId = Math.trunc(Number(fallbackDocumentId));
+        }
+      }
     }
   }
 
-  if (!documentId) {
+  if (!relationId) {
     const bySlug = await fetchPostByWhere(strapi, { slug: identifier });
-    documentId = coerceDocumentId(bySlug);
+    relationId = coerceRelationId(bySlug);
   }
 
-  if (documentId) {
-    cache.set(identifier, documentId);
-    return documentId;
+  if (relationId) {
+    cache.set(identifier, relationId);
+    return relationId;
   }
 
   cache.set(identifier, null);
@@ -107,12 +133,12 @@ const normalizeCommentRelations = async (strapi) => {
         continue;
       }
 
-      const resolvedDocumentId = await resolvePostDocumentId(strapi, identifier, cache);
-      if (!resolvedDocumentId) {
+      const resolvedRelationId = await resolvePostRelationId(strapi, identifier, cache);
+      if (!resolvedRelationId) {
         continue;
       }
 
-      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedDocumentId}`;
+      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedRelationId}`;
       if (normalizedRelation === comment.related) {
         continue;
       }
@@ -125,7 +151,7 @@ const normalizeCommentRelations = async (strapi) => {
     }
 
     if (normalizedCount > 0) {
-      strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to document-based identifiers.`);
+      strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to entry IDs.`);
     }
   } catch (error) {
     strapi.log.error('[comments] Failed to normalize comment relations.', error);

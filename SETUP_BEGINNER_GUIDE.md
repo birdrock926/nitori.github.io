@@ -183,8 +183,8 @@ npm run dev
 - ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
-  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<documentId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
-  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `documentId`（必須）と `id`（数値 ID／フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID が欠けていても Strapi 起動時の正規化処理が数値 ID や slug を Document ID へ変換しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
+  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
+  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
 
@@ -198,7 +198,7 @@ npm run dev
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
 7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
-8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名を変えたい場合は Post エディタでフィールドを更新してください。
+8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
 
 
 ### 6-4. ブロックエディタで装飾する

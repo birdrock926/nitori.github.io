@@ -8,6 +8,8 @@ const sanitizeSlug = (value = '') =>
     .replace(/^[-]+|[-]+$/g, '');
 
 const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
+const DEFAULT_BODY_FONT_SCALE = 'default';
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 
 const normalizeId = (value) => {
   if (typeof value === 'number') return value;
@@ -105,13 +107,49 @@ const applyDefaultCommentAuthor = (data, { requireExistingField = false } = {}) 
   });
 };
 
+const BODY_FONT_SCALE_KEYS = ['bodyFontScale', 'body_font_scale'];
+
+const applyBodyFontScale = (data, { requireExistingField = false } = {}) => {
+  if (!data || typeof data !== 'object') {
+    return;
+  }
+
+  const hasKey = BODY_FONT_SCALE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(data, key));
+
+  if (!hasKey) {
+    if (requireExistingField) {
+      return;
+    }
+    data.bodyFontScale = DEFAULT_BODY_FONT_SCALE;
+    return;
+  }
+
+  const key = BODY_FONT_SCALE_KEYS.find((candidate) => Object.prototype.hasOwnProperty.call(data, candidate));
+  const value = key ? data[key] : data.bodyFontScale;
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    data.bodyFontScale = BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+  } else if (value === null || value === undefined) {
+    data.bodyFontScale = DEFAULT_BODY_FONT_SCALE;
+  }
+
+  BODY_FONT_SCALE_KEYS.forEach((candidate) => {
+    if (candidate !== 'bodyFontScale' && Object.prototype.hasOwnProperty.call(data, candidate)) {
+      delete data[candidate];
+    }
+  });
+};
+
 export default {
   async beforeCreate(event) {
     await ensureUniqueSlug(event);
     applyDefaultCommentAuthor(event?.params?.data);
+    applyBodyFontScale(event?.params?.data);
   },
   async beforeUpdate(event) {
     await ensureUniqueSlug(event);
     applyDefaultCommentAuthor(event?.params?.data, { requireExistingField: true });
+    applyBodyFontScale(event?.params?.data, { requireExistingField: true });
   },
 };

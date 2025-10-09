@@ -51,6 +51,8 @@ const attachDocumentId = (sanitized, raw) => {
 };
 
 const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
+const DEFAULT_BODY_FONT_SCALE = 'default';
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 
 const readCommentDefaultAuthor = (entity) => {
   if (!entity || typeof entity !== 'object') {
@@ -74,6 +76,30 @@ const readCommentDefaultAuthor = (entity) => {
   return DEFAULT_COMMENT_AUTHOR;
 };
 
+const readBodyFontScale = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const direct = entity.bodyFontScale ?? entity.body_font_scale;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    const normalized = direct.trim().toLowerCase();
+    return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.bodyFontScale ?? attributes.body_font_scale;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      const normalized = attributeValue.trim().toLowerCase();
+      return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+    }
+  }
+
+  return DEFAULT_BODY_FONT_SCALE;
+};
+
 const enrichPostEntity = (sanitized, raw) => {
   const withDocument = attachDocumentId(sanitized, raw);
 
@@ -89,14 +115,12 @@ const enrichPostEntity = (sanitized, raw) => {
   }
 
   const commentDefaultAuthor = readCommentDefaultAuthor(raw);
-
-  if (withDocument.commentDefaultAuthor === commentDefaultAuthor) {
-    return withDocument;
-  }
+  const bodyFontScale = readBodyFontScale(raw);
 
   return {
     ...withDocument,
     commentDefaultAuthor,
+    bodyFontScale,
   };
 };
 
@@ -172,23 +196,65 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
+const MEDIA_POPULATE = { populate: '*' };
+
 const DEFAULT_POPULATE = {
-  cover: { populate: '*' },
+  cover: MEDIA_POPULATE,
   tags: { populate: '*' },
-  blocks: { populate: '*' },
+  blocks: {
+    populate: {
+      image: MEDIA_POPULATE,
+      media: MEDIA_POPULATE,
+      items: {
+        populate: {
+          image: MEDIA_POPULATE,
+          media: MEDIA_POPULATE,
+        },
+      },
+      gallery: {
+        populate: {
+          image: MEDIA_POPULATE,
+          media: MEDIA_POPULATE,
+          items: {
+            populate: {
+              image: MEDIA_POPULATE,
+              media: MEDIA_POPULATE,
+            },
+          },
+        },
+      },
+    },
+  },
 };
 
 const mergePopulate = (incoming) => {
   if (!incoming || incoming === 'deep' || incoming === '*') {
-    return DEFAULT_POPULATE;
+    return { ...DEFAULT_POPULATE };
   }
 
   if (Array.isArray(incoming)) {
-    const base = Array.from(new Set(incoming));
-    DEFAULT_POPULATE.cover && base.push('cover');
-    DEFAULT_POPULATE.tags && base.push('tags');
-    DEFAULT_POPULATE.blocks && base.push('blocks');
-    return Array.from(new Set(base));
+    const overrides = incoming.reduce((acc, key) => {
+      if (typeof key !== 'string' || !key) {
+        return acc;
+      }
+      if (DEFAULT_POPULATE[key]) {
+        acc[key] = DEFAULT_POPULATE[key];
+      } else {
+        acc[key] = true;
+      }
+      return acc;
+    }, {});
+    return {
+      ...DEFAULT_POPULATE,
+      ...overrides,
+    };
+  }
+
+  if (typeof incoming === 'string') {
+    return {
+      ...DEFAULT_POPULATE,
+      [incoming]: DEFAULT_POPULATE[incoming] ?? true,
+    };
   }
 
   if (typeof incoming === 'object') {
@@ -198,7 +264,7 @@ const mergePopulate = (incoming) => {
     };
   }
 
-  return incoming;
+  return { ...DEFAULT_POPULATE };
 };
 
 const applyDefaultSort = (query = {}) => {

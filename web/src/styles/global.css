@@ -527,6 +527,28 @@ button.tag-chip {
   gap: 1.25rem;
 }
 
+.article-body {
+  --article-font-size: 1rem;
+  --article-line-height: 1.85;
+  font-size: var(--article-font-size);
+  line-height: var(--article-line-height);
+}
+
+.article-body--default {
+  --article-font-size: 1rem;
+  --article-line-height: 1.85;
+}
+
+.article-body--large {
+  --article-font-size: 1.05rem;
+  --article-line-height: 1.9;
+}
+
+.article-body--xlarge {
+  --article-font-size: 1.12rem;
+  --article-line-height: 1.95;
+}
+
 .article-header__top {
   display: flex;
   align-items: flex-start;

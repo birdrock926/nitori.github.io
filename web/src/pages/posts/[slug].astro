@@ -96,10 +96,12 @@ const jsonLd = {
   },
 };
 
+const articleFontClass = `card article-body article-body--${post.bodyFontScale ?? 'default'}`;
+
 ---
 <BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
   <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
-  <article class="card" style="gap: 2rem;">
+  <article class={articleFontClass} style="gap: 2rem;">
     <header class="article-header">
       <div class="article-header__top">
         <div class="article-header__tags" aria-label="記事のタグ">

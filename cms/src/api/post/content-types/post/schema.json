@@ -55,6 +55,11 @@
         "ads.inline-slot"
       ]
     },
+    "bodyFontScale": {
+      "type": "enumeration",
+      "enum": ["default", "large", "xlarge"],
+      "default": "default"
+    },
     "author": {
       "type": "string"
     },

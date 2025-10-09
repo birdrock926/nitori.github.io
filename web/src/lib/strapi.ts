@@ -109,6 +109,7 @@ export type Post = {
   source?: string;
   publishedAt: string;
   commentDefaultAuthor: string;
+  bodyFontScale: 'default' | 'large' | 'xlarge';
 };
 
 export type RankingItem = {
@@ -117,6 +118,8 @@ export type RankingItem = {
   slug: string;
   score: number;
 };
+
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
@@ -599,6 +602,7 @@ const fallbackPost = (): Post => ({
   tags: [],
   blocks: [],
   commentDefaultAuthor: '名無しのユーザーさん',
+  bodyFontScale: 'default',
 });
 
 const mapPost = (apiPost: PostListResponse['data'][number]) => {
@@ -627,6 +631,18 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       typeof commentDefaultSource === 'string' && commentDefaultSource.trim().length > 0
         ? commentDefaultSource.trim()
         : defaults.commentDefaultAuthor;
+    const fontScaleSource =
+      attr.bodyFontScale ??
+      attr.body_font_scale ??
+      base.bodyFontScale ??
+      base.body_font_scale;
+    const normalizedFontScale =
+      typeof fontScaleSource === 'string' && fontScaleSource.trim().length > 0
+        ? fontScaleSource.trim().toLowerCase()
+        : defaults.bodyFontScale;
+    const bodyFontScale = BODY_FONT_SCALE_VALUES.has(normalizedFontScale)
+      ? (normalizedFontScale as Post['bodyFontScale'])
+      : defaults.bodyFontScale;
 
     return {
       ...defaults,
@@ -646,6 +662,7 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       tags: tagsArray,
       blocks: rawBlocks.map(normalizeBlock),
       commentDefaultAuthor,
+      bodyFontScale,
     } satisfies Post;
   } catch (error) {
     console.warn('[strapi] Failed to map post payload', error);
