@@ -199,41 +199,17 @@ const buildSlugFilter = (candidates = []) => {
 const MEDIA_POPULATE = { populate: '*' };
 
 const BLOCK_COMPONENT_POPULATE = {
-  'content.rich-text': {},
-  'content.colored-text': {},
-  'media.figure': {
-    populate: {
-      image: MEDIA_POPULATE,
-    },
-  },
-  'media.gallery': {
-    populate: {
-      items: {
-        populate: {
-          image: MEDIA_POPULATE,
-        },
-      },
-    },
-  },
-  'embed.twitch-live': {},
-  'embed.twitch-vod': {},
-  'embed.youtube': {},
-  'layout.callout': {
-    populate: {
-      body: true,
-    },
-  },
-  'layout.columns': {
-    populate: {
-      columns: {
-        populate: {
-          body: true,
-        },
-      },
-    },
-  },
-  'layout.separator': {},
-  'ads.inline-slot': {},
+  'content.rich-text': true,
+  'content.colored-text': true,
+  'media.figure': MEDIA_POPULATE,
+  'media.gallery': { populate: '*' },
+  'embed.twitch-live': true,
+  'embed.twitch-vod': true,
+  'embed.youtube': true,
+  'layout.callout': { populate: '*' },
+  'layout.columns': { populate: '*' },
+  'layout.separator': true,
+  'ads.inline-slot': true,
 };
 
 const ensureBlocksPopulate = (value) => {
