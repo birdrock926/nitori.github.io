@@ -201,30 +201,7 @@ const MEDIA_POPULATE = { populate: '*' };
 const DEFAULT_POPULATE = {
   cover: MEDIA_POPULATE,
   tags: { populate: '*' },
-  blocks: {
-    populate: {
-      image: MEDIA_POPULATE,
-      media: MEDIA_POPULATE,
-      items: {
-        populate: {
-          image: MEDIA_POPULATE,
-          media: MEDIA_POPULATE,
-        },
-      },
-      gallery: {
-        populate: {
-          image: MEDIA_POPULATE,
-          media: MEDIA_POPULATE,
-          items: {
-            populate: {
-              image: MEDIA_POPULATE,
-              media: MEDIA_POPULATE,
-            },
-          },
-        },
-      },
-    },
-  },
+  blocks: '*',
 };
 
 const mergePopulate = (incoming) => {
@@ -244,6 +221,10 @@ const mergePopulate = (incoming) => {
       }
       return acc;
     }, {});
+    if (overrides.blocks && overrides.blocks !== '*') {
+      overrides.blocks = '*';
+    }
+
     return {
       ...DEFAULT_POPULATE,
       ...overrides,
@@ -251,17 +232,29 @@ const mergePopulate = (incoming) => {
   }
 
   if (typeof incoming === 'string') {
-    return {
+    const merged = {
       ...DEFAULT_POPULATE,
       [incoming]: DEFAULT_POPULATE[incoming] ?? true,
     };
+
+    if (merged.blocks && merged.blocks !== '*') {
+      merged.blocks = '*';
+    }
+
+    return merged;
   }
 
   if (typeof incoming === 'object') {
-    return {
+    const merged = {
       ...DEFAULT_POPULATE,
       ...incoming,
     };
+
+    if (merged.blocks && merged.blocks !== '*') {
+      merged.blocks = '*';
+    }
+
+    return merged;
   }
 
   return { ...DEFAULT_POPULATE };
