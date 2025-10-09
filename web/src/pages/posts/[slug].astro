@@ -11,7 +11,7 @@ import YouTubePlayer from '@components/blocks/YouTubePlayer.tsx';
 import TwitchPlayer from '@components/blocks/TwitchPlayer.tsx';
 import InlineAd from '@components/ads/InlineAd.astro';
 import InlineAdBlock from '@components/blocks/InlineAdBlock.astro';
-import Remark42Widget from '@components/comments/Remark42Widget.astro';
+import CommentsSection from '@components/comments/CommentsSection.astro';
 import PostCard from '@components/PostCard.astro';
 import ShareMenu from '@components/ShareMenu.tsx';
 import { getPostBySlug, getPostsByTag, getPostSlugs } from '@lib/strapi';
@@ -96,10 +96,12 @@ const jsonLd = {
   },
 };
 
+const articleFontClass = `card article-body article-body--${post.bodyFontScale ?? 'default'}`;
+
 ---
 <BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
   <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
-  <article class="card" style="gap: 2rem;">
+  <article class={articleFontClass} style="gap: 2rem;">
     <header class="article-header">
       <div class="article-header__top">
         <div class="article-header__tags" aria-label="記事のタグ">
@@ -156,7 +158,7 @@ const jsonLd = {
     <div style="display: grid; gap: 2rem;">
       {post.blocks.map((block, index) => {
         if (block.__component === 'content.rich-text') {
-          return <RichText body={block.body} />;
+          return <RichText body={block.body} fontScale={block.fontScale} />;
         }
         if (block.__component === 'content.colored-text') {
           return (
@@ -232,5 +234,10 @@ const jsonLd = {
     </div>
   </section>
   <InlineAd slot={ADSENSE.slots.feed} placement="feed" />
-  <Remark42Widget slug={post.slug} title={post.title} url={Astro.url.href} />
+  <CommentsSection
+    documentId={post.documentId}
+    entryId={post.id}
+    slug={post.slug}
+    defaultAuthorName={post.commentDefaultAuthor}
+  />
 </BaseLayout>

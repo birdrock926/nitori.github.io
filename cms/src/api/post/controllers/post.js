@@ -1,5 +1,129 @@
 import { factories } from '@strapi/strapi';
 
+const readDocumentId = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return undefined;
+  }
+
+  if (typeof entity.documentId === 'string' && entity.documentId.trim().length > 0) {
+    return entity.documentId;
+  }
+
+  if (typeof entity.document_id === 'string' && entity.document_id.trim().length > 0) {
+    return entity.document_id;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+  if (attributes && typeof attributes.documentId === 'string' && attributes.documentId.trim().length > 0) {
+    return attributes.documentId;
+  }
+
+  return undefined;
+};
+
+const attachDocumentId = (sanitized, raw) => {
+  if (!sanitized) {
+    return sanitized;
+  }
+
+  if (Array.isArray(sanitized) && Array.isArray(raw)) {
+    return sanitized.map((item, index) => attachDocumentId(item, raw[index]));
+  }
+
+  if (Array.isArray(sanitized)) {
+    return sanitized;
+  }
+
+  const documentId = readDocumentId(raw);
+
+  if (!documentId || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+
+  if ('documentId' in sanitized && sanitized.documentId) {
+    return sanitized;
+  }
+
+  return {
+    ...sanitized,
+    documentId,
+  };
+};
+
+const DEFAULT_COMMENT_AUTHOR = '名無しのユーザーさん';
+const DEFAULT_BODY_FONT_SCALE = 'default';
+const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
+
+const readCommentDefaultAuthor = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_COMMENT_AUTHOR;
+  }
+
+  const direct = entity.commentDefaultAuthor ?? entity.comment_default_author;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    return direct.trim();
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.commentDefaultAuthor ?? attributes.comment_default_author;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      return attributeValue.trim();
+    }
+  }
+
+  return DEFAULT_COMMENT_AUTHOR;
+};
+
+const readBodyFontScale = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const direct = entity.bodyFontScale ?? entity.body_font_scale;
+  if (typeof direct === 'string' && direct.trim().length > 0) {
+    const normalized = direct.trim().toLowerCase();
+    return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+  }
+
+  const attributes = entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : undefined;
+
+  if (attributes) {
+    const attributeValue = attributes.bodyFontScale ?? attributes.body_font_scale;
+    if (typeof attributeValue === 'string' && attributeValue.trim().length > 0) {
+      const normalized = attributeValue.trim().toLowerCase();
+      return BODY_FONT_SCALE_VALUES.has(normalized) ? normalized : DEFAULT_BODY_FONT_SCALE;
+    }
+  }
+
+  return DEFAULT_BODY_FONT_SCALE;
+};
+
+const enrichPostEntity = (sanitized, raw) => {
+  const withDocument = attachDocumentId(sanitized, raw);
+
+  if (Array.isArray(withDocument)) {
+    if (Array.isArray(raw)) {
+      return withDocument.map((item, index) => enrichPostEntity(item, raw[index]));
+    }
+    return withDocument.map((item) => enrichPostEntity(item, raw));
+  }
+
+  if (!withDocument || typeof withDocument !== 'object') {
+    return withDocument;
+  }
+
+  const commentDefaultAuthor = readCommentDefaultAuthor(raw);
+  const bodyFontScale = readBodyFontScale(raw);
+
+  return {
+    ...withDocument,
+    commentDefaultAuthor,
+    bodyFontScale,
+  };
+};
+
 const ensurePublishedFilter = (filters = {}) => {
   const base = filters && typeof filters === 'object' && !Array.isArray(filters) ? filters : {};
   const publishedCondition = {
@@ -72,34 +196,55 @@ const buildSlugFilter = (candidates = []) => {
   return { $or: slugMatchers };
 };
 
+const BLOCK_COMPONENT_POPULATE = {
+  'content.rich-text': '*',
+  'content.colored-text': '*',
+  'media.figure': '*',
+  'media.gallery': {
+    populate: {
+      items: {
+        populate: '*',
+      },
+    },
+  },
+  'embed.twitch-live': '*',
+  'embed.twitch-vod': '*',
+  'embed.youtube': '*',
+  'layout.callout': {
+    populate: {
+      body: {
+        populate: '*',
+      },
+    },
+  },
+  'layout.columns': {
+    populate: {
+      columns: {
+        populate: {
+          body: {
+            populate: '*',
+          },
+        },
+      },
+    },
+  },
+  'layout.separator': '*',
+  'ads.inline-slot': '*',
+};
+
 const DEFAULT_POPULATE = {
-  cover: { populate: '*' },
-  tags: { populate: '*' },
-  blocks: { populate: '*' },
+  cover: '*',
+  tags: '*',
+  blocks: {
+    on: BLOCK_COMPONENT_POPULATE,
+  },
 };
 
-const mergePopulate = (incoming) => {
-  if (!incoming || incoming === 'deep' || incoming === '*') {
-    return DEFAULT_POPULATE;
-  }
+const clonePopulate = (source) => JSON.parse(JSON.stringify(source));
 
-  if (Array.isArray(incoming)) {
-    const base = Array.from(new Set(incoming));
-    DEFAULT_POPULATE.cover && base.push('cover');
-    DEFAULT_POPULATE.tags && base.push('tags');
-    DEFAULT_POPULATE.blocks && base.push('blocks');
-    return Array.from(new Set(base));
-  }
+const buildDefaultPopulate = () => clonePopulate(DEFAULT_POPULATE);
 
-  if (typeof incoming === 'object') {
-    return {
-      ...DEFAULT_POPULATE,
-      ...incoming,
-    };
-  }
-
-  return incoming;
-};
+const mergePopulate = () => buildDefaultPopulate();
 
 const applyDefaultSort = (query = {}) => {
   if (!query.sort) {
@@ -112,29 +257,41 @@ export default factories.createCoreController('api::post.post', () => ({
   async find(ctx) {
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
-    ctx.query.populate = mergePopulate(ctx.query.populate);
+    const populate = mergePopulate(ctx.query.populate);
+    ctx.query.populate = populate;
     ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
+    const finalQuery = {
+      ...sanitizedQuery,
+      populate,
+    };
 
-    const { results, pagination } = await strapi.service('api::post.post').find(sanitizedQuery);
+    const { results, pagination } = await strapi.service('api::post.post').find(finalQuery);
     const sanitizedResults = await this.sanitizeOutput(results, ctx);
-    return this.transformResponse(sanitizedResults, { pagination });
+    const enrichedResults = enrichPostEntity(sanitizedResults, results);
+    return this.transformResponse(enrichedResults, { pagination });
   },
 
   async findOne(ctx) {
     ctx.query = ctx.query || {};
     ctx.query.filters = ensurePublishedFilter(ctx.query.filters);
-    ctx.query.populate = mergePopulate(ctx.query.populate);
+    const populate = mergePopulate(ctx.query.populate);
+    ctx.query.populate = populate;
     ctx.query = applyDefaultSort(ctx.query);
 
     await this.validateQuery(ctx);
     const sanitizedQuery = await this.sanitizeQuery(ctx);
+    const finalQuery = {
+      ...sanitizedQuery,
+      populate,
+    };
 
-    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, sanitizedQuery);
+    const entity = await strapi.service('api::post.post').findOne(ctx.params.id, finalQuery);
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async findBySlug(ctx) {
@@ -153,7 +310,7 @@ export default factories.createCoreController('api::post.post', () => ({
 
     const query = {
       filters: ensurePublishedFilter(slugFilter),
-      populate: DEFAULT_POPULATE,
+      populate: buildDefaultPopulate(),
       limit: 1,
     };
 
@@ -165,7 +322,8 @@ export default factories.createCoreController('api::post.post', () => ({
     }
 
     const sanitizedEntity = await this.sanitizeOutput(entity, ctx);
-    return this.transformResponse(sanitizedEntity);
+    const enrichedEntity = enrichPostEntity(sanitizedEntity, entity);
+    return this.transformResponse(enrichedEntity);
   },
 
   async slugs(ctx) {

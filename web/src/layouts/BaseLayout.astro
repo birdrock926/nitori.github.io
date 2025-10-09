@@ -3,7 +3,7 @@ import '../styles/global.css';
 import GlobalHeader from '@components/GlobalHeader.astro';
 import GlobalFooter from '@components/GlobalFooter.astro';
 import ConsentManager from '@components/consent/ConsentManager.astro';
-import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI, REMARK42 } from '@config/site';
+import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI } from '@config/site';
 
 const { title = SITE_TITLE, description = SITE_DESCRIPTION, image, canonical, region = 'JP' } = Astro.props;
 const pageTitle = title === SITE_TITLE ? title : `${title} | ${SITE_TITLE}`;
@@ -20,13 +20,10 @@ const parseOrigin = (value?: string) => {
 const apiOrigin = parseOrigin(STRAPI.url);
 const mediaOrigin = parseOrigin(STRAPI.mediaUrl);
 
-const remarkOrigin = parseOrigin(REMARK42.host);
-
 const connectSrc = [
   "'self'",
   apiOrigin,
   mediaOrigin,
-  remarkOrigin,
   'https://www.google-analytics.com',
   'https://pagead2.googlesyndication.com',
 ]
@@ -42,7 +39,6 @@ const imgSrc = [
   'https://static-cdn.jtvnw.net',
   apiOrigin,
   mediaOrigin,
-  remarkOrigin,
 ]
   .filter(Boolean)
   .join(' ');
@@ -52,7 +48,6 @@ const scriptSrc = [
   "'unsafe-inline'",
   'https://www.googletagmanager.com',
   'https://pagead2.googlesyndication.com',
-  remarkOrigin,
 ]
   .filter(Boolean)
   .join(' ');
@@ -63,7 +58,6 @@ const frameSrc = [
   'https://www.google.com',
   'https://ads.google.com',
   'https://googleads.g.doubleclick.net',
-  remarkOrigin,
 ]
   .filter(Boolean)
   .join(' ');
