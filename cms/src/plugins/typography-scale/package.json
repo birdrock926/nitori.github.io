@@ -1,0 +1,9 @@
+{
+  "name": "typography-scale",
+  "version": "0.1.0",
+  "strapi": {
+    "name": "typography-scale",
+    "description": "Custom field to adjust rich-text font scale per block",
+    "kind": "plugin"
+  }
+}
