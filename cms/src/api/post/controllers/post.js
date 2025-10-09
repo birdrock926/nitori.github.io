@@ -199,9 +199,7 @@ const buildSlugFilter = (candidates = []) => {
 const DEFAULT_POPULATE = {
   cover: '*',
   tags: '*',
-  blocks: {
-    populate: '*',
-  },
+  blocks: '*',
 };
 
 const clonePopulate = (source) => JSON.parse(JSON.stringify(source));
