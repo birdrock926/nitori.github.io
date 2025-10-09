@@ -129,6 +129,8 @@
    - 影響: Rich Text ブロックで Typography Scale を設定できず、既存記事の編集も不能。コンポーネントのオプション読み込みも `attribute?.options` への依存が強いため、`attributeOptions` など新スキーマにも非対応。
    - 対応: `TypographyScaleInput` を `rawProps = {}` で初期化するよう変更し、`attribute` が無い場合でも分割代入が発火しないよう保護。`mergeOptions()` ヘルパーで `attribute?.options`・`attributeOptions`・`options` の各形式を統合しつつ、`intlLabel`/`description` のフォールバックと `onChange` の noop ガードを追加して API 変更に耐性を持たせた。
    - 検証: `cd cms && npm run develop`（Strapi Admin が正常起動）および `CI=1 npm run build`（管理画面ビルド成功）を実行し、コンソールエラーが再現しないことを確認。詳細ログは `0a96ff†L1-L23`、`d5ea11†L1-L4`、`cfe164†L1-L2` を参照。
+   - 追補 (2025-10-10): Strapi が props を `null` として渡すケース、および `attribute.options` ではなく `options.base` 配列で保持するケースを再現。コンポーネント側で `props ?? {}` に正規化し、`mergeOptions()` が配列を走査して個々のオプションオブジェクトを統合するよう拡張。`isPlainObject` 判定を追加してプロトタイプ汚染や不正な値を排除し、フォーム保存後の再レンダーでも安全に既定値を復元できることを確認。
+   - テスト実行ログ (2025-10-10): `cd cms && npm run develop -- --help` を実行したところ、ローカル環境に依存パッケージが未インストールだったため `Error: Cannot find module '@strapi/strapi/package.json'` が発生。再度の検証時は `npm install` 実施後に同コマンドを再試行すること。
 
 これらの対応により、Strapi 管理画面が真っ白になる既知の原因はすべて封じ込め済み。今後同様の症状が出た場合は、上記順序で再点検すること。
 

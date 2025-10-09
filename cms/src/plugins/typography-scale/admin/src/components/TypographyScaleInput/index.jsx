@@ -38,18 +38,38 @@ const clampScale = (value, min, max) => {
   return Math.round(clamped * 100) / 100;
 };
 
-const extractOptionObject = (candidate) => {
+const isPlainObject = (candidate) => {
   if (!candidate || typeof candidate !== 'object') {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(candidate);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const extractOptionObject = (candidate) => {
+  if (!isPlainObject(candidate)) {
     return null;
   }
 
-  const nested = typeof candidate.options === 'object' ? candidate.options : {};
+  const nested = isPlainObject(candidate.options) ? candidate.options : {};
 
   return { ...nested, ...candidate };
 };
 
 const mergeOptions = (...candidates) => {
   return candidates.reduce((acc, candidate) => {
+    if (Array.isArray(candidate)) {
+      return candidate.reduce((innerAcc, nestedCandidate) => {
+        const extracted = extractOptionObject(nestedCandidate);
+        if (!extracted) {
+          return innerAcc;
+        }
+
+        return { ...innerAcc, ...extracted };
+      }, acc);
+    }
+
     const extracted = extractOptionObject(candidate);
     if (!extracted) {
       return acc;
@@ -59,7 +79,8 @@ const mergeOptions = (...candidates) => {
   }, {});
 };
 
-const TypographyScaleInput = (rawProps = {}) => {
+const TypographyScaleInput = (props) => {
+  const rawProps = props ?? {};
   const {
     attribute,
     attributeOptions,
