@@ -1,5 +1,5 @@
 import pluginId from './pluginId';
-import TypographyScaleInput from './components/TypographyScaleInput';
+import TypographyScaleInput from './components/TypographyScaleInput/index.jsx';
 import getTrad from './utils/getTrad';
 
 const register = (app) => {
