@@ -7,6 +7,36 @@ const DEFAULT_MAX = 1.8;
 const DEFAULT_STEP = 0.05;
 const DEFAULT_SCALE = 1;
 
+const OPTION_PATHS = {
+  min: [
+    ['min'],
+    ['options', 'min'],
+  ],
+  max: [
+    ['max'],
+    ['options', 'max'],
+  ],
+  step: [
+    ['step'],
+    ['options', 'step'],
+  ],
+  defaultScale: [
+    ['defaultScale'],
+    ['default'],
+    ['options', 'defaultScale'],
+    ['options', 'default'],
+  ],
+};
+
+const OPTION_SOURCES = [
+  (props) => props?.options,
+  (props) => props?.attributeOptions?.options,
+  (props) => props?.attributeOptions,
+  (props) => props?.attribute?.options,
+  (props) => props?.attribute,
+  (props) => props,
+];
+
 const toNullableNumber = (value) => {
   if (value === null || value === undefined) {
     return null;
@@ -46,25 +76,9 @@ const isPlainObject = (candidate) => {
   return prototype === Object.prototype || prototype === null;
 };
 
-const OPTION_ALIAS_MAP = {
-  min: ['min', 'options.min'],
-  max: ['max', 'options.max'],
-  step: ['step', 'options.step'],
-  defaultScale: ['defaultScale', 'options.defaultScale', 'default', 'defaultScaleOption'],
-};
-
-const OPTION_VALUE_FIELDS = ['value', 'defaultValue', 'initialValue', 'current', 'default'];
-const ENTRY_IDENTIFIER_FIELDS = ['name', 'path', 'key', 'field', 'identifier', 'attribute'];
-const ARRAY_CANDIDATE_KEYS = ['entries', 'base', 'advanced', 'choices', 'settings', 'configuration', 'options'];
-const MAX_ARRAY_SCAN = 24;
-
 const getValueByPath = (object, path) => {
   if (!isPlainObject(object)) {
     return undefined;
-  }
-
-  if (typeof path === 'string') {
-    path = path.split('.');
   }
 
   if (!Array.isArray(path) || path.length === 0) {
@@ -72,98 +86,37 @@ const getValueByPath = (object, path) => {
   }
 
   let current = object;
-  for (const part of path) {
+  for (const segment of path) {
     if (!current || typeof current !== 'object') {
       return undefined;
     }
 
-    current = current[part];
+    current = current[segment];
   }
 
   return current;
 };
 
-const extractFromEntryArray = (entries, key) => {
-  if (!Array.isArray(entries) || entries.length === 0) {
-    return null;
-  }
+const resolveNumericOption = (props, key) => {
+  const paths = OPTION_PATHS[key] ?? [[key]];
 
-  const aliases = OPTION_ALIAS_MAP[key] ?? [key];
-  const scanLimit = Math.min(entries.length, MAX_ARRAY_SCAN);
-
-  for (let index = 0; index < scanLimit; index += 1) {
-    const entry = entries[index];
-    if (!isPlainObject(entry)) {
+  for (const pickSource of OPTION_SOURCES) {
+    const source = pickSource(props);
+    if (!isPlainObject(source)) {
       continue;
     }
 
-    const identifiers = ENTRY_IDENTIFIER_FIELDS
-      .map((field) => entry[field])
-      .filter((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
+    for (const path of paths) {
+      const value = getValueByPath(source, path);
+      const numeric = toNullableNumber(value);
 
-    const matchesAlias = identifiers.some((identifier) => {
-      return aliases.some((alias) => {
-        if (alias === identifier) {
-          return true;
-        }
-
-        if (alias.startsWith('options.') && identifier === alias.replace(/^options\./, '')) {
-          return true;
-        }
-
-        return false;
-      });
-    });
-
-    if (!matchesAlias) {
-      continue;
-    }
-
-    for (const field of OPTION_VALUE_FIELDS) {
-      if (Object.prototype.hasOwnProperty.call(entry, field)) {
-        const numeric = toNullableNumber(entry[field]);
-        if (numeric !== null) {
-          return numeric;
-        }
+      if (numeric !== null) {
+        return numeric;
       }
     }
-  }
 
-  return null;
-};
-
-const extractFromObject = (object, key) => {
-  if (!isPlainObject(object)) {
-    return null;
-  }
-
-  const aliases = OPTION_ALIAS_MAP[key] ?? [key];
-
-  for (const alias of aliases) {
-    const numeric = toNullableNumber(getValueByPath(object, alias));
-    if (numeric !== null) {
-      return numeric;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(object, key)) {
-    const numeric = toNullableNumber(object[key]);
-    if (numeric !== null) {
-      return numeric;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(object, 'options') && isPlainObject(object.options) && object.options !== object) {
-    const numeric = extractFromObject(object.options, key);
-    if (numeric !== null) {
-      return numeric;
-    }
-  }
-
-  for (const candidateKey of ARRAY_CANDIDATE_KEYS) {
-    const candidate = object[candidateKey];
-    if (Array.isArray(candidate)) {
-      const numeric = extractFromEntryArray(candidate, key);
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const numeric = toNullableNumber(source[key]);
       if (numeric !== null) {
         return numeric;
       }
@@ -173,58 +126,23 @@ const extractFromObject = (object, key) => {
   return null;
 };
 
-const collectOptionSources = (rawProps) => {
-  const sources = [];
-
-  if (isPlainObject(rawProps)) {
-    sources.push(rawProps);
-  }
-
-  if (isPlainObject(rawProps?.options)) {
-    sources.push(rawProps.options);
-  }
-
-  if (isPlainObject(rawProps?.attributeOptions?.options)) {
-    sources.push(rawProps.attributeOptions.options);
-  }
-
-  if (isPlainObject(rawProps?.attributeOptions)) {
-    sources.push(rawProps.attributeOptions);
-  }
-
-  if (isPlainObject(rawProps?.attribute?.options)) {
-    sources.push(rawProps.attribute.options);
-  }
-
-  if (isPlainObject(rawProps?.attribute)) {
-    sources.push(rawProps.attribute);
-  }
-
-  return sources;
-};
-
 const resolveScaleConfig = (props) => {
-  const rawProps = props ?? {};
-  const sources = collectOptionSources(rawProps);
+  const min = resolveNumericOption(props, 'min');
+  const max = resolveNumericOption(props, 'max');
+  const step = resolveNumericOption(props, 'step');
+  const defaultScale = resolveNumericOption(props, 'defaultScale');
 
-  const resolved = { min: null, max: null, step: null, defaultScale: null };
+  const resolvedMin = Number.isFinite(min) ? min : DEFAULT_MIN;
+  const resolvedMax = Number.isFinite(max) ? max : DEFAULT_MAX;
+  const resolvedStep = Number.isFinite(step) && step > 0 ? step : DEFAULT_STEP;
+  const resolvedDefault = clampScale(defaultScale, resolvedMin, resolvedMax) ?? DEFAULT_SCALE;
 
-  for (const key of Object.keys(resolved)) {
-    for (const source of sources) {
-      const numeric = extractFromObject(source, key);
-      if (numeric !== null) {
-        resolved[key] = numeric;
-        break;
-      }
-    }
-  }
-
-  const min = Number.isFinite(resolved.min) ? resolved.min : DEFAULT_MIN;
-  const max = Number.isFinite(resolved.max) ? resolved.max : DEFAULT_MAX;
-  const step = Number.isFinite(resolved.step) && resolved.step > 0 ? resolved.step : DEFAULT_STEP;
-  const defaultScale = clampScale(resolved.defaultScale, min, max) ?? DEFAULT_SCALE;
-
-  return { min, max, step, defaultScale };
+  return {
+    min: resolvedMin,
+    max: resolvedMax,
+    step: resolvedStep,
+    defaultScale: resolvedDefault,
+  };
 };
 
 const fallbackFormatMessage = (descriptor, values = {}) => {

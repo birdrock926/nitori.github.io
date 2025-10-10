@@ -359,3 +359,17 @@
   - `cd cms && npm ls react`（React 18.3.1 が単一ツリーで解決されていることを再確認し、複数バージョン混在が無いと証明。ログ: `8e7a72†L1-L2`, `2e919f†L1-L133`）
 - **ドキュメント更新**: README.md と SETUP_BEGINNER_GUIDE.md の Typography Scale 節に、浅い階層のみを読む軽量化戦略と再検証コマンドを追記。今回の更新で `options` の探索がスキーマ巨大化に伴うフリーズを引き起こさないこと、配列走査は 24 件で打ち切ることを明記した。
 - **今後の指針**: カスタムフィールドが外部 state（`mainState` や schema ツリー）へアクセスする際は「探索深度を限定」「エントリ数を上限化」「同一 props ではキャッシュを再利用」を徹底する。Dynamic Zone 用 component を新規追加する際は、該当フィールドへ `options.min/max/step/defaultScale` を明示して重い継承ロジックに依存しない構成を維持する。必要に応じて今回の浅い探索へ新しいキー（例: `attributeOptions.configuration2`）を明示追加し、再帰を導入しない方針を継続する。
+
+### 2025-10-21 追記: 継承ロジックの全面停止と O(1) 参照への固定化
+
+- **背景**: 外部 AI の追加分析で、Rich Text ブロック選択直後のフリーズ原因として Typography Scale フィールドが `mainState` に依存した継承ロジックを残している可能性が再指摘された。Strapi v5 の Dynamic Zone は schema 構築フェーズで巨大な状態木を複数回渡すため、浅い探索に切り替えた後も配列 (`base` など) を辿る処理が残っていると再評価ごとに無駄なループが発生するリスクがあった。
+- **対応**:
+  1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` から `collectOptionSources` / `extractFromObject` ベースの配列走査ロジックを排除し、`OPTION_SOURCES`（`props.options` / `attributeOptions?.options` / `attributeOptions` / `attribute?.options` / `attribute` / `props`）を固定順で巡回する方式へ変更。`OPTION_PATHS` に `min/max/step/defaultScale` の既知パスを配列として列挙し、`getValueByPath` がプレーンオブジェクトのみを対象に即時値を返す構成に改めた。【F:cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx†L1-L210】
+  2. 継承元が見つからない場合はその場で既定値 (`0.7` / `1.8` / `0.05` / `1`) にフォールバックし、`base` や `entries` といった配列・巨大オブジェクトは一切走査しない。これにより探索コストは props 数に比例する O(1) に固定化され、Dynamic Zone が大規模でも初期化時間が伸びない。
+  3. キャッシュは `attribute` / `attributeOptions` / `options` の参照一致のみをキーに維持し、`mainState` など巨大ツリーへのアクセスを完全排除。`resolveNumericOption` 内で直接 `props[key]` を fallback として確認することで、schema がトップレベルに数値を注入する互換性も確保した。
+  4. フロントエンド構成ファイル（README.md / SETUP_BEGINNER_GUIDE.md）に新たな O(1) 参照戦略と React 依存監査の継続を追記し、保守担当者が継承ロジックへ戻さないよう運用ルールを明文化した。【F:README.md†L44-L63】【F:SETUP_BEGINNER_GUIDE.md†L6-L27】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`（依存 2236 件を再展開し、既知の非推奨警告のみ。ログ: `b47a05†L1-L10`）
+  - `cd cms && CI=1 npm run build`（管理画面ビルドが成功し、Typography Scale フィールド読み込み時に追加警告なし。ログ: `c2d7cd†L1-L1`）
+  - `cd cms && npm ls react`（React 18.3.1 が単一で解決され、二重同梱がないことを再確認。ログ: `9c2fe0†L1-L118`）
+- **今後の指針**: Typography Scale のオプションを新たに追加する場合は `OPTION_PATHS` へパスを追加するだけで対応し、探索ロジックを再帰的に戻さない。Dynamic Zone へリッチテキスト以外のブロックを追加する際も `options.min/max/step/defaultScale` を JSON 定義で必ず明示し、継承に頼らない設計を維持する。問題再発時は `resolveNumericOption` へデバッグログを挿入し、どのソースが使用されているか確認したうえでパスリストを更新すること。
