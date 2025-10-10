@@ -445,3 +445,15 @@
   - `cd cms && CI=1 npm run build`（管理画面ビルド成功。ログ: `1ed552†L1-L2`）
 - **今後の指針**: Comments プラグインをアップデートする際は `externalAuthorSchema` の定義変更有無を確認し、必須フィールドが増えた場合はこの拡張で補完できるか／UI で事前検証すべきかを決定する。`@comments.local` ドメインは通知対象外として扱うため、実運用でメール通知を依頼する際は利用者に有効なアドレスの入力を徹底させること。SMTP エラーが増えた場合はダミー宛先の送信が混ざっていないかログを確認し、必要ならドメイン名を変更する。
 
+### 2025-10-23 追記: Comments 投稿時のクライアント側メール補完
+
+- **背景**: Web 側のコメントフォームから投稿すると 400 (Bad Request) が継続発生。ブラウザの開発者ツールには `Strapi comments request failed (400)` が表示され、バックエンドの `ensureAuthorEmail()` が実行される前にバリデーションで弾かれている可能性が高いことがわかった（フォーム送信時にメールが空欄のまま Strapi へ渡っていた）。
+- **対応**:
+  1. `web/src/lib/comments.ts` の `submitComment()` でメールを再検証し、空欄や不正な値の場合は `buildFallbackEmail()` で `@comments.local` ドメインのダミーアドレスを生成してから API へ送信するよう変更。【F:web/src/lib/comments.ts†L214-L265】【F:web/src/lib/comments.ts†L367-L383】
+  2. `buildFallbackEmail()` は `Buffer` と `btoa` の両方を試し、どちらも利用できない環境向けに URI エンコードベースのフォールバックを持つ。生成したローカルパートは英数字と `._-` のみに正規化し、64 文字で切り詰めて RFC 制限を満たす。
+  3. README / SETUP_BEGINNER_GUIDE の匿名コメント節を更新し、クライアントとサーバーの両方で `@comments.local` を補完する二重防御になったこと、ダミー宛には通知を送信しない方針を明記。【F:README.md†L214-L216】【F:SETUP_BEGINNER_GUIDE.md†L200-L204】
+- **検証**:
+  - `cd web && npm install --no-progress --no-fund --no-audit`（依存関係を解決し、既存スクリプトが最新の lockfile と整合していることを確認）【acfa6b†L1-L3】
+  - `cd web && npm run lint`（既存の Astro/React 混在コードに対する ESLint の既知エラーが多数残っているため失敗。今回の変更で新規エラーは発生していないことをログで確認）【028f7e†L1-L129】
+- **今後の指針**: コメントフォームを変更する際は、クライアント→サーバーの両方でメール必須条件を満たせるかを手動/自動テストで確認する。`buildFallbackEmail()` のフォーマットを変更する場合はバックエンドの `ensureAuthorEmail()` と整合を取ること、README / SETUP / 本書を同時更新すること。
+
