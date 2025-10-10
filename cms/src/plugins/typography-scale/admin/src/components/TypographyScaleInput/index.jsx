@@ -46,48 +46,42 @@ const isPlainObject = (candidate) => {
   return prototype === Object.prototype || prototype === null;
 };
 
-const OPTION_PATHS = {
-  min: ['min', 'options.min', 'config.min', 'settings.min'],
-  max: ['max', 'options.max', 'config.max', 'settings.max'],
-  step: ['step', 'options.step', 'config.step', 'settings.step'],
-  defaultScale: [
-    'defaultScale',
-    'options.defaultScale',
-    'config.defaultScale',
-    'settings.defaultScale',
-    'default',
-    'defaultScaleOption',
-  ],
-};
+const OPTION_KEYS = ['min', 'max', 'step', 'defaultScale'];
 
-const OPTION_ENTRY_ALIASES = {
+const OPTION_ALIAS_MAP = {
   min: ['min', 'options.min'],
   max: ['max', 'options.max'],
   step: ['step', 'options.step'],
-  defaultScale: ['defaultScale', 'options.defaultScale', 'default'],
+  defaultScale: ['defaultScale', 'options.defaultScale', 'default', 'defaultScaleOption'],
 };
 
-const getByPath = (source, path) => {
-  if (!isPlainObject(source)) {
-    return undefined;
-  }
+const OPTION_VALUE_FIELDS = ['value', 'defaultValue', 'initialValue', 'current', 'default'];
 
-  const segments = path.split('.');
-  let cursor = source;
+const NESTED_OPTION_KEYS = [
+  'options',
+  'settings',
+  'config',
+  'configuration',
+  'base',
+  'advanced',
+  'choices',
+  'defaults',
+  'properties',
+];
 
-  for (const segment of segments) {
-    if (!cursor || typeof cursor !== 'object') {
-      return undefined;
+const MAX_OPTION_NODES = 64;
+
+const recordOption = (bucket, key, candidate) => {
+  if (!Number.isFinite(bucket[key])) {
+    const numeric = toNullableNumber(candidate);
+    if (numeric !== null) {
+      bucket[key] = numeric;
     }
-
-    cursor = cursor[segment];
   }
-
-  return cursor;
 };
 
-const collectOptionCandidates = (root) => {
-  const results = [];
+const gatherOptionMap = (sources) => {
+  const bucket = { min: undefined, max: undefined, step: undefined, defaultScale: undefined };
   const queue = [];
   const seen = new WeakSet();
 
@@ -103,11 +97,7 @@ const collectOptionCandidates = (root) => {
       return;
     }
 
-    if (!isPlainObject(value)) {
-      return;
-    }
-
-    if (seen.has(value)) {
+    if (!isPlainObject(value) || seen.has(value)) {
       return;
     }
 
@@ -115,73 +105,86 @@ const collectOptionCandidates = (root) => {
     queue.push(value);
   };
 
-  enqueue(root);
+  for (const source of sources) {
+    enqueue(source);
+  }
 
-  while (queue.length > 0) {
-    const candidate = queue.shift();
-    if (!candidate) {
+  let processed = 0;
+
+  while (queue.length > 0 && processed < MAX_OPTION_NODES) {
+    const current = queue.shift();
+    if (!current) {
       continue;
     }
 
-    results.push(candidate);
+    processed += 1;
 
-    enqueue(candidate.options);
-    enqueue(candidate.settings);
-    enqueue(candidate.config);
-    enqueue(candidate.configuration);
-    enqueue(candidate.values);
-    enqueue(candidate.fields);
-    enqueue(candidate.base);
-    enqueue(candidate.choices);
-    enqueue(candidate.defaults);
-    enqueue(candidate.properties);
-  }
+    for (const key of OPTION_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(current, key)) {
+        recordOption(bucket, key, current[key]);
+      }
 
-  return results;
-};
-
-const extractNumericFromCandidate = (candidate, key) => {
-  if (!candidate) {
-    return undefined;
-  }
-
-  const candidates = collectOptionCandidates(candidate);
-  const lookupPaths = OPTION_PATHS[key] ?? [];
-  const aliasNames = OPTION_ENTRY_ALIASES[key] ?? [];
-
-  for (const source of candidates) {
-    for (const path of lookupPaths) {
-      const direct = getByPath(source, path);
-      const numeric = toNullableNumber(direct);
-      if (numeric !== null) {
-        return numeric;
+      const nestedOptions = current.options;
+      if (isPlainObject(nestedOptions) && Object.prototype.hasOwnProperty.call(nestedOptions, key)) {
+        recordOption(bucket, key, nestedOptions[key]);
       }
     }
 
-    if (typeof source[key] !== 'undefined') {
-      const numeric = toNullableNumber(source[key]);
-      if (numeric !== null) {
-        return numeric;
-      }
-    }
+    if (typeof current.name === 'string') {
+      const normalized = current.name.trim();
+      for (const key of OPTION_KEYS) {
+        const aliases = OPTION_ALIAS_MAP[key];
+        if (!aliases) {
+          continue;
+        }
 
-    if (typeof source.name === 'string') {
-      const normalized = source.name.trim();
-      for (const alias of aliasNames) {
-        if (normalized === alias || normalized === `options.${alias}`) {
-          const valueCandidates = [source.value, source.defaultValue, source.default, source.initialValue];
-          for (const candidateValue of valueCandidates) {
-            const numeric = toNullableNumber(candidateValue);
-            if (numeric !== null) {
-              return numeric;
+        if (aliases.includes(normalized)) {
+          for (const field of OPTION_VALUE_FIELDS) {
+            if (Object.prototype.hasOwnProperty.call(current, field)) {
+              recordOption(bucket, key, current[field]);
             }
           }
         }
       }
     }
+
+    if (typeof current.path === 'string') {
+      const normalized = current.path.trim();
+      for (const key of OPTION_KEYS) {
+        const aliases = OPTION_ALIAS_MAP[key];
+        if (!aliases) {
+          continue;
+        }
+
+        if (aliases.includes(normalized) || aliases.includes(normalized.replace(/^options\./, ''))) {
+          for (const field of OPTION_VALUE_FIELDS) {
+            if (Object.prototype.hasOwnProperty.call(current, field)) {
+              recordOption(bucket, key, current[field]);
+            }
+          }
+        }
+      }
+    }
+
+    for (const nestedKey of NESTED_OPTION_KEYS) {
+      const candidate = current[nestedKey];
+      if (!candidate) {
+        continue;
+      }
+
+      if (nestedKey === 'base' || nestedKey === 'advanced' || nestedKey === 'choices') {
+        if (Array.isArray(candidate)) {
+          for (const entry of candidate) {
+            enqueue(entry);
+          }
+        }
+      } else {
+        enqueue(candidate);
+      }
+    }
   }
 
-  return undefined;
+  return bucket;
 };
 
 const resolveScaleConfig = (props) => {
@@ -190,44 +193,22 @@ const resolveScaleConfig = (props) => {
 
   const optionSources = [
     attributeOptions,
+    attribute,
     attribute?.options,
     directOptions,
     attributeOptions?.options,
     directOptions?.options,
+    attributeOptions?.base,
+    attribute?.options?.base,
+    directOptions?.base,
   ];
 
-  const min = optionSources.reduce((acc, candidate) => {
-    if (Number.isFinite(acc)) {
-      return acc;
-    }
-    return extractNumericFromCandidate(candidate, 'min');
-  }, undefined);
+  const discovered = gatherOptionMap(optionSources);
 
-  const max = optionSources.reduce((acc, candidate) => {
-    if (Number.isFinite(acc)) {
-      return acc;
-    }
-    return extractNumericFromCandidate(candidate, 'max');
-  }, undefined);
-
-  const step = optionSources.reduce((acc, candidate) => {
-    if (Number.isFinite(acc)) {
-      return acc;
-    }
-    return extractNumericFromCandidate(candidate, 'step');
-  }, undefined);
-
-  const defaultScale = optionSources.reduce((acc, candidate) => {
-    if (Number.isFinite(acc)) {
-      return acc;
-    }
-    return extractNumericFromCandidate(candidate, 'defaultScale');
-  }, undefined);
-
-  const resolvedMin = Number.isFinite(min) ? min : DEFAULT_MIN;
-  const resolvedMax = Number.isFinite(max) ? max : DEFAULT_MAX;
-  const resolvedStep = Number.isFinite(step) && step > 0 ? step : DEFAULT_STEP;
-  const resolvedDefault = clampScale(defaultScale, resolvedMin, resolvedMax) ?? DEFAULT_SCALE;
+  const resolvedMin = Number.isFinite(discovered.min) ? discovered.min : DEFAULT_MIN;
+  const resolvedMax = Number.isFinite(discovered.max) ? discovered.max : DEFAULT_MAX;
+  const resolvedStep = Number.isFinite(discovered.step) && discovered.step > 0 ? discovered.step : DEFAULT_STEP;
+  const resolvedDefault = clampScale(discovered.defaultScale, resolvedMin, resolvedMax) ?? DEFAULT_SCALE;
 
   return {
     min: resolvedMin,

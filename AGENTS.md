@@ -314,3 +314,17 @@
   - `npm run develop -- --no-watch-admin` → `Bus error`（Chunk `1ec8d4`）
   - `npm run build` → `Bus error`（Chunk `321a87`）
   - `rg "resolveScaleConfig" cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx`
+
+### 2025-10-18 追記: Typography Scale 候補探索の最適化と互換性監査
+
+- **背景**: 2025-10-17 時点の実装でも Create an entry → Posts → Rich Text 直後にブラウザがフリーズするとの報告が継続。`collectOptionCandidates` が `attribute` 配下の Dynamic Zone 全体を幅優先探索しており、記事スキーマが大きい環境では 1 度のフィールド初期化で数百ノードを走査する最悪ケースが確認された。Strapi 管理画面は Dynamic Zone 検証のため短時間に同フィールドを繰り返し実行するため、探索コストが累積してメインスレッドを占有していた。
+- **対応**:
+  1. `TypographyScaleInput/index.jsx` の正規化ロジックを `gatherOptionMap` ベースに刷新。探索対象プロパティを Design System が使用する `options/settings/config/configuration/base/advanced/choices/defaults/properties` に限定し、候補ノード数を `MAX_OPTION_NODES = 64` に制限することで、Dynamic Zone 全体を辿ることなく `min/max/step/defaultScale` の抽出を完了させるようにした。
+  2. 配列形式のオプション（`base` 配列や `name: "options.min"` 形式）を `OPTION_ALIAS_MAP` と `OPTION_VALUE_FIELDS` で判定し、`value/defaultValue/initialValue` から数値のみを記録。候補が既に確定している場合は `Number.isFinite` 判定で再評価を即座にスキップし、同一ノードに対する重複アクセスを防いだ。
+  3. `attribute` そのものを探索キューに追加しつつも、`WeakSet` で循環参照を防ぎ、旧実装のように `fields` や `components` を無差別に展開しないよう調整。これによりオプション抽出は最大 64 ノードに収束する。
+- **互換性監査**:
+  - `cd cms && npm install --no-progress` を再実行し、Strapi 5.26.0 と付属プラグインの依存関係を最新状態に展開（ログ: `c3ad13†L1-L28`）。
+  - `cd cms && CI=1 npm run build` で管理画面ビルドが 44 秒で完了することを確認し、最適化後も本番ビルドが成功することを検証（ログ: `f0dacf†L1-L9`, `55e586†L1-L8`, `f1ad00†L1-L2`）。
+  - `cd cms && npm ls react` を実行して React 18.3.1 が単一ツリーで解決されていることを確認し、Strapi Admin/Design System/外部プラグイン間でバージョン不一致がないことを証明（ログ: `451d27†L1-L134`）。
+- **ドキュメント更新**: README と SETUP_BEGINNER_GUIDE の Typography Scale セクションにノード制限と互換性監査の結果を追記し、将来的に同様のフリーズを再調査する際の手がかりを明文化した。
+- **今後の指針**: Strapi カスタムフィールドの正規化処理は「必要なキーのみを限定的に探索」「探索ノード数を明示的に制限」「同一候補への再訪をキャッシュで排除」を原則とする。互換性確認では `npm ls` を活用し、React など peerDependencies が複製されていないか定期的にチェックする。
