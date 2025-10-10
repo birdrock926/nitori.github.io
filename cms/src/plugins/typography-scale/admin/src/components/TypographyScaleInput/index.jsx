@@ -349,7 +349,29 @@ class TypographyScaleInputInner extends React.Component {
   }
 }
 
+const hasActiveDispatcher = () => {
+  const internals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  const dispatcher = internals?.ReactCurrentDispatcher;
+
+  if (dispatcher && dispatcher.current) {
+    return true;
+  }
+
+  const owner = internals?.ReactCurrentOwner;
+  return Boolean(owner?.currentDispatcher);
+};
+
 const TypographyScaleInput = (props) => {
+  if (!hasActiveDispatcher()) {
+    const label =
+      props?.intlLabel?.defaultMessage || props?.intlLabel?.id || 'Typography scale placeholder';
+
+    return React.createElement('div', {
+      'data-typography-scale-placeholder': label,
+      style: { display: 'none' },
+    });
+  }
+
   return React.createElement(TypographyScaleInputInner, props);
 };
 

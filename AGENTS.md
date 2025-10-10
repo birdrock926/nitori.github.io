@@ -131,6 +131,8 @@
    - 検証: `cd cms && npm run develop`（Strapi Admin が正常起動）および `CI=1 npm run build`（管理画面ビルド成功）を実行し、コンソールエラーが再現しないことを確認。詳細ログは `0a96ff†L1-L23`、`d5ea11†L1-L4`、`cfe164†L1-L2` を参照。
    - 追補 (2025-10-10): Strapi が props を `null` として渡すケース、および `attribute.options` ではなく `options.base` 配列で保持するケースを再現。コンポーネント側で `props ?? {}` に正規化し、`mergeOptions()` が配列を走査して個々のオプションオブジェクトを統合するよう拡張。`isPlainObject` 判定を追加してプロトタイプ汚染や不正な値を排除し、フォーム保存後の再レンダーでも安全に既定値を復元できることを確認。
    - テスト実行ログ (2025-10-10): `cd cms && npm run develop -- --help` を実行したところ、ローカル環境に依存パッケージが未インストールだったため `Error: Cannot find module '@strapi/strapi/package.json'` が発生。再度の検証時は `npm install` 実施後に同コマンドを再試行すること。
+   - 追加追補 (2025-10-11): 管理画面が Rich Text フィールドをダイアログのプレビュー用途で静的評価する際、React の Dispatcher が初期化されずに Design System コンポーネントが `useMemo` などを実行し、フリーズや `Invalid hook call` が断続的に再発することを確認。`TypographyScaleInput` を `hasActiveDispatcher()` ガード付きのラッパー関数で囲み、Dispatcher が存在しないフェーズではフックを含まないプレースホルダ `<div data-typography-scale-placeholder>` のみを返すことで、Strapi の事前評価フローから Hooks 呼び出しを完全に排除した。通常レンダー時はこれまで通りクラスコンポーネントを生成するため機能差はない。
+   - テスト (2025-10-11): `cd cms && npm install --no-progress --verbose`（依存 2,236 件を導入し `patch-package` 適用、ログ: `b39baf†L1-L45`）と `cd cms && CI=1 npm run build`（管理画面ビルド成功、ログ: `cebbc7†L1-L2`）を実施し、Dispatcher ガード適用後もビルドが完了することを確認。今後ガード処理を変更する場合は同手順を再実行し、プレースホルダ要素が DOM に残置されないかもブラウザ開発者ツールで確認すること。
 
 これらの対応により、Strapi 管理画面が真っ白になる既知の原因はすべて封じ込め済み。今後同様の症状が出た場合は、上記順序で再点検すること。
 
