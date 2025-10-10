@@ -11,10 +11,15 @@
       "required": true
     },
     "fontScale": {
-      "type": "decimal",
-      "default": 1,
-      "min": 0.7,
-      "max": 1.8
+      "type": "customField",
+      "customField": "plugin::font-scale-slider.scale",
+      "default": null,
+      "options": {
+        "min": 0.7,
+        "max": 1.8,
+        "step": 0.05,
+        "defaultScale": 1
+      }
     }
   }
 }

@@ -457,3 +457,23 @@
   - `cd web && npm run lint`（既存の Astro/React 混在コードに対する ESLint の既知エラーが多数残っているため失敗。今回の変更で新規エラーは発生していないことをログで確認）【028f7e†L1-L129】
 - **今後の指針**: コメントフォームを変更する際は、クライアント→サーバーの両方でメール必須条件を満たせるかを手動/自動テストで確認する。`buildFallbackEmail()` のフォーマットを変更する場合はバックエンドの `ensureAuthorEmail()` と整合を取ること、README / SETUP / 本書を同時更新すること。
 
+### 2025-10-24 追記: Font Scale Slider プラグイン導入とコメント非表示処理の再設計
+
+- **背景**:
+  - Typography Scale プラグイン撤去後、Rich Text の `fontScale` を標準数値フィールドで入力する運用では編集体験が乏しく、倍率を変更してもプレビューしづらいとのフィードバックがあった。また、Strapi 管理画面の Rich Text ブロックでフォント倍率を調整しても Astro 側の出力が変化しないとの報告を受け、入力 UI と値の保存過程を再監査した。
+  - コメント機能ではブロック済みコメントがフロントエンドに常時「このコメントは管理者によって非表示になりました。」と表示され、返信が無い場合でも placeholder が残ってしまい閲覧体験を損ねていた。`lazyLoadComponents → setStore` ループは解消されたが、コメントツリー側での非表示処理が未調整だったためである。
+- **対応**:
+  1. Strapi ローカルプラグイン `cms/src/plugins/font-scale-slider/` を新規作成し、カスタムフィールド `plugin::font-scale-slider.scale` を登録。【F:cms/src/plugins/font-scale-slider/admin/src/index.js†L1-L20】【F:cms/src/plugins/font-scale-slider/admin/src/register.js†L1-L79】 `app.customFields.getAll()` で冪等確認した上で登録し、`app.registerPlugin` は未登録時のみ実行して `lazyLoadComponents → setStore` の再発を防止した。
+  2. 管理画面コンポーネント `FontScaleInput` をクラスベースで実装し、`useEffect` や `useState` を使わずに Strapi のフォーム API (`onChange({ target: { name, value, type } })`) へ直接通知。【F:cms/src/plugins/font-scale-slider/admin/src/components/FontScaleInput/index.jsx†L1-L211】 スライダーと数値入力は同じ正規化ロジック (`normalizeValue`) を共有し、初期値が `null` の場合はオプション既定値（1.0 倍）をプレビューのみに反映してフィールド値は `null` を維持する。
+  3. コンポーネントスキーマ `cms/src/components/content/rich-text.json` をカスタムフィールド参照へ更新し、最小値・最大値・刻み幅・既定表示値を `options` に明示。【F:cms/src/components/content/rich-text.json†L10-L20】 `default: null` を指定して記事既定値の継承を維持しつつ、ライフサイクル `clampScaleValue` で 0.7〜1.8 倍に丸め込む既存ロジックと整合させた。
+  4. `cms/config/plugins.js` に `font-scale-slider` を登録し、Strapi プロジェクト起動時にプラグインが有効化されるよう設定。【F:cms/config/plugins.js†L105-L108】
+  5. コメント UI (`web/src/components/comments/CommentsApp.tsx`) に `pruneHiddenComments()` を追加し、`blocked` / `removed` コメントを再帰的に除外。返信が存在するノードのみ placeholder を残すよう `renderComment()` を調整し、トップレベル・子レベルのいずれでも不要な「非表示」メッセージが出なくなった。【F:web/src/components/comments/CommentsApp.tsx†L55-L102】【F:web/src/components/comments/CommentsApp.tsx†L392-L470】【F:web/src/components/comments/CommentsApp.tsx†L1049-L1163】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - `cd web && npm install --no-progress --no-fund --no-audit`
+  - `cd web && npm run lint`（既存の ESLint エラーは残存。今回の差分で新規エラーが増えていないことを確認）
+- **今後の指針**:
+  - Font Scale Slider の `options` を変更する際は、プラグイン登録コードとライフサイクル `clampScaleValue` の上下限・刻み幅が一致しているかを同時に確認する。React コンポーネントに副作用を追加すると dispatcher 未初期化環境で再び `Invalid hook call` が発生するため、クラスベースもしくは副作用ゼロの関数コンポーネントを維持すること。
+  - コメント表示ロジックを更新する際は `pruneHiddenComments()` で `blocked` / `removed` ノードが除外されるか、`renderComment()` が `null` を返しても親の `.map()` が破綻しないかをブラウザで確認する。モデレーター向けの placeholder は返信が存在する場合のみ描画するルールを維持し、UI 文言を変更する場合は README / SETUP / 本書を同時更新する。
+

@@ -6,7 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
-- **カスタムフィールド**: 2025-10-23 に Rich Text ブロック向けの Typography Scale プラグインを完全撤去し、管理画面では標準の小数フィールド `fontScale` を直接入力する構成へ切り替えました。Strapi 5.26 で Dynamic Zone を初期化する際に `lazyLoadComponents → setStore` が繰り返し実行される不具合の根本原因がカスタムフィールド登録ロジックにあったためで、撤去後は Create an entry → Posts → Rich Text で画面がフリーズしないことを再確認しています。旧プラグインの実装や暫定対策の履歴は AGENTS.md に詳細を保管しており、障害調査の経緯を後追いできます。現在は `fontScale` に 0.7〜1.8 の数値を直接入力し、未設定時は記事既定値 (1.0 倍) が自動的に適用されます。値の上下限や既定値は `cms/src/components/content/rich-text.json` と `cms/src/api/post/content-types/post/lifecycles.js` の `clampScaleValue` で制御しているため、必要に応じて JSON を編集して検証ルールを拡張してください。
+- **カスタムフィールド**: 2025-10-24 に Rich Text ブロック向けの **Font Scale Slider** プラグイン（`plugin::font-scale-slider.scale`）を導入しました。Strapi 管理画面上で 0.7〜1.8 倍の範囲をスライダーと数値入力の両方で調整でき、空欄にすると記事既定の 1.0 倍を自動継承します。旧 Typography Scale プラグインで発生していた `lazyLoadComponents → setStore` ループは、冪等な登録ガードと副作用のないクラスコンポーネント実装により再発しないことを確認済みです。履歴・検証ログは AGENTS.md に保存しており、`cms/src/components/content/rich-text.json` や `cms/src/api/post/content-types/post/lifecycles.js` を編集すれば範囲や刻み幅をカスタマイズできます。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
@@ -190,6 +190,7 @@ npm run dev
   - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
+  - 管理画面でコメントを「ブロック」または「削除」すると、フロントエンドでは返信のないスレッドから自動的に除外され、返信が残っている場合のみ「このコメントは管理者によって非表示になりました。」のプレースホルダーが表示されます。ブロック済みコメントが一覧に残る場合は Strapi 側でコメント状態が更新されているか、キャッシュをクリアして再読込してください。
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
@@ -212,7 +213,7 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
-- Rich Text ブロックの `fontScale` は標準の数値入力で 0.7〜1.8 倍の範囲を直接指定し、空欄にすると記事の `bodyFontScale` 設定を継承します（既定 1.0 倍）。
+- Rich Text ブロックの `fontScale` は Font Scale Slider カスタムフィールドで 0.7〜1.8 倍をスライダー操作でき、空欄にすると記事の `bodyFontScale` 設定を継承します（既定 1.0 倍）。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。

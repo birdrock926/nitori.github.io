@@ -40,7 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
-  - RichText ブロックの本文倍率は 2025-10-23 に **Typography Scale** カスタムフィールドを撤去し、標準の小数入力 (`fontScale`) で直接指定する方式に切り替えました。これにより管理画面の `lazyLoadComponents → setStore` ループが解消され、Dynamic Zone 初期化時のフリーズが再発しないことを確認しています。従来のプラグイン実装と暫定対策の履歴は AGENTS.md に保存しており、互換性検証や障害の経緯を追跡できるようにしました。現在は 0.7〜1.8 倍の範囲を `fontScale` の最小・最大値とライフサイクル `clampScaleValue` で保証し、既定値は 1.0 倍（記事全体のデフォルト）です。必要に応じて JSON スキーマでさらに細かい検証ルールを追加できます。
+  - RichText ブロックの本文倍率は 2025-10-24 に **Font Scale Slider** カスタムフィールド（`plugin::font-scale-slider.scale`）へ移行しました。Strapi 管理画面で 0.7〜1.8 倍の範囲をスライダー + 数値入力で直感的に調整でき、未入力時は記事全体の既定値 (1.0 倍) を自動採用します。旧 Typography Scale 実装で発生していた `lazyLoadComponents → setStore` ループは新プラグインの冪等登録と副作用ゼロのクラスコンポーネントにより再発せず、詳細な経緯と検証ログは AGENTS.md に保存しています。必要に応じて JSON スキーマや `clampScaleValue` の上下限を編集すれば範囲・刻み幅を拡張できます。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -48,7 +48,7 @@
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
 - **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Document ID や slug を指定した古い投稿は自動でエントリー ID へ補正し、必要に応じてフォールバックします）。
 - **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
-- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。
+- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。管理側でコメントを「ブロック/削除」した場合は返信のないツリーから自動的に除外し、返信が残っているときだけ「このコメントは管理者によって非表示になりました。」のプレースホルダーを表示します。
 
 ### SEO / 収益
 - `NewsArticle`/`Article` **JSON-LD**、OGP 自動生成、サイトマップ/RSS
@@ -67,7 +67,7 @@
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-  - RichText ブロックの `fontScale` は標準の小数フィールドで 0.7〜1.8 倍の範囲を直接入力します（既定 1.0 倍）。旧 Typography Scale カスタムフィールドは管理画面ループ障害のため撤去済みで、履歴は AGENTS.md に記録しています
+- RichText ブロックの `fontScale` は `font-scale-slider` プラグインのカスタムフィールドで 0.7〜1.8 倍をスライダー操作できます。未入力時は記事全体の既定値 (1.0 倍) が適用され、詳細な履歴・復旧手順は AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー

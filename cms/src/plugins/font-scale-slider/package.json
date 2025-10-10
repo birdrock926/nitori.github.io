@@ -1,0 +1,9 @@
+{
+  "name": "font-scale-slider",
+  "version": "1.0.0",
+  "private": true,
+  "strapi": {
+    "name": "font-scale-slider",
+    "type": "plugin"
+  }
+}

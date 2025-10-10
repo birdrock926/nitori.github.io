@@ -149,6 +149,9 @@ export default ({ env }) => ({
   'color-picker': {
     enabled: true,
   },
+  'font-scale-slider': {
+    enabled: true,
+  },
   upload: buildUploadConfig(env),
   comments: buildCommentsConfig(env),
   email: {
