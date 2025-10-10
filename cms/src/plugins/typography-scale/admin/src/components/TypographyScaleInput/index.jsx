@@ -46,8 +46,6 @@ const isPlainObject = (candidate) => {
   return prototype === Object.prototype || prototype === null;
 };
 
-const OPTION_KEYS = ['min', 'max', 'step', 'defaultScale'];
-
 const OPTION_ALIAS_MAP = {
   min: ['min', 'options.min'],
   max: ['max', 'options.max'],
@@ -57,153 +55,171 @@ const OPTION_ALIAS_MAP = {
 
 const OPTION_VALUE_FIELDS = ['value', 'defaultValue', 'initialValue', 'current', 'default'];
 
-const NESTED_OPTION_KEYS = [
-  'options',
-  'settings',
-  'config',
-  'configuration',
-  'base',
-  'advanced',
-  'choices',
-  'defaults',
-  'properties',
+const OBJECT_SOURCE_PATHS = [
+  [],
+  ['attributeOptions'],
+  ['attributeOptions', 'options'],
+  ['attributeOptions', 'settings'],
+  ['attributeOptions', 'config'],
+  ['attributeOptions', 'configuration'],
+  ['attribute'],
+  ['attribute', 'options'],
+  ['attribute', 'settings'],
+  ['options'],
+  ['options', 'options'],
+  ['options', 'settings'],
+  ['options', 'config'],
+  ['options', 'configuration'],
 ];
 
-const MAX_OPTION_NODES = 64;
+const ARRAY_SOURCE_PATHS = [
+  ['attributeOptions', 'base'],
+  ['attributeOptions', 'advanced'],
+  ['attributeOptions', 'choices'],
+  ['attributeOptions', 'properties'],
+  ['attributeOptions', 'defaults'],
+  ['attributeOptions', 'config', 'base'],
+  ['attributeOptions', 'config', 'advanced'],
+  ['attributeOptions', 'configuration', 'base'],
+  ['attributeOptions', 'configuration', 'advanced'],
+  ['attribute', 'options', 'base'],
+  ['attribute', 'options', 'advanced'],
+  ['attribute', 'options', 'choices'],
+  ['attribute', 'options', 'properties'],
+  ['options', 'base'],
+  ['options', 'advanced'],
+  ['options', 'choices'],
+  ['options', 'properties'],
+  ['options', 'defaults'],
+  ['options', 'config', 'base'],
+  ['options', 'config', 'advanced'],
+  ['options', 'configuration', 'base'],
+  ['options', 'configuration', 'advanced'],
+];
 
-const recordOption = (bucket, key, candidate) => {
-  if (!Number.isFinite(bucket[key])) {
-    const numeric = toNullableNumber(candidate);
-    if (numeric !== null) {
-      bucket[key] = numeric;
-    }
+const getNestedValue = (root, path) => {
+  if (!Array.isArray(path) || path.length === 0) {
+    return root;
   }
+
+  let current = root;
+  for (const part of path) {
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+
+    current = current[part];
+  }
+
+  return current;
 };
 
-const gatherOptionMap = (sources) => {
-  const bucket = { min: undefined, max: undefined, step: undefined, defaultScale: undefined };
-  const queue = [];
-  const seen = new WeakSet();
-
-  const enqueue = (value) => {
-    if (!value) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        enqueue(entry);
-      }
-      return;
-    }
-
-    if (!isPlainObject(value) || seen.has(value)) {
-      return;
-    }
-
-    seen.add(value);
-    queue.push(value);
-  };
-
-  for (const source of sources) {
-    enqueue(source);
+const extractNumericFromEntry = (entry, key) => {
+  if (!isPlainObject(entry)) {
+    return null;
   }
 
-  let processed = 0;
+  const aliases = OPTION_ALIAS_MAP[key] ?? [];
+  const identifierCandidates = [entry.name, entry.path, entry.key, entry.field, entry.identifier, entry.attribute];
 
-  while (queue.length > 0 && processed < MAX_OPTION_NODES) {
-    const current = queue.shift();
-    if (!current) {
-      continue;
+  const normalizedIdentifiers = identifierCandidates
+    .filter((candidate) => typeof candidate === 'string')
+    .map((candidate) => candidate.trim());
+
+  const matchesAlias = normalizedIdentifiers.some((identifier) => {
+    if (!identifier) {
+      return false;
     }
 
-    processed += 1;
+    return aliases.some((alias) => alias === identifier || alias === identifier.replace(/^options\./, ''));
+  });
 
-    for (const key of OPTION_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(current, key)) {
-        recordOption(bucket, key, current[key]);
-      }
+  if (!matchesAlias) {
+    return null;
+  }
 
-      const nestedOptions = current.options;
-      if (isPlainObject(nestedOptions) && Object.prototype.hasOwnProperty.call(nestedOptions, key)) {
-        recordOption(bucket, key, nestedOptions[key]);
-      }
-    }
-
-    if (typeof current.name === 'string') {
-      const normalized = current.name.trim();
-      for (const key of OPTION_KEYS) {
-        const aliases = OPTION_ALIAS_MAP[key];
-        if (!aliases) {
-          continue;
-        }
-
-        if (aliases.includes(normalized)) {
-          for (const field of OPTION_VALUE_FIELDS) {
-            if (Object.prototype.hasOwnProperty.call(current, field)) {
-              recordOption(bucket, key, current[field]);
-            }
-          }
-        }
-      }
-    }
-
-    if (typeof current.path === 'string') {
-      const normalized = current.path.trim();
-      for (const key of OPTION_KEYS) {
-        const aliases = OPTION_ALIAS_MAP[key];
-        if (!aliases) {
-          continue;
-        }
-
-        if (aliases.includes(normalized) || aliases.includes(normalized.replace(/^options\./, ''))) {
-          for (const field of OPTION_VALUE_FIELDS) {
-            if (Object.prototype.hasOwnProperty.call(current, field)) {
-              recordOption(bucket, key, current[field]);
-            }
-          }
-        }
-      }
-    }
-
-    for (const nestedKey of NESTED_OPTION_KEYS) {
-      const candidate = current[nestedKey];
-      if (!candidate) {
-        continue;
-      }
-
-      if (nestedKey === 'base' || nestedKey === 'advanced' || nestedKey === 'choices') {
-        if (Array.isArray(candidate)) {
-          for (const entry of candidate) {
-            enqueue(entry);
-          }
-        }
-      } else {
-        enqueue(candidate);
+  for (const field of OPTION_VALUE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(entry, field)) {
+      const numeric = toNullableNumber(entry[field]);
+      if (numeric !== null) {
+        return numeric;
       }
     }
   }
 
-  return bucket;
+  if (Object.prototype.hasOwnProperty.call(entry, 'value')) {
+    const numeric = toNullableNumber(entry.value);
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  return null;
+};
+
+const extractNumericFromObject = (object, key) => {
+  if (!isPlainObject(object)) {
+    return null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(object, key)) {
+    const numeric = toNullableNumber(object[key]);
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(object, 'options') && isPlainObject(object.options)) {
+    const numeric = toNullableNumber(object.options[key]);
+    if (numeric !== null) {
+      return numeric;
+    }
+  }
+
+  return null;
 };
 
 const resolveScaleConfig = (props) => {
   const rawProps = props ?? {};
-  const { attribute, attributeOptions, options: directOptions } = rawProps;
 
-  const optionSources = [
-    attributeOptions,
-    attribute,
-    attribute?.options,
-    directOptions,
-    attributeOptions?.options,
-    directOptions?.options,
-    attributeOptions?.base,
-    attribute?.options?.base,
-    directOptions?.base,
-  ];
+  const discovered = { min: undefined, max: undefined, step: undefined, defaultScale: undefined };
 
-  const discovered = gatherOptionMap(optionSources);
+  for (const [key, pathList] of Object.entries({
+    min: OBJECT_SOURCE_PATHS,
+    max: OBJECT_SOURCE_PATHS,
+    step: OBJECT_SOURCE_PATHS,
+    defaultScale: OBJECT_SOURCE_PATHS,
+  })) {
+    for (const path of pathList) {
+      const candidate = getNestedValue(rawProps, path);
+      const numeric = extractNumericFromObject(candidate, key);
+      if (numeric !== null) {
+        discovered[key] = numeric;
+        break;
+      }
+    }
+  }
+
+  for (const path of ARRAY_SOURCE_PATHS) {
+    const entries = getNestedValue(rawProps, path);
+    if (!Array.isArray(entries) || entries.length === 0) {
+      continue;
+    }
+
+    for (const key of Object.keys(discovered)) {
+      if (Number.isFinite(discovered[key])) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const numeric = extractNumericFromEntry(entry, key);
+        if (numeric !== null) {
+          discovered[key] = numeric;
+          break;
+        }
+      }
+    }
+  }
 
   const resolvedMin = Number.isFinite(discovered.min) ? discovered.min : DEFAULT_MIN;
   const resolvedMax = Number.isFinite(discovered.max) ? discovered.max : DEFAULT_MAX;

@@ -328,3 +328,21 @@
   - `cd cms && npm ls react` を実行して React 18.3.1 が単一ツリーで解決されていることを確認し、Strapi Admin/Design System/外部プラグイン間でバージョン不一致がないことを証明（ログ: `451d27†L1-L134`）。
 - **ドキュメント更新**: README と SETUP_BEGINNER_GUIDE の Typography Scale セクションにノード制限と互換性監査の結果を追記し、将来的に同様のフリーズを再調査する際の手がかりを明文化した。
 - **今後の指針**: Strapi カスタムフィールドの正規化処理は「必要なキーのみを限定的に探索」「探索ノード数を明示的に制限」「同一候補への再訪をキャッシュで排除」を原則とする。互換性確認では `npm ls` を活用し、React など peerDependencies が複製されていないか定期的にチェックする。
+
+### 2025-10-19 追記: Typography Scale の探索ロジックをパス列挙方式へ再再設計
+
+- **背景**: ユーザーからの再報告および外部 AI の助言で、Rich Text ブロックを開いた瞬間にフリーズする原因として Typography Scale カスタムフィールドの再レンダー嵐が依然疑われた。従来の `gatherOptionMap` は 64 ノード上限を設けていたものの、`attribute` 配下の入れ子構造を幅優先探索する過程で不要なオブジェクトをたびたび再訪し、Strapi Blocks のスキーマ再評価と合わさるとメインスレッドが張り付くリスクが残っていた。また、React の複数バージョンが同梱されると `Invalid hook call` が再発するとの指摘も受けたため、依存監査を再実施した。
+- **対応**:
+  1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` で探索ロジックを全面的に置き換え、事前に列挙したオプションパス (`attributeOptions`, `attribute.options`, `options` など) と `options.min` 系のエイリアスのみを逐次評価する仕組みに変更。配列は `base/advanced/choices` など既知のコンテナだけを一次走査し、幅優先探索と `WeakSet` を廃止したことで CPU コストを完全に一定化した。
+  2. `extractNumericFromObject` / `extractNumericFromEntry` を導入し、プレーンオブジェクトと `name/path/key` を持つ設定エントリから数値のみを抽出。`toNullableNumber` による検証を徹底し、未定義・空文字・Infinity のような異常値が UI に伝播しないようガードした。
+  3. `OBJECT_SOURCE_PATHS` に空配列を含めて props 直下 (`props.min` など) も検査できるようにし、`ARRAY_SOURCE_PATHS` は `config.base` / `configuration.advanced` など発見済みパターンを追加。Strapi v5 の schema 変更で格納先が入れ替わっても、新しいキーをパスリストに追記するだけで対応できる構造になった。
+  4. `resolveScaleConfig` は発見済みのキーを `discovered` に保持し、既に数値が確定したものは追加探索を早期にスキップ。これにより Strapi Blocks が同一フレームで複数回フィールドを評価しても不要なループが生じない。
+  5. プラグインの `package.json` を再確認し、`react` / `react-dom` が依存に含まれていないことを明文化。さらに `npm ls react` を実行して依存グラフが単一の `18.3.1` に収束していることを再確認し、React の二重同梱による `Invalid hook call` 懸念を払拭した。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`（2236 パッケージ導入、既知の非推奨警告のみ。ログ: `eea59f†L1-L14`）
+  - `cd cms && CI=1 npm run build`（管理画面ビルド 43.8 秒で完了、追加警告なし。ログ: `020cfb†L1-L2`, `9a96f6†L1-L19`, `c677e4†L1-L2`）
+  - `cd cms && npm ls react`（React 18.3.1 が単一ツリーで解決されていることを確認。ログ: `9f3b39†L1-L3`, `c8adfc†L1-L128`）
+- **ドキュメント更新**:
+  - README.md / SETUP_BEGINNER_GUIDE.md の Typography Scale 節に、パス列挙方式・React 依存監査・`CI=1 npm run build` 再検証を追記。
+  - 本書に本節を追加し、再発時の調査手順（パスリスト更新・`npm ls react` 確認）を明記。
+- **今後の指針**: Strapi のカスタムフィールドでは「探索対象を明示的に列挙」「単位時間あたりの計算量を一定化」「依存パッケージが複数コピーされていないか定期監査」の 3 点を遵守する。Dynamic Zone へコンポーネントを追加するとオプション配置が変わるため、schema 更新時はパスリストを洗い替えし、`npm run build` とブラウザでの動作確認を必須とする。
