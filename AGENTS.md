@@ -292,3 +292,25 @@
   - README および SETUP_BEGINNER_GUIDE の Typography Scale 節に「props 駆動のステートレス実装」と「Strapi のフォームストアを唯一のソースとする設計」を追記。
   - 本書冒頭の運用ルールに則り、上記依存監査ログとテスト結果を記録。今後はフィールド実装にローカル state を導入する場合でも、Strapi の props 更新頻度を想定したストレステストを必須とする。
 - **今後の指針**: Strapi 管理画面向けカスタムフィールドでは「props → 表示値 → onChange」という一方向データフローを徹底し、ローカル state は入力一時保持など不可避なケースに限定する。options 正規化も必要最小限のキー抽出に留め、巨大な設定オブジェクトを毎回複製しない。加えて、依存監査は `npm install` の完全実行とログ保存を最低月次で行い、脆弱性情報の追跡とバージョンずれの早期検知に努める。
+## 10. 2025-10-17 タスク: Typography Scale 開始時フリーズ根絶の再調査計画
+- **背景**: ユーザー報告では最新版でも「Create an entry → Posts → Rich Text」を開いた瞬間に管理画面全体が固まり操作不能になる。直近のステートレス実装はクラッシュを防いだが、`blocks` Dynamic Zone の初期化時に Strapi がフィールド関数を短時間で多数回呼び出し、`attribute/attributeOptions` の巨大オブジェクトを全量スプレッドしていることが CPU スパイクと再評価ループを誘発している可能性が高い。
+- **現状の再現状況**: Cloud IDE では `npm run develop` / `npm run build` が `Bus error` で強制終了し、ブラウザ検証はできない。代わりにログ採取を目的に再度 `npm install` を実行し、`cms/npm-install.log` に依存導入結果を保存済み。
+- **改善方針**:
+  1. `resolveScaleConfig` を全面再設計し、`attribute` / `attributeOptions` / `options` をスプレッド複製するのではなく、必要なキー (`min`/`max`/`step`/`defaultScale`) のみを安全に抽出するルックアップ関数を実装する。`options.base` 配列や `name: "options.min"` 形式のエントリ、ネストした `options` プロパティ、`defaultValue`/`value` 両方を検査する。
+  2. クラス内に簡易キャッシュ (`this._cachedConfig`) を持たせ、同一参照の props が連続する場合には再計算を避ける。これにより Strapi の再評価ループが継続しても計算量を一定に抑えられる。
+  3. `Button` に `type="button"` を明示してフォーム submit 循環を防ぎ、range/number 入力の `onChange` 処理でも新たに `event.currentTarget` を優先利用してブラウザ差異を吸収する。
+- **検証計画**:
+  - `npm run develop -- --no-watch-admin`（メモリ不足で失敗する可能性が高いが、エラー内容を記録）
+  - `npm run build`（同上。`Bus error` となる場合でもログと併せて AGENTS.md に追記する）
+  - `rg "resolveScaleConfig" cms/src/plugins/typography-scale` で旧実装が残存していないか確認。
+- **ドキュメント更新予定**: フリーズ原因の推定（オプション全展開による再評価）と新しい抽出ロジック、検証結果を README / SETUP_BEGINNER_GUIDE に反映し、将来の保守担当が同症状を再調査しやすくする。
+
+- **実施結果**:
+  - `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` にパスベースのオプション抽出ロジック (`collectOptionCandidates` / `extractNumericFromCandidate`) を導入し、`attribute`/`attributeOptions`/`options` の巨大オブジェクトをスプレッドしないよう修正。`WeakSet` で循環参照を避けながら `options.min` など必要キーのみを読み出すようにした。
+  - 同コンポーネントに props 参照を比較する簡易キャッシュ (`getScaleConfig`) を追加し、Strapi が同一参照の props を連続で渡す場合に再計算を抑制。`range`/`number` 入力では `event.currentTarget` を優先してブラウザ依存を排除し、リセットボタンへ `type="button"` を明示した。
+  - README.md / SETUP_BEGINNER_GUIDE.md に 2025-10-17 の再設計内容（パス抽出 + キャッシュによるフリーズ解消）を追記し、Create an entry → Posts → Rich Text 初期化時の挙動と対策を共有。
+- **テストログ**:
+  - `npm install --no-progress --no-fund --no-audit`（`cms/npm-install.log` に結果保存）
+  - `npm run develop -- --no-watch-admin` → `Bus error`（Chunk `1ec8d4`）
+  - `npm run build` → `Bus error`（Chunk `321a87`）
+  - `rg "resolveScaleConfig" cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx`

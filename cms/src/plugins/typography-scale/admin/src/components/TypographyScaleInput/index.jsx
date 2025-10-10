@@ -46,29 +46,139 @@ const isPlainObject = (candidate) => {
   return prototype === Object.prototype || prototype === null;
 };
 
-const normalizeOptionCandidate = (candidate) => {
-  if (!isPlainObject(candidate)) {
-    return {};
-  }
-
-  const nested = isPlainObject(candidate.options) ? candidate.options : {};
-
-  return { ...nested, ...candidate };
+const OPTION_PATHS = {
+  min: ['min', 'options.min', 'config.min', 'settings.min'],
+  max: ['max', 'options.max', 'config.max', 'settings.max'],
+  step: ['step', 'options.step', 'config.step', 'settings.step'],
+  defaultScale: [
+    'defaultScale',
+    'options.defaultScale',
+    'config.defaultScale',
+    'settings.defaultScale',
+    'default',
+    'defaultScaleOption',
+  ],
 };
 
-const extractNumericOption = (source, key) => {
-  if (!source) {
+const OPTION_ENTRY_ALIASES = {
+  min: ['min', 'options.min'],
+  max: ['max', 'options.max'],
+  step: ['step', 'options.step'],
+  defaultScale: ['defaultScale', 'options.defaultScale', 'default'],
+};
+
+const getByPath = (source, path) => {
+  if (!isPlainObject(source)) {
     return undefined;
   }
 
-  const direct = source[key];
-  if (typeof direct === 'number') {
-    return direct;
+  const segments = path.split('.');
+  let cursor = source;
+
+  for (const segment of segments) {
+    if (!cursor || typeof cursor !== 'object') {
+      return undefined;
+    }
+
+    cursor = cursor[segment];
   }
 
-  if (typeof direct === 'string') {
-    const parsed = Number.parseFloat(direct);
-    return Number.isFinite(parsed) ? parsed : undefined;
+  return cursor;
+};
+
+const collectOptionCandidates = (root) => {
+  const results = [];
+  const queue = [];
+  const seen = new WeakSet();
+
+  const enqueue = (value) => {
+    if (!value) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        enqueue(entry);
+      }
+      return;
+    }
+
+    if (!isPlainObject(value)) {
+      return;
+    }
+
+    if (seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+    queue.push(value);
+  };
+
+  enqueue(root);
+
+  while (queue.length > 0) {
+    const candidate = queue.shift();
+    if (!candidate) {
+      continue;
+    }
+
+    results.push(candidate);
+
+    enqueue(candidate.options);
+    enqueue(candidate.settings);
+    enqueue(candidate.config);
+    enqueue(candidate.configuration);
+    enqueue(candidate.values);
+    enqueue(candidate.fields);
+    enqueue(candidate.base);
+    enqueue(candidate.choices);
+    enqueue(candidate.defaults);
+    enqueue(candidate.properties);
+  }
+
+  return results;
+};
+
+const extractNumericFromCandidate = (candidate, key) => {
+  if (!candidate) {
+    return undefined;
+  }
+
+  const candidates = collectOptionCandidates(candidate);
+  const lookupPaths = OPTION_PATHS[key] ?? [];
+  const aliasNames = OPTION_ENTRY_ALIASES[key] ?? [];
+
+  for (const source of candidates) {
+    for (const path of lookupPaths) {
+      const direct = getByPath(source, path);
+      const numeric = toNullableNumber(direct);
+      if (numeric !== null) {
+        return numeric;
+      }
+    }
+
+    if (typeof source[key] !== 'undefined') {
+      const numeric = toNullableNumber(source[key]);
+      if (numeric !== null) {
+        return numeric;
+      }
+    }
+
+    if (typeof source.name === 'string') {
+      const normalized = source.name.trim();
+      for (const alias of aliasNames) {
+        if (normalized === alias || normalized === `options.${alias}`) {
+          const valueCandidates = [source.value, source.defaultValue, source.default, source.initialValue];
+          for (const candidateValue of valueCandidates) {
+            const numeric = toNullableNumber(candidateValue);
+            if (numeric !== null) {
+              return numeric;
+            }
+          }
+        }
+      }
+    }
   }
 
   return undefined;
@@ -78,16 +188,41 @@ const resolveScaleConfig = (props) => {
   const rawProps = props ?? {};
   const { attribute, attributeOptions, options: directOptions } = rawProps;
 
-  const merged = {
-    ...normalizeOptionCandidate(attribute?.options),
-    ...normalizeOptionCandidate(attributeOptions),
-    ...normalizeOptionCandidate(directOptions),
-  };
+  const optionSources = [
+    attributeOptions,
+    attribute?.options,
+    directOptions,
+    attributeOptions?.options,
+    directOptions?.options,
+  ];
 
-  const min = extractNumericOption(merged, 'min');
-  const max = extractNumericOption(merged, 'max');
-  const step = extractNumericOption(merged, 'step');
-  const defaultScale = extractNumericOption(merged, 'defaultScale');
+  const min = optionSources.reduce((acc, candidate) => {
+    if (Number.isFinite(acc)) {
+      return acc;
+    }
+    return extractNumericFromCandidate(candidate, 'min');
+  }, undefined);
+
+  const max = optionSources.reduce((acc, candidate) => {
+    if (Number.isFinite(acc)) {
+      return acc;
+    }
+    return extractNumericFromCandidate(candidate, 'max');
+  }, undefined);
+
+  const step = optionSources.reduce((acc, candidate) => {
+    if (Number.isFinite(acc)) {
+      return acc;
+    }
+    return extractNumericFromCandidate(candidate, 'step');
+  }, undefined);
+
+  const defaultScale = optionSources.reduce((acc, candidate) => {
+    if (Number.isFinite(acc)) {
+      return acc;
+    }
+    return extractNumericFromCandidate(candidate, 'defaultScale');
+  }, undefined);
 
   const resolvedMin = Number.isFinite(min) ? min : DEFAULT_MIN;
   const resolvedMax = Number.isFinite(max) ? max : DEFAULT_MAX;
@@ -158,6 +293,12 @@ class TypographyScaleInput extends React.PureComponent {
     this.cachedResolvedFormat = null;
     this.cachedFormatMessage = null;
     this.warnedMissingIntl = false;
+    this.cachedConfig = null;
+    this.cachedConfigSources = {
+      attribute: null,
+      attributeOptions: null,
+      options: null,
+    };
   }
 
   getFormatMessage() {
@@ -192,6 +333,27 @@ class TypographyScaleInput extends React.PureComponent {
     return fallbackFormatMessage;
   }
 
+  getScaleConfig(rawProps = this.props ?? {}) {
+    const attribute = rawProps.attribute;
+    const attributeOptions = rawProps.attributeOptions;
+    const options = rawProps.options;
+
+    const hasCache =
+      this.cachedConfig &&
+      this.cachedConfigSources.attribute === attribute &&
+      this.cachedConfigSources.attributeOptions === attributeOptions &&
+      this.cachedConfigSources.options === options;
+
+    if (hasCache) {
+      return this.cachedConfig;
+    }
+
+    const computed = resolveScaleConfig(rawProps);
+    this.cachedConfig = computed;
+    this.cachedConfigSources = { attribute, attributeOptions, options };
+    return computed;
+  }
+
   emitChange(next) {
     const { name = 'typography-scale' } = this.props ?? {};
     const onChange = typeof this.props?.onChange === 'function' ? this.props.onChange : () => {};
@@ -204,15 +366,17 @@ class TypographyScaleInput extends React.PureComponent {
   }
 
   handleSliderChange = (event) => {
-    const config = resolveScaleConfig(this.props);
-    const nextValue = clampScale(event.target.value, config.min, config.max) ?? config.defaultScale;
+    const config = this.getScaleConfig();
+    const target = event?.currentTarget ?? event?.target;
+    const nextValue = clampScale(target?.value, config.min, config.max) ?? config.defaultScale;
 
     this.emitChange(nextValue);
   };
 
   handleNumberChange = (event) => {
-    const config = resolveScaleConfig(this.props);
-    const raw = event.target.value;
+    const config = this.getScaleConfig();
+    const target = event?.currentTarget ?? event?.target;
+    const raw = target?.value;
 
     if (raw === '' || raw === null || raw === undefined) {
       this.emitChange(null);
@@ -242,7 +406,7 @@ class TypographyScaleInput extends React.PureComponent {
       value,
     } = rawProps;
 
-    const config = resolveScaleConfig(rawProps);
+    const config = this.getScaleConfig(rawProps);
     const rawValue = toNullableNumber(value);
     const numericValue = clampScale(rawValue, config.min, config.max);
     const sliderValue = numericValue ?? config.defaultScale;
@@ -257,7 +421,7 @@ class TypographyScaleInput extends React.PureComponent {
         <Flex direction="column" gap={3}>
           <Flex justifyContent="space-between" alignItems="center" gap={2}>
             <Field.Label action={labelAction}>{formatMessage(resolvedLabel)}</Field.Label>
-            <Button variant="tertiary" size="S" onClick={this.handleReset} disabled={disabled}>
+            <Button variant="tertiary" size="S" onClick={this.handleReset} disabled={disabled} type="button">
               {formatMessage({ id: getTrad('field.reset'), defaultMessage: '既定値に戻す' })}
             </Button>
           </Flex>
