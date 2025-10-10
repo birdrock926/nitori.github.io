@@ -6,6 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
+- **カスタムフィールド**: Rich Text ブロック向けの Typography Scale（文字サイズ倍率）フィールドは、Strapi 5.26 が props を未初期化のまま渡すケースやオプションを配列で保持するケースでも安全に動作するよう防御ロジックを追加済み。未入力時は記事既定値 (1.0) を使い、0.7〜1.8 倍の範囲をスライダーと数値入力で調整できます。Intl コンテキストが読み込まれる前でも `window.strapi` 経由のフォールバックでラベルが表示されるうえ、内部ロジックをクラスコンポーネントに移行して hooks を完全に排除し、さらに React Dispatcher が未初期化のフェーズではフックのないプレースホルダ要素だけを返すゲートを設けたため、Strapi がフィールドを直接評価しても `Invalid hook call` や画面フリーズが再発しません。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
@@ -158,6 +159,8 @@ cd ..
 ```
 
 `/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` も `scripts/run-strapi.mjs` により Node 20 / Windows / WSL で安定して動作するようになりました。極端にメモリが少ない環境 (2GB 未満) では Vite がクラッシュする可能性があるため、その場合は公式 `strapi/strapi:5`（Node 18 ベース）コンテナでビルドするか、ホストでビルド済みの管理画面をコピーする運用を検討してください。
+
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール環境で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生します。ドキュメント更新時点では CI 環境に依存がないため、ローカルで検証するときは先に `npm install` を実行してください。
 
 
 > ✅ **2025-10-02 JST 動作検証ログ**: Node.js 20.19.4 + npm 10.8 (Debian/WSL) で `npm install` → `npm run develop` → `npm run build`（/cms）と `npm install` → `npm run build`（/web）を順番に実行し、すべて成功することを確認しました。Strapi 起動時には `[github] Webhook dispatch skipped` のデバッグメッセージが表示され、GitHub 連携が未設定でも 401 が発生しないことを確認済みです。
