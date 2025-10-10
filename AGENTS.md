@@ -373,3 +373,18 @@
   - `cd cms && CI=1 npm run build`（管理画面ビルドが成功し、Typography Scale フィールド読み込み時に追加警告なし。ログ: `c2d7cd†L1-L1`）
   - `cd cms && npm ls react`（React 18.3.1 が単一で解決され、二重同梱がないことを再確認。ログ: `9c2fe0†L1-L118`）
 - **今後の指針**: Typography Scale のオプションを新たに追加する場合は `OPTION_PATHS` へパスを追加するだけで対応し、探索ロジックを再帰的に戻さない。Dynamic Zone へリッチテキスト以外のブロックを追加する際も `options.min/max/step/defaultScale` を JSON 定義で必ず明示し、継承に頼らない設計を維持する。問題再発時は `resolveNumericOption` へデバッグログを挿入し、どのソースが使用されているか確認したうえでパスリストを更新すること。
+
+### 2025-10-22 追記: 初期値未確定による `Maximum update depth exceeded` ループの解消
+
+- **背景**: 最新ビルドでも「Create an entry → Posts → Rich Text」を開いた瞬間にブラウザがフリーズし、開発者ツールには `Warning: Maximum update depth exceeded` が連続出力されるとの再報告を受領。スタックトレースは `lazyLoadComponents` 内の `setStore` が無限再実行されており、Dynamic Zone 初期化時に Typography Scale フィールドの `value` が常に `undefined` のまま再評価され続けていることが原因と判明。これまでの最適化で継承スキャンは排除できた一方、Strapi が「未初期化フィールド」と判断して再マウントを繰り返し、`useEffect` 依存関係の乱高下 → update depth 超過を誘発していた。
+- **対応**:
+  1. `TypographyScaleInput` に `lastSubmittedValue` トラッキングと `ensureInitialValue()` を追加し、受け取った `value` が `undefined` の場合は一度だけ `onChange({ value: null })` を発行して Strapi 側のフォームストアへ「既定値（記事継承）」を明示するよう修正。既に `null` が渡されている場合は何も送らず、同じ値を重複送信しないことで再レンダー嵐を防ぐ。【F:cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx†L205-L286】
+  2. `ensureInitialValue()` はフィールドに既存値がある場合でも `clampScale()` で上下限へ正規化し、浮動小数点誤差や文字列値（例: `'1.0'`）を検出した際は一度だけ補正値を `emitChange()` で返す。これにより Strapi が options 更新 → 値が微妙にズレる → 再度 schema 評価……というループを起こさなくなる。
+  3. `emitChange()` 側に値のメモ化と `Number.isFinite` チェックを実装し、同じ数値を繰り返し送信しないガードを追加。`null` を繰り返し送信すると再マウントがループするため、初期化とリセット時のみイベントを飛ばすよう整理した。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`（2236 パッケージを再展開し、patch-package の適用と依存整合性を確認）【008425†L1-L16】
+  - `cd cms && CI=1 npm run build`（管理画面ビルドが 114 秒で完了し、警告・エラーなく終了）【104dbe†L1-L5】【ebcbdc†L1-L1】
+- **今後の指針**:
+  - Typography Scale を含むカスタムフィールドは「Strapi が undefined を渡すフェーズ」で必ず一度既定値を申告し、フォームストアを安定させる。`ensureInitialValue()` にデバッグログを仕込む場合は、値送信回数が 1 回に収束しているか確認する。
+  - 新たに上下限を追加する際は JSON 定義に明示したうえで `ensureInitialValue()` にも同値が渡されるか確認し、誤差補正が不要なケースではイベント送信が発生していないことを `console.count` などで監視する。
+  - `Maximum update depth exceeded` が再発した場合はまずブラウザコンソールで `value` が `undefined` のままループしていないか調査し、必要に応じて `emitChange()` の重複送信ガードや clamp ロジックを更新する。

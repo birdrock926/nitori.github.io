@@ -207,6 +207,7 @@ class TypographyScaleInput extends React.PureComponent {
       attributeOptions: null,
       options: null,
     };
+    this.lastSubmittedValue = undefined;
   }
 
   getFormatMessage() {
@@ -265,12 +266,24 @@ class TypographyScaleInput extends React.PureComponent {
   emitChange(next) {
     const { name = 'typography-scale' } = this.props ?? {};
     const onChange = typeof this.props?.onChange === 'function' ? this.props.onChange : () => {};
+    const normalized = next === null ? null : toNullableNumber(next);
 
-    if (next === null) {
+    if (normalized === null) {
+      if (this.lastSubmittedValue === null) {
+        return;
+      }
+
+      this.lastSubmittedValue = null;
       onChange({ target: { name, value: null, type: 'float' } });
-    } else {
-      onChange({ target: { name, value: next, type: 'float' } });
+      return;
     }
+
+    if (Number.isFinite(this.lastSubmittedValue) && this.lastSubmittedValue === normalized) {
+      return;
+    }
+
+    this.lastSubmittedValue = normalized;
+    onChange({ target: { name, value: normalized, type: 'float' } });
   }
 
   handleSliderChange = (event) => {
@@ -298,6 +311,55 @@ class TypographyScaleInput extends React.PureComponent {
   handleReset = () => {
     this.emitChange(null);
   };
+
+  ensureInitialValue(props = this.props ?? {}) {
+    const { value } = props;
+
+    if (value === undefined) {
+      if (this.lastSubmittedValue !== null) {
+        this.emitChange(null);
+      }
+      return;
+    }
+
+    if (value === null) {
+      this.lastSubmittedValue = null;
+      return;
+    }
+
+    const config = this.getScaleConfig(props);
+    const numeric = clampScale(value, config.min, config.max);
+
+    if (numeric === null) {
+      if (this.lastSubmittedValue !== null) {
+        this.emitChange(null);
+      }
+      return;
+    }
+
+    const rawNumeric = toNullableNumber(value);
+    if (rawNumeric === null || Math.abs(rawNumeric - numeric) > Number.EPSILON) {
+      this.emitChange(numeric);
+      return;
+    }
+
+    this.lastSubmittedValue = numeric;
+  }
+
+  componentDidMount() {
+    this.ensureInitialValue(this.props);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (
+      prevProps.value !== this.props.value ||
+      prevProps.attribute !== this.props.attribute ||
+      prevProps.attributeOptions !== this.props.attributeOptions ||
+      prevProps.options !== this.props.options
+    ) {
+      this.ensureInitialValue(this.props);
+    }
+  }
 
   render() {
     const rawProps = this.props ?? {};
