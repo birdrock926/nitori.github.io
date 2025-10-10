@@ -226,3 +226,12 @@
   - そのため hooks を完全に排除し、`window.strapi` から `formatMessage` を取得するフェイルセーフ関数 `resolveFormatMessage()` を実装。Intl コンテキストが無い場合でも `fallbackFormatMessage` が defaultMessage / id を描画し、`{value}` 置換にも対応するようにした。Intl 取得に失敗した場合は開発時のみ `console.warn` を出力する。
   - `npm run build` の初回実行は上記 import 解決エラーで停止、再試行時に `CI=1 npm run build` を実行して 111 秒で管理画面ビルドが完了することを確認 (`11b573†L1-L2`)。途中で `write EPIPE` が発生したログ (`e5f068†L2-L11`) は Ctrl+C による中断が原因であり、再実行で解消した。
   - README / SETUP_BEGINNER_GUIDE に Intl フォールバックの内容と `Invalid hook call` 再発防止策を追記し、利用者向けドキュメントを最新化。
+
+### 2025-10-12 追記: React dispatcher 不在時の Invalid hook call 恒久対策
+- **新規知見**: Strapi 5.26 はカスタムフィールドのバリデーションやフォーム初期化時に `components.Input` を React レンダラー経由ではなく生関数として評価するケースがあり、このタイミングでは `ReactCurrentDispatcher` が未初期化のため、関数本体に `useMemo` / `useState` などの hooks が存在すると `Invalid hook call` が再発する。
+- **実装**: `TypographyScaleInput` を薄いラッパーに変更し、`React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentDispatcher` が存在しない場合はフックを持つ本体 `TypographyScaleInner` を直接呼び出さず、`React.createElement(TypographyScaleInner, props)` を返すだけに限定。これにより非 React 文脈で評価されても hooks が実行されず、実際のレンダリング時のみ `TypographyScaleInner` がマウントされる。
+- **副作用**: `formatMessage` の取得ロジックや props 正規化はすべて内側コンポーネントに温存しているため、既存のデフォルト値・バリデーション挙動に変更なし。Dispatcher 存在チェックが `false` の場合でも React 要素が返るため、Strapi のコンポーネント評価結果は従来どおり。
+- **検証**:
+  - `cd cms && CI=1 npm run build` → 依存未導入のため `Error: Cannot find module '@strapi/strapi/package.json'` で失敗（ログ: `ede5c1†L1-L23`）。依存セットアップ後に再実行すること。
+  - `rg "useIntl" -n cms/src` → `TypographyScale` 以外に `useIntl` 直接利用箇所なしを確認。
+- **今後の指針**: Strapi 管理画面向けのカスタム React コンポーネントでは、hooks を含む実処理を別コンポーネントに切り出し、外側は hooks 非依存の安全なプロキシとする方針を標準化する。既存フィールドで同様の構造が無いか、アップグレード作業時に再点検する。

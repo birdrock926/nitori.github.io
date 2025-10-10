@@ -127,7 +127,14 @@ const resolveFormatMessage = () => {
   return null;
 };
 
-const TypographyScaleInput = (props) => {
+const hasActiveReactDispatcher = () => {
+  const internals = React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  const dispatcher = internals?.ReactCurrentDispatcher?.current;
+
+  return Boolean(dispatcher);
+};
+
+const TypographyScaleInner = (props) => {
   const rawProps = props ?? {};
   const {
     attribute,
@@ -284,6 +291,14 @@ const TypographyScaleInput = (props) => {
       </Flex>
     </Field.Root>
   );
+};
+
+const TypographyScaleInput = (props) => {
+  if (!hasActiveReactDispatcher()) {
+    return React.createElement(TypographyScaleInner, props);
+  }
+
+  return <TypographyScaleInner {...props} />;
 };
 
 export default TypographyScaleInput;

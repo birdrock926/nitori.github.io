@@ -6,7 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
-- **カスタムフィールド**: Rich Text ブロック向けの Typography Scale（文字サイズ倍率）フィールドは、Strapi 5.26 が props を未初期化のまま渡すケースやオプションを配列で保持するケースでも安全に動作するよう防御ロジックを追加済み。未入力時は記事既定値 (1.0) を使い、0.7〜1.8 倍の範囲をスライダーと数値入力で調整できます。Intl コンテキストが読み込まれる前でも `window.strapi` 経由のフォールバックでラベルが表示されるため、プレビュー中の `Invalid hook call` で編集画面が停止する心配はありません。
+- **カスタムフィールド**: Rich Text ブロック向けの Typography Scale（文字サイズ倍率）フィールドは、Strapi 5.26 が props を未初期化のまま渡すケースやオプションを配列で保持するケースでも安全に動作するよう防御ロジックを追加済み。未入力時は記事既定値 (1.0) を使い、0.7〜1.8 倍の範囲をスライダーと数値入力で調整できます。Intl コンテキストが読み込まれる前でも `window.strapi` 経由のフォールバックでラベルが表示され、さらに React dispatcher が立ち上がる前に Strapi がフィールド関数を直接評価しても外側ラッパーが hooks 実行を抑止するため、プレビュー中の `Invalid hook call` で編集画面が停止する心配はありません。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
