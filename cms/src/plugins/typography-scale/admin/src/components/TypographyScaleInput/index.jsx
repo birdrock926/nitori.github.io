@@ -146,6 +146,19 @@ const resolveScaleConfig = (props) => {
   return { options, min, max, step, defaultScaleOption };
 };
 
+const hasConfigChanged = (nextConfig, previousConfig) => {
+  if (!previousConfig) {
+    return true;
+  }
+
+  return (
+    nextConfig.min !== previousConfig.min ||
+    nextConfig.max !== previousConfig.max ||
+    nextConfig.step !== previousConfig.step ||
+    nextConfig.defaultScaleOption !== previousConfig.defaultScaleOption
+  );
+};
+
 class TypographyScaleInputInner extends React.Component {
   constructor(props) {
     super(props);
@@ -154,44 +167,47 @@ class TypographyScaleInputInner extends React.Component {
     const initialPending = toNullableNumber(props?.value);
 
     this.state = {
+      config: initialConfig,
       pendingValue: initialPending,
       internal: computeInternalValue(initialPending, initialConfig),
+      lastPropValue: initialPending,
     };
 
     this.cachedResolvedFormat = null;
     this.cachedFormatMessage = null;
     this.warnedMissingIntl = false;
-    this.currentConfig = initialConfig;
   }
 
-  componentDidUpdate(prevProps) {
-    const nextConfig = resolveScaleConfig(this.props);
-    const prevConfig = resolveScaleConfig(prevProps);
-    const configChanged =
-      nextConfig.min !== prevConfig.min ||
-      nextConfig.max !== prevConfig.max ||
-      nextConfig.step !== prevConfig.step ||
-      nextConfig.defaultScaleOption !== prevConfig.defaultScaleOption;
-    const valueChanged = this.props.value !== prevProps.value;
+  static getDerivedStateFromProps(nextProps, prevState) {
+    const nextConfig = resolveScaleConfig(nextProps);
+    const incomingValue = toNullableNumber(nextProps?.value);
+    const configChanged = hasConfigChanged(nextConfig, prevState.config);
+    const propChanged = !Object.is(incomingValue, prevState.lastPropValue);
 
-    this.currentConfig = nextConfig;
-
-    if (configChanged || valueChanged) {
-      const nextPending = toNullableNumber(this.props.value);
-      const nextInternal = computeInternalValue(nextPending, nextConfig);
-
-      if (nextPending !== this.state.pendingValue || nextInternal !== this.state.internal) {
-        this.setState({ pendingValue: nextPending, internal: nextInternal });
-      }
+    if (!configChanged && !propChanged) {
+      return null;
     }
+
+    let pendingValue = prevState.pendingValue;
+    let internalValue = prevState.internal;
+
+    if (propChanged) {
+      pendingValue = incomingValue;
+      internalValue = computeInternalValue(incomingValue, nextConfig);
+    } else if (configChanged) {
+      internalValue = computeInternalValue(pendingValue, nextConfig);
+    }
+
+    return {
+      config: nextConfig,
+      pendingValue,
+      internal: internalValue,
+      lastPropValue: incomingValue,
+    };
   }
 
   getCurrentConfig() {
-    if (!this.currentConfig) {
-      this.currentConfig = resolveScaleConfig(this.props);
-    }
-
-    return this.currentConfig;
+    return this.state?.config ?? resolveScaleConfig(this.props);
   }
 
   getFormatMessage() {
@@ -280,8 +296,7 @@ class TypographyScaleInputInner extends React.Component {
       required = false,
     } = rawProps;
 
-    const config = resolveScaleConfig(rawProps);
-    this.currentConfig = config;
+    const config = this.getCurrentConfig();
 
     const formatMessage = this.getFormatMessage();
     const resolvedLabel = intlLabel ?? { id: getTrad('field.label'), defaultMessage: '文字サイズ倍率' };

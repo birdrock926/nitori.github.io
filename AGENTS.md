@@ -261,3 +261,16 @@
   - `cd cms && CI=1 npm run build`（管理画面ビルド成功を確認）
 - **ドキュメント**: README と SETUP_BEGINNER_GUIDE の Typography Scale 節を更新し、「クラスコンポーネント化のみで dispatcher ゲート不要」と明記した。
 - **教訓**: Strapi 管理画面のフォームビルダーはカスタムフィールドを React レンダラ外で直接実行し、戻り値が Design System コンポーネントでない場合は初期化をやり直す挙動がある。hooks エラー回避のためのプレースホルダ返却は最終手段とし、まずは hooks の排除や `React.createElement` 返却のみで安全性を担保すること。
+
+### 2025-10-15 追記: Typography Scale 状態同期の無限再評価対策
+
+- **背景**: 管理画面で Rich Text ブロックを追加するとフォーム全体が固まる事象が再発。調査の結果、`TypographyScaleInput` の `componentDidUpdate` が Strapi 側のプロップ再計算と競合し、`resolveScaleConfig(prevProps)` を無限に再評価 → `setState` が抑止されずスレッドが占有されるケースが確認された。特に `attribute.options` が都度ミュータブルに差し替えられる環境では構成値が毎回違うと判定され、描画がループしていた。
+- **対応**:
+  1. クラスコンポーネントを `getDerivedStateFromProps` ベースに刷新し、`config`・`pendingValue`・`internal`・`lastPropValue` を一括管理。props からの同期は純粋関数で行い、`componentDidUpdate` による手動比較を撤廃して競合を解消した。
+  2. `hasConfigChanged()` ヘルパーを追加し、`min/max/step/defaultScaleOption` のみを安定比較。Strapi が `attribute.options` を都度新しい参照で供給しても、実際の値が変わらなければ再計算されないようにした。
+  3. 既存のイベントハンドラ (`handleSliderChange` / `handleNumberChange` / `handleReset`) は新しいステート構造に追随させ、`emitChange` が送出する値とローカル表示値の不整合が起きないよう `pendingValue` と `internal` を同時更新するように統一した。
+  4. `getCurrentConfig()` はステートのキャッシュを参照するだけに簡略化し、レンダー中に不要な `resolveScaleConfig` 呼び出しが発生しないようにした。
+- **検証**:
+  - `CI=1 npm run build` で管理画面の本番ビルドが 43 秒で完了することを確認（ログ: `781ecc†L1-L1`）。
+  - Playwright 経由で `/admin/content-manager/collectionType/api::post.post` → Rich Text ブロック追加 → 展開の操作を再実行し、フリーズが発生しないこととブラウザコンソールにエラーが出ないことを目視確認。なお、Vite の HMR 接続失敗 (`5173` ポート) や既知のプラグイン警告は従来どおりで、Typography Scale とは無関係であることをログ (`nusqdmgv†L1-L120`) にて再確認した。
+- **今後の指針**: Strapi が props をミュータブルに差し替えるケースに備え、カスタムフィールドは `getDerivedStateFromProps` など純粋な同期手段で状態を整合させることを優先する。`componentDidUpdate` での手動比較が必要な場合でも、`prevProps` を再評価せずステートキャッシュで比較する設計を徹底する。

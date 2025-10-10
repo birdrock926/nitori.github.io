@@ -40,7 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
-- RichText ブロックの **Typography Scale カスタムフィールド** は 0.7〜1.8 倍の範囲で本文倍率を指定可能。Strapi 5.26 が props を未定義や配列形式で渡すケースでも、コンポーネント側で `options` を正規化し、既定値（1.0 倍）やスライダー設定が安全に復元されるようガード済み。管理画面が Intl コンテキストを初期化する前にプレビュー呼び出しが発生しても、`window.strapi` からのフォールバックと defaultMessage によってラベルを描画するほか、内部ロジックをクラスコンポーネントへ移行して hooks を全廃したことで、React Dispatcher が未初期化のフェーズでも純粋な React 要素を返すだけで評価が完了し、`Invalid hook call` や無限リロードが再発しないようになっている。
+- RichText ブロックの **Typography Scale カスタムフィールド** は 0.7〜1.8 倍の範囲で本文倍率を指定可能。Strapi 5.26 が props を未定義や配列形式で渡すケースでも、コンポーネント側で `options` を正規化し、既定値（1.0 倍）やスライダー設定が安全に復元されるようガード済み。管理画面が Intl コンテキストを初期化する前にプレビュー呼び出しが発生しても、`window.strapi` からのフォールバックと defaultMessage によってラベルを描画するほか、内部ロジックをクラスコンポーネントへ移行して hooks を全廃したことで、React Dispatcher が未初期化のフェーズでも純粋な React 要素を返すだけで評価が完了し、`Invalid hook call` や無限リロードが再発しないようになっている。さらに 2025-10-15 時点で `getDerivedStateFromProps` ベースの状態同期に改修し、Strapi 側が `attribute.options` をミュータブルに差し替える環境でも `componentDidUpdate` が暴走せず、Rich Text 追加時のフリーズを抑止する。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
