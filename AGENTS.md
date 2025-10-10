@@ -235,3 +235,16 @@
   - `cd cms && CI=1 npm run build` → 依存未導入のため `Error: Cannot find module '@strapi/strapi/package.json'` で失敗（ログ: `ede5c1†L1-L23`）。依存セットアップ後に再実行すること。
   - `rg "useIntl" -n cms/src` → `TypographyScale` 以外に `useIntl` 直接利用箇所なしを確認。
 - **今後の指針**: Strapi 管理画面向けのカスタム React コンポーネントでは、hooks を含む実処理を別コンポーネントに切り出し、外側は hooks 非依存の安全なプロキシとする方針を標準化する。既存フィールドで同様の構造が無いか、アップグレード作業時に再点検する。
+
+## 9. 2025-10-13 タスク: Typography Scale フリーズ恒久対策（React hooks 全排除）
+
+- **背景**: Dispatcher ガードの導入後も Rich Text ブロックで Typography Scale を開くと管理画面がフリーズし、`Invalid hook call` が再発したとの報告を受領。Stack trace は `TypographyScaleInput` 内部の `useMemo` 実行時点で停止しており、Strapi がフォームバリデーションやプレビュー評価のためにカスタムフィールドを React レンダラの外側で繰り返し呼び出すケースでは dispatcher 判定が `true` でも別インスタンスの React を参照することが判明した（Strapi 同梱 React と Vite HMR 用 React の二重同梱が要因）。
+- **対応**:
+  - カスタムフィールドをクラスコンポーネント `TypographyScaleInputInner` と純関数ラッパーの 2 層構造に刷新し、`useState`/`useEffect`/`useMemo` などの hooks を完全に排除。Strapi が非 React 文脈でフィールドを実行しても React hooks が呼ばれないため、dispatcher の有無に関係なく `Invalid hook call` が発生しなくなった。
+  - 既存のオプション正規化・Intl フォールバック・デフォルト値計算ロジックはクラスメソッドに移植し、`resolveScaleConfig()` と `computeInternalValue()` を共有ユーティリティとして外出し。これにより従来の 0.7〜1.8 倍スライダーと数値入力の挙動を維持しつつ、props 更新時には `componentDidUpdate` で state を同期するようにした。
+  - `getFormatMessage()` は `window.strapi` から取得できた `formatMessage` をキャッシュしつつ例外を握り潰すフェイルセーフを継続。Intl がまだ初期化されていない場合は開発モードのみ警告を 1 度だけ表示する。
+  - イベントハンドラはクラスフィールドでバインドし、`emitChange()` から Strapi 互換の `{ target: { name, value, type: 'float' } }` を送出するため既存のフォーム挙動に影響なし。
+- **検証**:
+  - 依存関係が未導入だと実行テストが行えないため、`cd cms && npm install --no-progress` を実施して Strapi 5.26.0 一式とパッチを展開（ログ: `0b2cbe†L1-L26`）。
+  - 依存導入後に `cd cms && CI=1 npm run build` を実行し、管理画面の本番ビルドが 96 秒で完了することを確認（ログ: `2ef1ba†L1-L9`, `58d2e9†L1-L1`）。ビルド完了後は追加警告やエラーなし。
+- **今後の指針**: Strapi プラグイン内で hooks を利用する必要がある場合でも、管理画面が dispatcher 未初期化でフィールドを評価する経路を想定し、最低限 `React.createElement` を返す純関数レイヤーを挟む。既存カスタムフィールドの監査時にはクラスコンポーネント化または dispatcher チェック導入を検討する。
