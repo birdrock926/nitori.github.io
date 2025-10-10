@@ -184,3 +184,24 @@
 - `ensure-env.mjs` に `.env.sample` の全項目を明示し、プレースホルダが増えた際に漏れなく検出する仕組みを追加。
 
 以上の情報は 2025-10-02 時点の最新状態に基づきます。以後の変更は本ファイルへ逐次追記してください。
+
+---
+
+## 7. 2025-10-11 タスク: Typography Scale 互換性総点検とドキュメント最新化
+
+- **背景**: 2025-10-09〜10 に Rich Text ブロックの Typography Scale カスタムフィールドで props 未定義・配列オプションによるクラッシュを連続で修正した。最終調整後も互換性リスクが残っていないか再確認し、得られた知見を全ドキュメントへ反映することを指示された。
+- **実施内容**:
+  1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` を再度レビューし、Strapi 5.26 が渡し得る `props` バリエーション（未定義/null/空配列/配列 + ネストオブジェクト/旧 `attribute.options` 形式）を手元知見とフォーラム情報をもとに再検証。`mergeOptions()` と `extractOptionObject()` がプレーンオブジェクト以外を弾くこと、`options`/`attributeOptions`/`attribute?.options` の優先順位が期待どおりかを確認した。
+  2. `register.js` のカスタムフィールド宣言が `options.base[].name` に `options.` プレフィックスを付けていること、`defaultValue` とスキーマの初期値が先述のコンポーネント既定値と一致していることを突き合わせ。Strapi 5.27 beta の breaking change ノートも確認し、現状の 5.26.0 と互換性が取れていることを記録。
+  3. `AGENTS.md` / `README.md` / `SETUP_BEGINNER_GUIDE.md` の各所に Typography Scale の挙動・エラー再発防止策・テスト状況を追記し、最新手順と整合させた。
+  4. 他プラグイン（Comments/Color Picker/Content Releases）で props 分割代入を行っているカスタムコードは存在しないことを `rg "props ??"` / `rg "attribute" cms/src` でスキャンして確認。互換性リスクの高い箇所が Typography Scale のみに限定されていることを明確化した。
+- **テスト**:
+  - `cd cms && npm run develop -- --help`（未インストール環境のため `Error: Cannot find module '@strapi/strapi/package.json'` で停止。依存導入後に再試行が必要）
+  - `rg "props ??" cms/src`（props 初期化パターンを横断確認）
+  - `rg "attribute" cms/src/plugins/typography-scale`（props 分割代入箇所の再確認に利用）
+- **ドキュメント更新方針**:
+  - Typography Scale の props 正規化とフォールバック挙動、未設定時の UI 表示、既知の検証失敗ログを README/SETUP ガイドに明記。
+  - 既存の「開発コマンド失敗ログ」（`npm run develop -- --help`）を最新版としてこの節に転記し、依存未導入時の失敗が既知であることを明示。
+  - 今後同様の props 破壊的変更があった場合は、本節を起点に修正履歴を追加し、関連ドキュメントを即時更新すること。
+
+> ✅ **完了報告 (2025-10-11)**: 上記確認およびドキュメント更新を完了。Strapi 依存が未インストールの CI 環境ではヘルプコマンドが失敗することを再度ログに残し、依存インストール後に再検証する運用を明示した。

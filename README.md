@@ -40,6 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
+- RichText ブロックの **Typography Scale カスタムフィールド** は 0.7〜1.8 倍の範囲で本文倍率を指定可能。Strapi 5.26 が props を未定義や配列形式で渡すケースでも、コンポーネント側で `options` を正規化し、既定値（1.0 倍）やスライダー設定が安全に復元されるようガード済み。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -103,6 +104,8 @@
 本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
 > **最終検証 (2025-10-02 JST)**: Node.js 20.19.4 + npm 10.8 系 (Debian/WSL 相当) で `/cms`・`/web` の `npm install` / `npm run build` を実行し、さらに `/cms` の `npm run develop` も起動確認しました。`scripts/run-strapi.mjs` により Node 20 + Windows/WSL 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` が発生せず、管理画面ビルドも完走することを再検証済みです。ログには `admin.auth.options.expiresIn` の非推奨警告が表示されますが動作に影響はありません。
+>
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール状態で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生することを確認。ドキュメント追従時点では CI 環境に依存が存在しないため、ローカル/本番で検証する際は事前に `npm install` を実行してください。
 
 ## 事前要件
 - Node.js 20 LTS
