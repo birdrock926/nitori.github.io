@@ -40,7 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
-  - RichText ブロックの **Typography Scale カスタムフィールド** は 0.7〜1.8 倍の範囲で本文倍率を指定可能。Strapi 5.26 が props を未定義や配列形式で渡すケースでも、コンポーネント側で `min/max/step/defaultScale` だけを抽出する軽量な正規化レイヤーを通じて既定値（1.0 倍）やスライダー設定が安全に復元されるようガード済み。管理画面が Intl コンテキストを初期化する前にプレビュー呼び出しが発生しても、`window.strapi` からのフォールバックと defaultMessage によってラベルを描画する。2025-10-16 時点で実装を `React.PureComponent` ベースの**完全ステートレス構成**に置き換え、UI 表示はすべて props とその場の正規化結果から導出するようになったため、Strapi が同一フレーム内でフィールドを複数回評価してもローカル state が暴走せず、`Invalid hook call`、無限リロード、Rich Text フリーズが再発しない。Admin 拡張の登録は `window.__plugin_typography_scale_field_registered__` / `__plugin_typography_scale_admin_registered__` の冪等ガードで 1 度だけ store を mutate する構造に固定し、`lazyLoadComponents → setStore` の無限ループを防止している。2025-10-17 には `attribute/attributeOptions` を無差別にスプレッドしていた旧正規化ロジックを廃止し、`options.min` など必要なキーのみをパス指定で走査する抽出関数と、同一参照の props であれば再計算をスキップするキャッシュを導入。Strapi が Dynamic Zone 構築時に短時間で多数回フィールドを評価しても CPU スパイクが抑えられ、Create an entry → Posts → Rich Text で報告されていた初期化直後のフリーズが解消された。2025-10-18 ではさらに候補探索の上限（最大 64 ノード）と対象プロパティを厳格に制限し、`attribute` から Dynamic Zone 全体をトラバースしてしまう最悪ケースでもフィールド初期化が O(1) に収束するよう最適化。`npm ls react` により React の複数バージョン混在が無いことも確認し、プラグイン/Design System 間の互換性を再検証した。2025-10-19 時点では探索処理を再度見直し、事前に列挙したオプションパスと `options.min` などのエイリアスだけを逐次評価する方式へ移行。2025-10-20 現在は候補ソースを `props` とその浅い階層に限定し、配列探索も既知の `entries/base/advanced` など最大 24 件までに抑えることで、Dynamic Zone が巨大でも再帰的に schema 全体を走査しない設計となった。Strapi Blocks が初期化時に複数回コンポーネントを評価しても無駄な幅優先探索が走らず、`TypeError` や描画ループを誘発しないことをブラウザ再現と `CI=1 npm run build` で確認したほか、カスタムフィールド側が独自に React を依存追加していないことも `cms/src/plugins/typography-scale/package.json` と `npm ls react` で監査済み。2025-10-21 には Dynamic Zone 追加直後の `mainState` 不整合や巨大状態木の循環参照を再調査し、継承ロジックを全面停止。`min/max/step/defaultScale` は `options`・`attribute.options`・`attributeOptions` といった浅い階層からのみ直接取得し、配列 (`base` など) は一切走査せずに未指定時は既定値へ即座にフォールバックする構成へ再設計した。2025-10-22 には Dynamic Zone 初期化中に `value` が `undefined` のまま残るケースを検知し、`ensureInitialValue()` が一度だけ `onChange({ value: null })` を送出してフォームストアへ既定値を確定させるガードと、数値補正時に重複イベントを抑止するメモ化ロジックを追加。これによりブラウザコンソールで報告されていた `Warning: Maximum update depth exceeded` が再発せず、Create an entry → Posts → Rich Text でも即時に編集 UI が表示されることを `CI=1 npm run build` と手動再現で確認済み。React を複数バージョン読み込む事故が起きていないかも `npm ls react` で継続監視する運用をドキュメント化した。2025-10-22 には Dynamic Zone 初期化中にフィールド値が `undefined` のまま残るケースに対処するため、`ensureInitialValue()` が一度だけ `onChange({ value: null })` を送出して既定値を確定させ、浮動小数点誤差を補正する際もメモ化で重複イベントを防ぐガードを追加。これによりブラウザで再確認した `Warning: Maximum update depth exceeded` が解消され、Rich Text ブロックも即時描画される。 2025-10-22 夜には管理画面拡張の登録処理が再レンダーごとに `app.customFields.register` を実行して Strapi store を更新し続けていた問題を確認し、`register.js` / `admin/src/index.js` でグローバルシンボルを利用した冪等ガードを導入して `lazyLoadComponents→setStore` ループを遮断した。
+  - RichText ブロックの本文倍率は 2025-10-23 に **Typography Scale** カスタムフィールドを撤去し、標準の小数入力 (`fontScale`) で直接指定する方式に切り替えました。これにより管理画面の `lazyLoadComponents → setStore` ループが解消され、Dynamic Zone 初期化時のフリーズが再発しないことを確認しています。従来のプラグイン実装と暫定対策の履歴は AGENTS.md に保存しており、互換性検証や障害の経緯を追跡できるようにしました。現在は 0.7〜1.8 倍の範囲を `fontScale` の最小・最大値とライフサイクル `clampScaleValue` で保証し、既定値は 1.0 倍（記事全体のデフォルト）です。必要に応じて JSON スキーマでさらに細かい検証ルールを追加できます。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -60,14 +60,14 @@
 - テーマ（ライト/ダーク）・読みやすいタイポ・スケルトン/LQIP・アクセシビリティ AA 準拠  
 - トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング  
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
-  - Rich Text ブロックごとに Strapi 管理画面の「文字サイズ倍率」スライダーで本文サイズを調整でき、未設定時は記事既定値を自動適用
+  - Rich Text ブロックの本文倍率は管理画面の `fontScale` 数値入力で調整でき、未設定時は記事既定値 (1.0 倍) を自動適用
 
 ## データモデル（抜粋）
 - **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-  - RichText ブロックはカスタムフィールド「文字サイズ倍率」で記事既定値（default/large/xlarge）に対する倍率を 0.7〜1.8 倍の範囲で設定できます
+  - RichText ブロックの `fontScale` は標準の小数フィールドで 0.7〜1.8 倍の範囲を直接入力します（既定 1.0 倍）。旧 Typography Scale カスタムフィールドは管理画面ループ障害のため撤去済みで、履歴は AGENTS.md に記録しています
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー

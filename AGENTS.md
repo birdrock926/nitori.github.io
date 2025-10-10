@@ -412,3 +412,25 @@
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
 - **今後の指針**: Strapi Admin 拡張で store を更新する API を呼ぶ場合、HMR や Dynamic Zone の遅延ロードで複数コンテキストから同じモジュールが評価される前提で `window`（もしくは `globalThis`）へ不変フラグを保存する。`Symbol.for` はクロスコンテキスト共有が保証されないため、実ブラウザでの再現試験後もプロパティキーを固定文字列に保つこと。必要に応じて `app.customFields.getAll()` などの内部 API で登録済み状態を確認し、store mutate の回数が 1 回で止まっているかをブラウザコンソールのカウンタで監視する。
+
+### 2025-10-23 追記: Typography Scale プラグインを完全撤去し標準フィールドへ移行
+
+- **背景**: Rich Text ブロックを開いた直後に管理画面がフリーズし、ブラウザコンソールでは `lazyLoadComponents → setStore` が無限に再実行される `Maximum update depth exceeded` 警告が継続。Typography Scale カスタムフィールド登録処理がレンダー毎に `app.customFields.register` / `app.registerPlugin` を呼び出し、Store を更新し続けている点が根本原因と判定された。複数の冪等ガード（`Symbol.for` や `window.__plugin_typography_scale_*__`）を導入しても、Strapi Admin が iframe・module 再評価で新しいコンテキストを生成するたびにフラグを失い、無限更新が再発していた。
+- **対応**:
+  1. `cms/src/components/content/rich-text.json` の `fontScale` を Strapi 標準の小数フィールドへ戻し、`customField` 参照を削除。`default: 1` / `min: 0.7` / `max: 1.8` を直接定義して既定値と入力範囲を維持した。
+  2. `cms/config/plugins.js` から `'typography-scale'` 登録ブロックを削除し、Strapi のプラグイン解決から除外。
+  3. `cms/src/plugins/typography-scale/` ディレクトリ（admin 実装・translations・register スクリプトを含む）を完全に削除。今後は `cms/src/plugins` 配下に同名フォルダが存在しないことを前提とする。
+  4. README.md / SETUP_BEGINNER_GUIDE.md を更新し、Typography Scale カスタムフィールドの詳細説明を廃止して標準 `fontScale` フィールドへ移行した旨、Dynamic Zone 初期化時のフリーズが解消された旨を明記。UI ではスライダーではなく数値入力で倍率を指定すること、履歴は本 AGENTS.md に保存していることを周知。
+- **影響**:
+  - 管理画面では `fontScale` が Strapi 標準の数値入力 (step はブラウザ実装依存) として表示される。スライダー UI は無くなるが、手入力で 0.7〜1.8 の範囲を設定可能。未入力時は `null` → 記事既定値 (1.0) を継承する挙動は継続。
+  - API レスポンスの構造は変更なし (`fontScale` が小数 or null)。既存記事のデータもそのまま利用される。
+  - 将来 Typography Scale 相当の UI を再導入する場合は、新規プラグインを作る前に今回のフリーズ再発条件（`lazyLoadComponents → setStore` ループ）と React Dispatcher 未初期化パスを再分析し、冪等登録と副作用ゼロを保証する実装指針を遵守すること。
+- **運用メモ**:
+  - `cms/src/api/post/content-types/post/lifecycles.js` の `clampScaleValue` は継続利用し、入力値を 0.7〜1.8 に丸める。フィールドのバリデーションを追加したい場合は JSON スキーマ側の `min` / `max` を調整し、同時にライフサイクルの上下限も更新する。
+  - README / SETUP に記載した履歴は将来の再導入検討用に残してあるが、最新版ではプラグインが存在しない点を再度強調している。新規貢献者には必ず最新ドキュメントを参照させること。
+  - 旧プラグインの調査ログはこのファイル内の過去エントリで保持しているため、削除せずヒストリー参照として残す。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - 依存インストールとビルドの結果は今回の変更後も記録すること。Strapi Admin で Rich Text ブロックを追加し、無限リロードや `Maximum update depth exceeded` が発生しないことを手動確認する。
+

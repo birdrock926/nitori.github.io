@@ -149,10 +149,6 @@ export default ({ env }) => ({
   'color-picker': {
     enabled: true,
   },
-  'typography-scale': {
-    enabled: true,
-    resolve: './src/plugins/typography-scale',
-  },
   upload: buildUploadConfig(env),
   comments: buildCommentsConfig(env),
   email: {
