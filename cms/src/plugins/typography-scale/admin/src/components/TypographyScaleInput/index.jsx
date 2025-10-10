@@ -54,55 +54,24 @@ const OPTION_ALIAS_MAP = {
 };
 
 const OPTION_VALUE_FIELDS = ['value', 'defaultValue', 'initialValue', 'current', 'default'];
+const ENTRY_IDENTIFIER_FIELDS = ['name', 'path', 'key', 'field', 'identifier', 'attribute'];
+const ARRAY_CANDIDATE_KEYS = ['entries', 'base', 'advanced', 'choices', 'settings', 'configuration', 'options'];
+const MAX_ARRAY_SCAN = 24;
 
-const OBJECT_SOURCE_PATHS = [
-  [],
-  ['attributeOptions'],
-  ['attributeOptions', 'options'],
-  ['attributeOptions', 'settings'],
-  ['attributeOptions', 'config'],
-  ['attributeOptions', 'configuration'],
-  ['attribute'],
-  ['attribute', 'options'],
-  ['attribute', 'settings'],
-  ['options'],
-  ['options', 'options'],
-  ['options', 'settings'],
-  ['options', 'config'],
-  ['options', 'configuration'],
-];
-
-const ARRAY_SOURCE_PATHS = [
-  ['attributeOptions', 'base'],
-  ['attributeOptions', 'advanced'],
-  ['attributeOptions', 'choices'],
-  ['attributeOptions', 'properties'],
-  ['attributeOptions', 'defaults'],
-  ['attributeOptions', 'config', 'base'],
-  ['attributeOptions', 'config', 'advanced'],
-  ['attributeOptions', 'configuration', 'base'],
-  ['attributeOptions', 'configuration', 'advanced'],
-  ['attribute', 'options', 'base'],
-  ['attribute', 'options', 'advanced'],
-  ['attribute', 'options', 'choices'],
-  ['attribute', 'options', 'properties'],
-  ['options', 'base'],
-  ['options', 'advanced'],
-  ['options', 'choices'],
-  ['options', 'properties'],
-  ['options', 'defaults'],
-  ['options', 'config', 'base'],
-  ['options', 'config', 'advanced'],
-  ['options', 'configuration', 'base'],
-  ['options', 'configuration', 'advanced'],
-];
-
-const getNestedValue = (root, path) => {
-  if (!Array.isArray(path) || path.length === 0) {
-    return root;
+const getValueByPath = (object, path) => {
+  if (!isPlainObject(object)) {
+    return undefined;
   }
 
-  let current = root;
+  if (typeof path === 'string') {
+    path = path.split('.');
+  }
+
+  if (!Array.isArray(path) || path.length === 0) {
+    return undefined;
+  }
+
+  let current = object;
   for (const part of path) {
     if (!current || typeof current !== 'object') {
       return undefined;
@@ -114,52 +83,67 @@ const getNestedValue = (root, path) => {
   return current;
 };
 
-const extractNumericFromEntry = (entry, key) => {
-  if (!isPlainObject(entry)) {
+const extractFromEntryArray = (entries, key) => {
+  if (!Array.isArray(entries) || entries.length === 0) {
     return null;
   }
 
-  const aliases = OPTION_ALIAS_MAP[key] ?? [];
-  const identifierCandidates = [entry.name, entry.path, entry.key, entry.field, entry.identifier, entry.attribute];
+  const aliases = OPTION_ALIAS_MAP[key] ?? [key];
+  const scanLimit = Math.min(entries.length, MAX_ARRAY_SCAN);
 
-  const normalizedIdentifiers = identifierCandidates
-    .filter((candidate) => typeof candidate === 'string')
-    .map((candidate) => candidate.trim());
-
-  const matchesAlias = normalizedIdentifiers.some((identifier) => {
-    if (!identifier) {
-      return false;
+  for (let index = 0; index < scanLimit; index += 1) {
+    const entry = entries[index];
+    if (!isPlainObject(entry)) {
+      continue;
     }
 
-    return aliases.some((alias) => alias === identifier || alias === identifier.replace(/^options\./, ''));
-  });
+    const identifiers = ENTRY_IDENTIFIER_FIELDS
+      .map((field) => entry[field])
+      .filter((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
 
-  if (!matchesAlias) {
-    return null;
-  }
+    const matchesAlias = identifiers.some((identifier) => {
+      return aliases.some((alias) => {
+        if (alias === identifier) {
+          return true;
+        }
 
-  for (const field of OPTION_VALUE_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(entry, field)) {
-      const numeric = toNullableNumber(entry[field]);
-      if (numeric !== null) {
-        return numeric;
+        if (alias.startsWith('options.') && identifier === alias.replace(/^options\./, '')) {
+          return true;
+        }
+
+        return false;
+      });
+    });
+
+    if (!matchesAlias) {
+      continue;
+    }
+
+    for (const field of OPTION_VALUE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(entry, field)) {
+        const numeric = toNullableNumber(entry[field]);
+        if (numeric !== null) {
+          return numeric;
+        }
       }
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(entry, 'value')) {
-    const numeric = toNullableNumber(entry.value);
-    if (numeric !== null) {
-      return numeric;
     }
   }
 
   return null;
 };
 
-const extractNumericFromObject = (object, key) => {
+const extractFromObject = (object, key) => {
   if (!isPlainObject(object)) {
     return null;
+  }
+
+  const aliases = OPTION_ALIAS_MAP[key] ?? [key];
+
+  for (const alias of aliases) {
+    const numeric = toNullableNumber(getValueByPath(object, alias));
+    if (numeric !== null) {
+      return numeric;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(object, key)) {
@@ -169,69 +153,78 @@ const extractNumericFromObject = (object, key) => {
     }
   }
 
-  if (Object.prototype.hasOwnProperty.call(object, 'options') && isPlainObject(object.options)) {
-    const numeric = toNullableNumber(object.options[key]);
+  if (Object.prototype.hasOwnProperty.call(object, 'options') && isPlainObject(object.options) && object.options !== object) {
+    const numeric = extractFromObject(object.options, key);
     if (numeric !== null) {
       return numeric;
+    }
+  }
+
+  for (const candidateKey of ARRAY_CANDIDATE_KEYS) {
+    const candidate = object[candidateKey];
+    if (Array.isArray(candidate)) {
+      const numeric = extractFromEntryArray(candidate, key);
+      if (numeric !== null) {
+        return numeric;
+      }
     }
   }
 
   return null;
 };
 
+const collectOptionSources = (rawProps) => {
+  const sources = [];
+
+  if (isPlainObject(rawProps)) {
+    sources.push(rawProps);
+  }
+
+  if (isPlainObject(rawProps?.options)) {
+    sources.push(rawProps.options);
+  }
+
+  if (isPlainObject(rawProps?.attributeOptions?.options)) {
+    sources.push(rawProps.attributeOptions.options);
+  }
+
+  if (isPlainObject(rawProps?.attributeOptions)) {
+    sources.push(rawProps.attributeOptions);
+  }
+
+  if (isPlainObject(rawProps?.attribute?.options)) {
+    sources.push(rawProps.attribute.options);
+  }
+
+  if (isPlainObject(rawProps?.attribute)) {
+    sources.push(rawProps.attribute);
+  }
+
+  return sources;
+};
+
 const resolveScaleConfig = (props) => {
   const rawProps = props ?? {};
+  const sources = collectOptionSources(rawProps);
 
-  const discovered = { min: undefined, max: undefined, step: undefined, defaultScale: undefined };
+  const resolved = { min: null, max: null, step: null, defaultScale: null };
 
-  for (const [key, pathList] of Object.entries({
-    min: OBJECT_SOURCE_PATHS,
-    max: OBJECT_SOURCE_PATHS,
-    step: OBJECT_SOURCE_PATHS,
-    defaultScale: OBJECT_SOURCE_PATHS,
-  })) {
-    for (const path of pathList) {
-      const candidate = getNestedValue(rawProps, path);
-      const numeric = extractNumericFromObject(candidate, key);
+  for (const key of Object.keys(resolved)) {
+    for (const source of sources) {
+      const numeric = extractFromObject(source, key);
       if (numeric !== null) {
-        discovered[key] = numeric;
+        resolved[key] = numeric;
         break;
       }
     }
   }
 
-  for (const path of ARRAY_SOURCE_PATHS) {
-    const entries = getNestedValue(rawProps, path);
-    if (!Array.isArray(entries) || entries.length === 0) {
-      continue;
-    }
+  const min = Number.isFinite(resolved.min) ? resolved.min : DEFAULT_MIN;
+  const max = Number.isFinite(resolved.max) ? resolved.max : DEFAULT_MAX;
+  const step = Number.isFinite(resolved.step) && resolved.step > 0 ? resolved.step : DEFAULT_STEP;
+  const defaultScale = clampScale(resolved.defaultScale, min, max) ?? DEFAULT_SCALE;
 
-    for (const key of Object.keys(discovered)) {
-      if (Number.isFinite(discovered[key])) {
-        continue;
-      }
-
-      for (const entry of entries) {
-        const numeric = extractNumericFromEntry(entry, key);
-        if (numeric !== null) {
-          discovered[key] = numeric;
-          break;
-        }
-      }
-    }
-  }
-
-  const resolvedMin = Number.isFinite(discovered.min) ? discovered.min : DEFAULT_MIN;
-  const resolvedMax = Number.isFinite(discovered.max) ? discovered.max : DEFAULT_MAX;
-  const resolvedStep = Number.isFinite(discovered.step) && discovered.step > 0 ? discovered.step : DEFAULT_STEP;
-  const resolvedDefault = clampScale(discovered.defaultScale, resolvedMin, resolvedMax) ?? DEFAULT_SCALE;
-
-  return {
-    min: resolvedMin,
-    max: resolvedMax,
-    step: resolvedStep,
-    defaultScale: resolvedDefault,
-  };
+  return { min, max, step, defaultScale };
 };
 
 const fallbackFormatMessage = (descriptor, values = {}) => {

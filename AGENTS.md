@@ -346,3 +346,16 @@
   - README.md / SETUP_BEGINNER_GUIDE.md の Typography Scale 節に、パス列挙方式・React 依存監査・`CI=1 npm run build` 再検証を追記。
   - 本書に本節を追加し、再発時の調査手順（パスリスト更新・`npm ls react` 確認）を明記。
 - **今後の指針**: Strapi のカスタムフィールドでは「探索対象を明示的に列挙」「単位時間あたりの計算量を一定化」「依存パッケージが複数コピーされていないか定期監査」の 3 点を遵守する。Dynamic Zone へコンポーネントを追加するとオプション配置が変わるため、schema 更新時はパスリストを洗い替えし、`npm run build` とブラウザでの動作確認を必須とする。
+
+### 2025-10-20 追記: Typography Scale オプション探索の簡素化と再監査結果
+
+- **背景**: パス列挙方式へ切り替えた後も Rich Text ブロック選択時のフリーズ報告が継続。Strapi Blocks が短時間に同一フィールドを多数回実行する際、`resolveScaleConfig` が `attribute` ツリー全体を再帰的に読み直すことで CPU 負荷が跳ね上がるケースが確認された。特に Dynamic Zone に大型コンポーネントが含まれているプロジェクトでは、わずかな `options` 読み取りのために巨大な schema オブジェクトを繰り返し走査していた。
+- **対応**:
+  1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` の `resolveScaleConfig` を再設計し、探索対象を `props` と `props.attribute/options/attributeOptions` の浅いレベルに限定。従来の幅優先／再帰走査を廃止し、`collectOptionSources` で平坦化した候補のみを逐次検査する方式へ変更した。`extractFromObject` も `options` 直下と `entries/base/advanced` など既知の配列だけを最大 24 件まで走査する軽量実装とし、ループ嵐の原因だった `WeakSet` ベースの深い探索を排除した。【F:cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx†L1-L308】
+  2. `toNullableNumber` と `clampScale` の既存ガードは維持しつつ、`collectOptionSources` が `props` 自身も候補に含めるよう調整。これにより schema が直接 `min/max/step` をトップレベルに注入するケースも追加処理なしで受け入れられる。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`（2236 パッケージを再展開し、依存グラフの健全性を確認。ログ: `da5867†L1-L14`）
+  - `cd cms && CI=1 npm run build`（管理画面ビルドが 62.6 秒で完了し、追加警告なし。ログ: `ad49dd†L1-L10`, `32fa95†L1-L10`, `b3513a†L1-L1`）
+  - `cd cms && npm ls react`（React 18.3.1 が単一ツリーで解決されていることを再確認し、複数バージョン混在が無いと証明。ログ: `8e7a72†L1-L2`, `2e919f†L1-L133`）
+- **ドキュメント更新**: README.md と SETUP_BEGINNER_GUIDE.md の Typography Scale 節に、浅い階層のみを読む軽量化戦略と再検証コマンドを追記。今回の更新で `options` の探索がスキーマ巨大化に伴うフリーズを引き起こさないこと、配列走査は 24 件で打ち切ることを明記した。
+- **今後の指針**: カスタムフィールドが外部 state（`mainState` や schema ツリー）へアクセスする際は「探索深度を限定」「エントリ数を上限化」「同一 props ではキャッシュを再利用」を徹底する。Dynamic Zone 用 component を新規追加する際は、該当フィールドへ `options.min/max/step/defaultScale` を明示して重い継承ロジックに依存しない構成を維持する。必要に応じて今回の浅い探索へ新しいキー（例: `attributeOptions.configuration2`）を明示追加し、再帰を導入しない方針を継続する。
