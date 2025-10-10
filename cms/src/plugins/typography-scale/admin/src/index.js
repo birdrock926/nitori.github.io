@@ -7,7 +7,23 @@ import prefixPluginTranslations from './utils/prefixPluginTranslations';
 const globalObject =
   typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : {};
 
-const PLUGIN_REGISTER_SYMBOL = Symbol.for('plugin::typography-scale.admin-registered');
+const PLUGIN_REGISTER_KEY = '__plugin_typography_scale_admin_registered__';
+
+const hasRegisteredPlugin = () =>
+  Boolean(Object.prototype.hasOwnProperty.call(globalObject, PLUGIN_REGISTER_KEY) && globalObject[PLUGIN_REGISTER_KEY]);
+
+const markPluginRegistered = () => {
+  try {
+    Object.defineProperty(globalObject, PLUGIN_REGISTER_KEY, {
+      value: true,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  } catch (error) {
+    globalObject[PLUGIN_REGISTER_KEY] = true;
+  }
+};
 
 const name = pluginPkg.strapi?.name || pluginPkg.name;
 
@@ -15,13 +31,13 @@ const admin = {
   register(app) {
     register(app);
 
-    if (!globalObject[PLUGIN_REGISTER_SYMBOL]) {
+    if (!hasRegisteredPlugin()) {
       app.registerPlugin({
         id: pluginId,
         name,
       });
 
-      globalObject[PLUGIN_REGISTER_SYMBOL] = true;
+      markPluginRegistered();
     }
   },
   bootstrap(app) {

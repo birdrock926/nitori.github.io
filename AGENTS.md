@@ -400,3 +400,15 @@
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
 - **今後の指針**: Admin 拡張で `app.*` API を呼び出す際は、HMR や Dynamic Zone 再評価で同じコードが再実行されることを前提に、グローバルフラグや `app.getPlugin` による存在確認で必ず冪等性を担保する。将来カスタムフィールドを追加する場合も同じガード方針を適用し、store 書き換えがレンダーごとに走らない構造を維持する。
+
+### 2025-10-23 追記: Typography Scale Admin 登録ガードの多重初期化ループ修正
+
+- **背景**: `Maximum update depth exceeded` が継続。ブラウザコンソールのスタックトレースは `lazyLoadComponents → setStore` ループが止まらず、2025-10-22 時点で導入した `Symbol.for('plugin::typography-scale.*')` ガードでは、Strapi Admin が iframe / module 再評価ごとに新しい `window` コンテキストを生成する環境で値が共有されず、`app.customFields.register` と `app.registerPlugin` が再度 store を mutate していたことが判明。
+- **対応**:
+  1. `cms/src/plugins/typography-scale/admin/src/register.js` でグローバルシンボルによる判定を廃止し、`window.__plugin_typography_scale_field_registered__` を `Object.defineProperty` で `configurable: false` にピン留め。定義に失敗する場合はフォールバックで直接代入し、ブラウザ/Node/iframe 間で冪等フラグを共有するよう変更。【F:cms/src/plugins/typography-scale/admin/src/register.js†L1-L63】
+  2. `cms/src/plugins/typography-scale/admin/src/index.js` も同様に `__plugin_typography_scale_admin_registered__` を導入し、プラグイン登録が 1 度だけ走るよう統一。【F:cms/src/plugins/typography-scale/admin/src/index.js†L1-L67】
+  3. README / SETUP_BEGINNER_GUIDE に新しいガード方式とループ再発時の確認ポイントを追記し、運用担当者が Symbol へ戻さないよう周知。【F:README.md†L43-L44】【F:SETUP_BEGINNER_GUIDE.md†L9-L10】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+- **今後の指針**: Strapi Admin 拡張で store を更新する API を呼ぶ場合、HMR や Dynamic Zone の遅延ロードで複数コンテキストから同じモジュールが評価される前提で `window`（もしくは `globalThis`）へ不変フラグを保存する。`Symbol.for` はクロスコンテキスト共有が保証されないため、実ブラウザでの再現試験後もプロパティキーを固定文字列に保つこと。必要に応じて `app.customFields.getAll()` などの内部 API で登録済み状態を確認し、store mutate の回数が 1 回で止まっているかをブラウザコンソールのカウンタで監視する。

@@ -5,10 +5,26 @@ import getTrad from './utils/getTrad';
 const globalObject =
   typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : {};
 
-const FIELD_REGISTER_SYMBOL = Symbol.for('plugin::typography-scale.field-registered');
+const FIELD_REGISTER_KEY = '__plugin_typography_scale_field_registered__';
+
+const hasRegisteredField = () =>
+  Boolean(Object.prototype.hasOwnProperty.call(globalObject, FIELD_REGISTER_KEY) && globalObject[FIELD_REGISTER_KEY]);
+
+const markFieldRegistered = () => {
+  try {
+    Object.defineProperty(globalObject, FIELD_REGISTER_KEY, {
+      value: true,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  } catch (error) {
+    globalObject[FIELD_REGISTER_KEY] = true;
+  }
+};
 
 const register = (app) => {
-  if (globalObject[FIELD_REGISTER_SYMBOL]) {
+  if (hasRegisteredField()) {
     return;
   }
 
@@ -71,7 +87,7 @@ const register = (app) => {
     },
   });
 
-  globalObject[FIELD_REGISTER_SYMBOL] = true;
+  markFieldRegistered();
 };
 
 export default register;
