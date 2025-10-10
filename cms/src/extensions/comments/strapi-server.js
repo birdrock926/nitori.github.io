@@ -3,6 +3,62 @@ const POST_UID = 'api::post.post';
 const NUMERIC_PATTERN = /^\d+$/;
 
 const relationCache = new Map();
+const FALLBACK_EMAIL_DOMAIN = 'comments.local';
+const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
+
+const coerceString = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+
+  return null;
+};
+
+const isLikelyEmail = (value) => /.+@.+\..+/.test(value);
+const isFallbackEmail = (value) =>
+  typeof value === 'string' && value.trim().toLowerCase().endsWith(`@${FALLBACK_EMAIL_DOMAIN}`);
+
+const buildFallbackEmail = (author, content) => {
+  const source =
+    coerceString(author?.id) || coerceString(author?.name) || coerceString(content) || 'anonymous';
+
+  const encoded = Buffer.from(source, 'utf8')
+    .toString('base64url')
+    .replace(/[^a-zA-Z0-9._-]+/g, '')
+    .replace(/_{2,}/g, '_')
+    .replace(/\.{2,}/g, '.')
+    .replace(/^-+|-+$/g, '');
+
+  const localPart = (encoded || 'anonymous').slice(0, MAX_EMAIL_LOCAL_PART_LENGTH);
+  return `${localPart}@${FALLBACK_EMAIL_DOMAIN}`;
+};
+
+const ensureAuthorEmail = (ctx) => {
+  const body = ctx?.request?.body;
+  if (!body || typeof body !== 'object') {
+    return;
+  }
+
+  const { author } = body;
+  if (!author || typeof author !== 'object') {
+    return;
+  }
+
+  if (typeof author.email === 'string') {
+    const trimmed = author.email.trim();
+    if (trimmed && isLikelyEmail(trimmed)) {
+      author.email = trimmed;
+      return;
+    }
+  }
+
+  author.email = buildFallbackEmail(author, body.content);
+};
 
 const coerceDocumentId = (post) => {
   if (!post) {
@@ -170,6 +226,8 @@ export default (plugin) => {
         ctx.params.relation = await normalizeRelation(ctx.params.relation);
       }
 
+      ensureAuthorEmail(ctx);
+
       return basePost(ctx, next);
     };
   }
@@ -198,6 +256,95 @@ export default (plugin) => {
       }
 
       return baseReportAbuse.call(this, normalizedParams, user);
+    };
+  }
+
+  if (plugin?.services?.client?.sendResponseNotification) {
+    const baseService = plugin.services.client;
+
+    baseService.sendResponseNotification = async function sendResponseNotificationWithoutFallback(entity) {
+      if (!entity?.threadOf) {
+        return null;
+      }
+
+      const commonService = this?.getCommonService?.();
+      const thread =
+        typeof entity.threadOf === 'object'
+          ? entity.threadOf
+          : await commonService?.findOne({
+              id: entity.threadOf,
+              related: entity.related,
+              locale: entity.locale || null,
+            });
+
+      if (!thread) {
+        return null;
+      }
+
+      const normalizeRecipient = (value) => {
+        if (typeof value !== 'string') {
+          return null;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || isFallbackEmail(trimmed)) {
+          return null;
+        }
+        return trimmed;
+      };
+
+      let emailRecipient = normalizeRecipient(thread?.author?.email);
+
+      if (!emailRecipient && thread?.authorUser) {
+        const authorUser =
+          typeof thread.authorUser === 'object'
+            ? thread.authorUser
+            : await strapi
+                .query('plugin::users-permissions.user')
+                .findOne({ where: { id: thread.authorUser } });
+        emailRecipient = normalizeRecipient(authorUser?.email);
+      }
+
+      if (!emailRecipient) {
+        return null;
+      }
+
+      const superAdmin = await strapi
+        .query('admin::user')
+        .findOne({ where: { roles: { code: 'strapi-super-admin' } } });
+
+      const emailSender = await commonService?.getConfig('client.contactEmail', superAdmin?.email);
+      const clientAppUrl = await commonService?.getConfig('client.url', 'our site');
+
+      if (!emailSender) {
+        return null;
+      }
+
+      try {
+        await strapi
+          .plugin('email')
+          .service('email')
+          .send({
+            to: [emailRecipient],
+            from: emailSender,
+            subject: "You've got a new response to your comment",
+            text: `Hello ${thread?.author?.name || emailRecipient}!
+You've got a new response to your comment by ${entity?.author?.name || entity?.author?.email}.
+
+------
+
+"${entity.content}"
+
+------
+
+Visit ${clientAppUrl} and continue the discussion.
+`,
+          });
+      } catch (error) {
+        strapi.log.error(error);
+        throw error;
+      }
+
+      return null;
     };
   }
 

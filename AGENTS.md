@@ -434,3 +434,14 @@
   - `cd cms && CI=1 npm run build`
   - 依存インストールとビルドの結果は今回の変更後も記録すること。Strapi Admin で Rich Text ブロックを追加し、無限リロードや `Maximum update depth exceeded` が発生しないことを手動確認する。
 
+### 2025-10-23 追記: Comments 投稿時のメール必須化に対するフェイルセーフ
+
+- **背景**: VirtusLab Comments v3.1.0 のバリデータが匿名投稿時にも `author.email` を必須化したため、フロントフォームでメール欄を空のまま送信すると `POST /api/comments/api::post.post:<id>` が 400 を返し、ブラウザには `Strapi comments request failed (400)` が表示された。Strapi 側のログには `Path: author.email Code: invalid_type Message: Required` が残り、コメントが保存されない状態が再現済み。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` に `ensureAuthorEmail()` を追加し、投稿ボディ内の `author.email` が空/不正な場合は `Buffer` でエンコードしたローカルパートを `@comments.local` ドメインで自動補完するよう修正。既存の `normalizeRelation` フックと同じ場所で呼び出し、必須項目を満たして 400 を回避する。【F:cms/src/extensions/comments/strapi-server.js†L1-L138】【F:cms/src/extensions/comments/strapi-server.js†L177-L250】
+  2. 同ファイルに `sendResponseNotification` のラッパーを追加し、`@comments.local` のダミー宛先には通知メールを送らないようガード。実際のメールアドレスが入力されている場合のみ従来どおり通知を送信し、SMTP 設定が誤っている際は従来同様にエラーを再送出する。【F:cms/src/extensions/comments/strapi-server.js†L252-L327】
+  3. README / SETUP_BEGINNER_GUIDE に匿名投稿時のダミーアドレス補完と通知スキップの挙動を追記し、運用担当者へ必ず実アドレスを入れてもらうよう周知した。【F:README.md†L217-L226】【F:SETUP_BEGINNER_GUIDE.md†L197-L204】
+- **検証**:
+  - `cd cms && CI=1 npm run build`（管理画面ビルド成功。ログ: `1ed552†L1-L2`）
+- **今後の指針**: Comments プラグインをアップデートする際は `externalAuthorSchema` の定義変更有無を確認し、必須フィールドが増えた場合はこの拡張で補完できるか／UI で事前検証すべきかを決定する。`@comments.local` ドメインは通知対象外として扱うため、実運用でメール通知を依頼する際は利用者に有効なアドレスの入力を徹底させること。SMTP エラーが増えた場合はダミー宛先の送信が混ざっていないかログを確認し、必要ならドメイン名を変更する。
+
