@@ -205,3 +205,24 @@
   - 今後同様の props 破壊的変更があった場合は、本節を起点に修正履歴を追加し、関連ドキュメントを即時更新すること。
 
 > ✅ **完了報告 (2025-10-11)**: 上記確認およびドキュメント更新を完了。Strapi 依存が未インストールの CI 環境ではヘルプコマンドが失敗することを再度ログに残し、依存インストール後に再検証する運用を明示した。
+
+## 8. 2025-10-12 タスク: Typography Scale の Invalid hook call 再調査
+
+- **背景**: Rich Text ブロックで Typography Scale の入力を開くと `Invalid hook call` が発生し、Strapi 管理画面が再び操作不能になった。`useIntl` 呼び出し時に発火しており、React の hooks ルール違反・複数 React バンドル・`react-intl` のコンテキスト不整合のいずれかが疑われる。
+- **暫定仮説**:
+  1. Strapi 5.26 のカスタムフィールド登録で `react-intl` を直接 import すると、Vite ビルド結果に `react` が二重に同梱され、`useIntl` が別 React インスタンスの dispatcher を参照する。
+  2. `@strapi/helper-plugin` が提供する `useIntl` を利用すれば、Strapi 本体と同一の React / Intl コンテキストにバインドされ、hooks エラーが解消される。
+  3. 既存の props 正規化・フォールバック処理との競合は無いが、`formatMessage` が取得できない場合に備えたフェイルセーフを追加する必要がある。
+- **対応方針**:
+  - `TypographyScaleInput` の `useIntl` import 元を `react-intl` から `@strapi/helper-plugin` へ切り替え、Strapi 管理画面の依存と完全に揃える。
+  - `formatMessage` が未定義または例外を投げた場合でも defaultMessage を表示できるよう、フォールバックラッパーを実装する。
+  - 影響箇所を `rg "useIntl" cms/src` で再確認し、同様の import パターンが無いか点検する。
+- **検証計画**:
+  - `cd cms && npm run develop` で管理画面を起動し、Rich Text → Typography Scale 操作時にエラーが再発しないことを確認する。
+  - `CI=1 npm run build` または `cd cms && npm run build` を実行し、管理画面ビルドが成功するかチェックする（依存が未導入の場合はログとともに記録）。
+  - 失敗時はビルドログと追加調査結果を本節に追記する。
+- **実施結果**:
+  - まず `@strapi/helper-plugin` の `useIntl` を直接利用する案を検証したが、`npm run build` 時に Vite が依存を解決できず (`Rollup failed to resolve import "@strapi/helper-plugin"`) 失敗することが判明。Strapi 5.26 のプラグインバンドルでは当該パッケージが外部化されておらず、追加依存にするには lock 更新が必要となる。
+  - そのため hooks を完全に排除し、`window.strapi` から `formatMessage` を取得するフェイルセーフ関数 `resolveFormatMessage()` を実装。Intl コンテキストが無い場合でも `fallbackFormatMessage` が defaultMessage / id を描画し、`{value}` 置換にも対応するようにした。Intl 取得に失敗した場合は開発時のみ `console.warn` を出力する。
+  - `npm run build` の初回実行は上記 import 解決エラーで停止、再試行時に `CI=1 npm run build` を実行して 111 秒で管理画面ビルドが完了することを確認 (`11b573†L1-L2`)。途中で `write EPIPE` が発生したログ (`e5f068†L2-L11`) は Ctrl+C による中断が原因であり、再実行で解消した。
+  - README / SETUP_BEGINNER_GUIDE に Intl フォールバックの内容と `Invalid hook call` 再発防止策を追記し、利用者向けドキュメントを最新化。

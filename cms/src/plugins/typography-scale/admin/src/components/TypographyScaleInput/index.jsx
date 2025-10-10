@@ -1,5 +1,4 @@
 import React from 'react';
-import { useIntl } from 'react-intl';
 import { Field, Flex, Typography, TextInput, Button, Box } from '@strapi/design-system';
 import getTrad from '../../utils/getTrad';
 
@@ -79,6 +78,55 @@ const mergeOptions = (...candidates) => {
   }, {});
 };
 
+const fallbackFormatMessage = (descriptor, values = {}) => {
+  if (descriptor && typeof descriptor === 'object') {
+    const template =
+      typeof descriptor.defaultMessage === 'string'
+        ? descriptor.defaultMessage
+        : typeof descriptor.id === 'string'
+        ? descriptor.id
+        : '';
+
+    if (!template) {
+      return '';
+    }
+
+    return template.replace(/\{([^}]+)\}/g, (match, key) => {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        const replacement = values[key];
+        return replacement === undefined || replacement === null ? '' : String(replacement);
+      }
+
+      return match;
+    });
+  }
+
+  if (typeof descriptor === 'string') {
+    return descriptor;
+  }
+
+  return '';
+};
+
+const resolveFormatMessage = () => {
+  const globalObject = typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : {};
+  const strapi = globalObject?.strapi;
+
+  const candidates = [
+    strapi?.i18n,
+    strapi?.admin?.services?.intl,
+    typeof strapi?.getPlugin === 'function' ? strapi.getPlugin('i18n')?.services?.i18n : null,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate.formatMessage === 'function') {
+      return candidate.formatMessage.bind(candidate);
+    }
+  }
+
+  return null;
+};
+
 const TypographyScaleInput = (props) => {
   const rawProps = props ?? {};
   const {
@@ -96,7 +144,31 @@ const TypographyScaleInput = (props) => {
     value,
   } = rawProps;
 
-  const { formatMessage } = useIntl();
+  const formatMessage = React.useMemo(() => {
+    const resolved = resolveFormatMessage();
+
+    if (resolved) {
+      return (descriptor, values) => {
+        try {
+          return resolved(descriptor, values);
+        } catch (error) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+              '[typography-scale] Failed to format message via Strapi intl; using default message instead.',
+              error
+            );
+          }
+          return fallbackFormatMessage(descriptor, values);
+        }
+      };
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[typography-scale] Intl context unavailable; using default messages.');
+    }
+
+    return fallbackFormatMessage;
+  }, []);
   const onChange = typeof rawOnChange === 'function' ? rawOnChange : () => {};
   const options = mergeOptions(attribute?.options, attributeOptions, directOptions);
   const min = typeof options.min === 'number' ? options.min : DEFAULT_MIN;
