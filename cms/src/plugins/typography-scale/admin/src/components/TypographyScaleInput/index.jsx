@@ -46,9 +46,9 @@ const isPlainObject = (candidate) => {
   return prototype === Object.prototype || prototype === null;
 };
 
-const extractOptionObject = (candidate) => {
+const normalizeOptionCandidate = (candidate) => {
   if (!isPlainObject(candidate)) {
-    return null;
+    return {};
   }
 
   const nested = isPlainObject(candidate.options) ? candidate.options : {};
@@ -56,26 +56,50 @@ const extractOptionObject = (candidate) => {
   return { ...nested, ...candidate };
 };
 
-const mergeOptions = (...candidates) => {
-  return candidates.reduce((acc, candidate) => {
-    if (Array.isArray(candidate)) {
-      return candidate.reduce((innerAcc, nestedCandidate) => {
-        const extracted = extractOptionObject(nestedCandidate);
-        if (!extracted) {
-          return innerAcc;
-        }
+const extractNumericOption = (source, key) => {
+  if (!source) {
+    return undefined;
+  }
 
-        return { ...innerAcc, ...extracted };
-      }, acc);
-    }
+  const direct = source[key];
+  if (typeof direct === 'number') {
+    return direct;
+  }
 
-    const extracted = extractOptionObject(candidate);
-    if (!extracted) {
-      return acc;
-    }
+  if (typeof direct === 'string') {
+    const parsed = Number.parseFloat(direct);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
 
-    return { ...acc, ...extracted };
-  }, {});
+  return undefined;
+};
+
+const resolveScaleConfig = (props) => {
+  const rawProps = props ?? {};
+  const { attribute, attributeOptions, options: directOptions } = rawProps;
+
+  const merged = {
+    ...normalizeOptionCandidate(attribute?.options),
+    ...normalizeOptionCandidate(attributeOptions),
+    ...normalizeOptionCandidate(directOptions),
+  };
+
+  const min = extractNumericOption(merged, 'min');
+  const max = extractNumericOption(merged, 'max');
+  const step = extractNumericOption(merged, 'step');
+  const defaultScale = extractNumericOption(merged, 'defaultScale');
+
+  const resolvedMin = Number.isFinite(min) ? min : DEFAULT_MIN;
+  const resolvedMax = Number.isFinite(max) ? max : DEFAULT_MAX;
+  const resolvedStep = Number.isFinite(step) && step > 0 ? step : DEFAULT_STEP;
+  const resolvedDefault = clampScale(defaultScale, resolvedMin, resolvedMax) ?? DEFAULT_SCALE;
+
+  return {
+    min: resolvedMin,
+    max: resolvedMax,
+    step: resolvedStep,
+    defaultScale: resolvedDefault,
+  };
 };
 
 const fallbackFormatMessage = (descriptor, values = {}) => {
@@ -127,87 +151,13 @@ const resolveFormatMessage = () => {
   return null;
 };
 
-const computeInternalValue = (pendingValue, config) => {
-  const base = pendingValue ?? config.defaultScaleOption;
-  return clampScale(base, config.min, config.max) ?? config.defaultScaleOption;
-};
-
-const resolveScaleConfig = (props) => {
-  const rawProps = props ?? {};
-  const { attribute, attributeOptions, options: directOptions } = rawProps;
-
-  const options = mergeOptions(attribute?.options, attributeOptions, directOptions);
-  const min = typeof options.min === 'number' ? options.min : DEFAULT_MIN;
-  const max = typeof options.max === 'number' ? options.max : DEFAULT_MAX;
-  const step = typeof options.step === 'number' && options.step > 0 ? options.step : DEFAULT_STEP;
-  const defaultScaleOption =
-    typeof options.defaultScale === 'number' ? clampScale(options.defaultScale, min, max) ?? DEFAULT_SCALE : DEFAULT_SCALE;
-
-  return { options, min, max, step, defaultScaleOption };
-};
-
-const hasConfigChanged = (nextConfig, previousConfig) => {
-  if (!previousConfig) {
-    return true;
-  }
-
-  return (
-    nextConfig.min !== previousConfig.min ||
-    nextConfig.max !== previousConfig.max ||
-    nextConfig.step !== previousConfig.step ||
-    nextConfig.defaultScaleOption !== previousConfig.defaultScaleOption
-  );
-};
-
-class TypographyScaleInputInner extends React.Component {
+class TypographyScaleInput extends React.PureComponent {
   constructor(props) {
     super(props);
-
-    const initialConfig = resolveScaleConfig(props);
-    const initialPending = toNullableNumber(props?.value);
-
-    this.state = {
-      config: initialConfig,
-      pendingValue: initialPending,
-      internal: computeInternalValue(initialPending, initialConfig),
-      lastPropValue: initialPending,
-    };
 
     this.cachedResolvedFormat = null;
     this.cachedFormatMessage = null;
     this.warnedMissingIntl = false;
-  }
-
-  static getDerivedStateFromProps(nextProps, prevState) {
-    const nextConfig = resolveScaleConfig(nextProps);
-    const incomingValue = toNullableNumber(nextProps?.value);
-    const configChanged = hasConfigChanged(nextConfig, prevState.config);
-    const propChanged = !Object.is(incomingValue, prevState.lastPropValue);
-
-    if (!configChanged && !propChanged) {
-      return null;
-    }
-
-    let pendingValue = prevState.pendingValue;
-    let internalValue = prevState.internal;
-
-    if (propChanged) {
-      pendingValue = incomingValue;
-      internalValue = computeInternalValue(incomingValue, nextConfig);
-    } else if (configChanged) {
-      internalValue = computeInternalValue(pendingValue, nextConfig);
-    }
-
-    return {
-      config: nextConfig,
-      pendingValue,
-      internal: internalValue,
-      lastPropValue: incomingValue,
-    };
-  }
-
-  getCurrentConfig() {
-    return this.state?.config ?? resolveScaleConfig(this.props);
   }
 
   getFormatMessage() {
@@ -254,31 +204,26 @@ class TypographyScaleInputInner extends React.Component {
   }
 
   handleSliderChange = (event) => {
-    const config = this.getCurrentConfig();
-    const nextValue = clampScale(event.target.value, config.min, config.max) ?? config.defaultScaleOption;
+    const config = resolveScaleConfig(this.props);
+    const nextValue = clampScale(event.target.value, config.min, config.max) ?? config.defaultScale;
 
-    this.setState({ pendingValue: nextValue, internal: nextValue });
     this.emitChange(nextValue);
   };
 
   handleNumberChange = (event) => {
-    const config = this.getCurrentConfig();
+    const config = resolveScaleConfig(this.props);
     const raw = event.target.value;
 
     if (raw === '' || raw === null || raw === undefined) {
-      this.setState({ pendingValue: null, internal: config.defaultScaleOption });
       this.emitChange(null);
       return;
     }
 
-    const nextValue = clampScale(raw, config.min, config.max) ?? config.defaultScaleOption;
-    this.setState({ pendingValue: nextValue, internal: nextValue });
+    const nextValue = clampScale(raw, config.min, config.max) ?? config.defaultScale;
     this.emitChange(nextValue);
   };
 
   handleReset = () => {
-    const config = this.getCurrentConfig();
-    this.setState({ pendingValue: null, internal: config.defaultScaleOption });
     this.emitChange(null);
   };
 
@@ -294,16 +239,18 @@ class TypographyScaleInputInner extends React.Component {
       labelAction,
       name = 'typography-scale',
       required = false,
+      value,
     } = rawProps;
 
-    const config = this.getCurrentConfig();
-
+    const config = resolveScaleConfig(rawProps);
+    const rawValue = toNullableNumber(value);
+    const numericValue = clampScale(rawValue, config.min, config.max);
+    const sliderValue = numericValue ?? config.defaultScale;
+    const numberValue = rawValue === null ? '' : (numericValue ?? config.defaultScale).toString();
     const formatMessage = this.getFormatMessage();
     const resolvedLabel = intlLabel ?? { id: getTrad('field.label'), defaultMessage: '文字サイズ倍率' };
-    const { pendingValue, internal } = this.state;
-    const displayScale = clampScale(internal, config.min, config.max) ?? config.defaultScaleOption;
-    const isDefault = pendingValue === null;
     const hint = description ?? attribute?.description ?? attributeOptions?.description ?? null;
+    const isDefault = rawValue === null;
 
     return (
       <Field.Root id={name} name={name} hint={hint} error={error} required={required}>
@@ -318,11 +265,11 @@ class TypographyScaleInputInner extends React.Component {
             {isDefault
               ? formatMessage(
                   { id: getTrad('field.usingDefault'), defaultMessage: '記事既定の文字サイズ（{value}倍）を使用しています。' },
-                  { value: displayScale.toFixed(2) }
+                  { value: sliderValue.toFixed(2) }
                 )
               : formatMessage(
                   { id: getTrad('field.preview'), defaultMessage: '現在の倍率: {value}倍' },
-                  { value: displayScale.toFixed(2) }
+                  { value: sliderValue.toFixed(2) }
                 )}
           </Typography>
           <Box paddingTop={1}>
@@ -331,7 +278,7 @@ class TypographyScaleInputInner extends React.Component {
               min={config.min}
               max={config.max}
               step={config.step}
-              value={displayScale}
+              value={sliderValue}
               onChange={this.handleSliderChange}
               disabled={disabled}
               style={{ width: '100%', accentColor: 'var(--colors-primary500, #4945ff)' }}
@@ -344,7 +291,7 @@ class TypographyScaleInputInner extends React.Component {
               type="number"
               label={formatMessage({ id: getTrad('field.inputLabel'), defaultMessage: '倍率' })}
               name={`${name}-number`}
-              value={displayScale.toString()}
+              value={numberValue}
               onChange={this.handleNumberChange}
               step={config.step}
               min={config.min}
@@ -364,6 +311,4 @@ class TypographyScaleInputInner extends React.Component {
   }
 }
 
-const TypographyScaleInput = (props) => React.createElement(TypographyScaleInputInner, props);
-
-export default TypographyScaleInput;
+export default (props) => React.createElement(TypographyScaleInput, props);

@@ -274,3 +274,21 @@
   - `CI=1 npm run build` で管理画面の本番ビルドが 43 秒で完了することを確認（ログ: `781ecc†L1-L1`）。
   - Playwright 経由で `/admin/content-manager/collectionType/api::post.post` → Rich Text ブロック追加 → 展開の操作を再実行し、フリーズが発生しないこととブラウザコンソールにエラーが出ないことを目視確認。なお、Vite の HMR 接続失敗 (`5173` ポート) や既知のプラグイン警告は従来どおりで、Typography Scale とは無関係であることをログ (`nusqdmgv†L1-L120`) にて再確認した。
 - **今後の指針**: Strapi が props をミュータブルに差し替えるケースに備え、カスタムフィールドは `getDerivedStateFromProps` など純粋な同期手段で状態を整合させることを優先する。`componentDidUpdate` での手動比較が必要な場合でも、`prevProps` を再評価せずステートキャッシュで比較する設計を徹底する。
+
+### 2025-10-16 追記: Typography Scale を完全ステートレス化して Rich Text フリーズを根絶
+
+- **背景**: `getDerivedStateFromProps` 化後も「Create an entry → Posts → Rich Text」で管理画面がフリーズするとの報告が継続。Strapi 側がフィールドを検証するたびに `attribute.options` を新しい参照で供給し続けるため、`getDerivedStateFromProps` が毎回新しい state を返し、内部の `setState` なしでもフォーム全体の再評価が止まらないことが判明した。また、スライダーと数値入力を同時に制御するローカル state が、Strapi 本体のフィールド値と競合し一時的に値を奪い合う状況も観測された。
+- **対応**:
+  1. `TypographyScaleInput` を `React.PureComponent` ベースの **完全ステートレス実装**へ置き換え、表示値は常に props (`value`) とその場で計算する `resolveScaleConfig()` のみで決定するように変更。これにより Strapi が同一フレーム内でフィールド関数を複数回評価しても副作用が生じず、再帰的な再描画が発生しない。
+  2. `resolveScaleConfig()` を再設計し、`normalizeOptionCandidate` / `extractNumericOption` で `min/max/step/defaultScale` だけを抽出。従来のディープマージ（`mergeOptions`）で巨大会員オブジェクトを複製し続ける負荷と循環参照リスクを排除した。
+  3. `handleSliderChange` / `handleNumberChange` / `handleReset` から `setState` 呼び出しを削除し、Strapi の `onChange` に対して正規化済みの数値または `null` を即時送信。これにより管理画面のフォームストアが唯一の真実のソースとなり、ローカル state と競合しない。
+  4. Intl フォールバックとラベル描画ロジック（`resolveFormatMessage` / `fallbackFormatMessage`）は既存のキャッシュ方式を温存しつつ、PureComponent 化後も再利用されるようプロパティをインスタンス変数で維持。
+- **依存関係監査**:
+  - `cd cms && npm install --no-progress` を実行して Strapi 5.26.0 系パッケージとプラグイン依存を再展開し、React/Design System などのバージョン衝突が無いことを確認。インストールログでは 2236 パッケージの追加と 32 件の既知脆弱性（低～高）が報告されたが、いずれも上流依存によるもので `@strapi/*` と `react@18.3.1` の組み合わせに互換性問題は見られなかった（`e62646†L1-L18`）。
+  - `npm view @strapi/admin@5.26.0 peerDependencies` を再参照し、React 18 系と互換であることを再確認（`efd02d†L1-L6`）。追加の peer 依存 (`@strapi/data-transfer`) は既存ロックファイルで満たされている。
+- **検証**:
+  - `cd cms && CI=1 npm run build` を実施し、管理画面ビルドが 62 秒で完了することを確認（`2aa45c†L1-L9`, `fafe27†L1-L10`, `8cea5c†L1-L2`）。ビルド中に追加エラーや警告は発生せず、`TypographyScaleInput` のステートレス化による副作用は確認されなかった。
+- **ドキュメント/運用更新**:
+  - README および SETUP_BEGINNER_GUIDE の Typography Scale 節に「props 駆動のステートレス実装」と「Strapi のフォームストアを唯一のソースとする設計」を追記。
+  - 本書冒頭の運用ルールに則り、上記依存監査ログとテスト結果を記録。今後はフィールド実装にローカル state を導入する場合でも、Strapi の props 更新頻度を想定したストレステストを必須とする。
+- **今後の指針**: Strapi 管理画面向けカスタムフィールドでは「props → 表示値 → onChange」という一方向データフローを徹底し、ローカル state は入力一時保持など不可避なケースに限定する。options 正規化も必要最小限のキー抽出に留め、巨大な設定オブジェクトを毎回複製しない。加えて、依存監査は `npm install` の完全実行とログ保存を最低月次で行い、脆弱性情報の追跡とバージョンずれの早期検知に努める。
