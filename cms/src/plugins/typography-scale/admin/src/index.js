@@ -4,15 +4,25 @@ import register from './register';
 import bootstrap from './bootstrap';
 import prefixPluginTranslations from './utils/prefixPluginTranslations';
 
+const globalObject =
+  typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : {};
+
+const PLUGIN_REGISTER_SYMBOL = Symbol.for('plugin::typography-scale.admin-registered');
+
 const name = pluginPkg.strapi?.name || pluginPkg.name;
 
 const admin = {
   register(app) {
     register(app);
-    app.registerPlugin({
-      id: pluginId,
-      name,
-    });
+
+    if (!globalObject[PLUGIN_REGISTER_SYMBOL]) {
+      app.registerPlugin({
+        id: pluginId,
+        name,
+      });
+
+      globalObject[PLUGIN_REGISTER_SYMBOL] = true;
+    }
   },
   bootstrap(app) {
     bootstrap(app);

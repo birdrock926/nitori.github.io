@@ -2,7 +2,16 @@ import pluginId from './pluginId';
 import TypographyScaleInput from './components/TypographyScaleInput/index.jsx';
 import getTrad from './utils/getTrad';
 
+const globalObject =
+  typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : {};
+
+const FIELD_REGISTER_SYMBOL = Symbol.for('plugin::typography-scale.field-registered');
+
 const register = (app) => {
+  if (globalObject[FIELD_REGISTER_SYMBOL]) {
+    return;
+  }
+
   app.customFields.register({
     name: 'scale',
     pluginId,
@@ -61,6 +70,8 @@ const register = (app) => {
       advanced: [],
     },
   });
+
+  globalObject[FIELD_REGISTER_SYMBOL] = true;
 };
 
 export default register;

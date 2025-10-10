@@ -388,3 +388,15 @@
   - Typography Scale を含むカスタムフィールドは「Strapi が undefined を渡すフェーズ」で必ず一度既定値を申告し、フォームストアを安定させる。`ensureInitialValue()` にデバッグログを仕込む場合は、値送信回数が 1 回に収束しているか確認する。
   - 新たに上下限を追加する際は JSON 定義に明示したうえで `ensureInitialValue()` にも同値が渡されるか確認し、誤差補正が不要なケースではイベント送信が発生していないことを `console.count` などで監視する。
   - `Maximum update depth exceeded` が再発した場合はまずブラウザコンソールで `value` が `undefined` のままループしていないか調査し、必要に応じて `emitChange()` の重複送信ガードや clamp ロジックを更新する。
+
+### 2025-10-22 追記: 管理画面拡張登録の無限再実行を阻止
+
+- **背景**: ブラウザの開発者ツールで `Warning: Maximum update depth exceeded` が継続出力される状況を追加調査した結果、Strapi Admin が Dynamic Zone を初期化する際に当プラグインの `register` が再評価され、`app.customFields.register`→`lazyLoadComponents`→`setStore` が循環してストア更新が止まらないことが判明。カスタムフィールド側の初期値補正が完了しても、登録処理が毎回 store を書き換えるため Rich Text 画面がフリーズしていた。
+- **対応**:
+  1. `cms/src/plugins/typography-scale/admin/src/register.js` にグローバルシンボル `Symbol.for('plugin::typography-scale.field-registered')` を導入し、同一セッション中は `app.customFields.register` を一度だけ実行する冪等ガードを追加。【F:cms/src/plugins/typography-scale/admin/src/register.js†L1-L57】
+  2. `cms/src/plugins/typography-scale/admin/src/index.js` でも `Symbol.for('plugin::typography-scale.admin-registered')` を用いて `app.registerPlugin` の多重実行を抑制し、Strapi store の再構築がループしないよう統一。【F:cms/src/plugins/typography-scale/admin/src/index.js†L1-L44】
+  3. グローバルシンボルは `window` / `globalThis` の両方を透過的に扱えるフォールバック付きで定義し、ビルド時（Node 実行）やブラウザ（Admin）どちらの評価でも安全に共有できるよう実装。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+- **今後の指針**: Admin 拡張で `app.*` API を呼び出す際は、HMR や Dynamic Zone 再評価で同じコードが再実行されることを前提に、グローバルフラグや `app.getPlugin` による存在確認で必ず冪等性を担保する。将来カスタムフィールドを追加する場合も同じガード方針を適用し、store 書き換えがレンダーごとに走らない構造を維持する。
