@@ -630,3 +630,17 @@
 - **運用メモ**:
   - Comments プラグインをアップデートした際は `serializeQuery()` が新しいクエリパラメータを網羅しているか確認し、必要に応じて `LIMIT_ALIAS_KEYS` を拡張する。`comments.limit.serializeQuery.failed` ログが出た場合はエラー内容と併せて本書へ追記する。
   - 記事カードの 21:9 比率は `max-height` を持つため、極端に幅の広いレイアウトで縦横比が崩れる場合は CSS カスタムプロパティ化を検討する。カバー画像のサイズ変更に合わせてライト/ダークテーマの余白や影が崩れないかを UI 側で確認すること。
+
+### 2025-10-19 追記: Comments limit querystring 同期と Post カバー縮小
+
+- **背景**: `http://localhost:1337/admin/plugins/comments` でコメント一覧が空のまま更新されず、ブラウザコンソールに `A valid integer must be provided to limit` が連続出力される事象を確認。既存の正規化は `ctx.request.querystring` のみ更新していたため、Strapi が内部で参照する `ctx.querystring` や `ctx.state.query.pagination` へ不正値が残り続け、Knex のバリデーションが再実行されていたと推測される。また、トップページの Post カードでカバー画像が依然として大きく感じられるとのフィードバックがあり、表示サイズの見直しが必要になった。
+- **実施内容**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `wrapCommentsController` を修正し、`sanitizeCommentsLimit()` 適用後に `ctx.state.query` を生成・マージする処理を追加。`pagination` オブジェクトの値も上書きし、`serializeQuery()` の結果を `ctx.request.querystring` と `ctx.querystring` の双方へ反映するよう統一した。シリアライズのリトライとログ出力も共通化し、管理画面が limit 警告でループする再発を防止。
+  2. `web/src/styles/global.css` の `.post-card-cover` を 16:9・最大 140px（モバイルは 4:3・最大 110px）へ縮小し、周囲コンテンツとのバランスを調整。README / SETUP_BEGINNER_GUIDE に新しい寸法を追記し、運用者が UI 変更を把握できるようにした。
+  3. README.md / SETUP_BEGINNER_GUIDE.md のコメント節を更新し、limit 正規化が `ctx.request.querystring`・`ctx.querystring`・`ctx.state.query.pagination` に作用すること、トップページのカードカバーが小型化されたことを明示。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - `cd web && npm install --no-progress --no-fund --no-audit`
+  - `cd web && npm run build`（Strapi 未起動のため API フェッチはフォールバック応答を使用）
+- **今後の指針**: Comments まわりでクエリを補正する際は `ctx.request.query` / `ctx.request.querystring` / `ctx.querystring` / `ctx.state.query` の整合性を必ず取る。UI 変更は README / SETUP / 本書の三カ所へ同時反映し、既存スクリーンショットとの差異を説明する。必要に応じてストーリーブックやデザインカタログに新寸法を記録することも検討する。

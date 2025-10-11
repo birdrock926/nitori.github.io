@@ -857,9 +857,9 @@ main > * {
   overflow: hidden;
   border-radius: calc(var(--border-radius-lg) - 0.5rem);
   line-height: 0;
-  aspect-ratio: 21 / 9;
-  max-height: 180px;
-  margin-bottom: 0.75rem;
+  aspect-ratio: 16 / 9;
+  max-height: 140px;
+  margin-bottom: 0.5rem;
   background: var(--surface-stronger);
 }
 
@@ -877,9 +877,9 @@ main > * {
 
 @media (max-width: 599px) {
   .post-card-cover {
-    aspect-ratio: 16 / 9;
-    max-height: 140px;
-    margin-bottom: 0.5rem;
+    aspect-ratio: 4 / 3;
+    max-height: 110px;
+    margin-bottom: 0.4rem;
   }
 }
 

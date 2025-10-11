@@ -381,6 +381,30 @@ const wrapCommentsController = (controller, { sanitizeLimit = false, annotateRes
 
       const sanitized = sanitizeCommentsLimit(ctx.query);
 
+      if (ctx.state) {
+        if (!ctx.state.query || typeof ctx.state.query !== 'object') {
+          ctx.state.query = {};
+        }
+
+        if (ctx.query && typeof ctx.query === 'object') {
+          ctx.state.query = { ...ctx.state.query, ...ctx.query };
+
+          if (ctx.query.pagination && typeof ctx.query.pagination === 'object') {
+            const existingPagination =
+              ctx.state.query && typeof ctx.state.query.pagination === 'object'
+                ? ctx.state.query.pagination
+                : {};
+            ctx.state.query.pagination = {
+              ...existingPagination,
+              ...ctx.query.pagination,
+            };
+          }
+        }
+      }
+
+      let serializedQuerystring;
+      let didSerialize = false;
+
       if (ctx.request) {
         if (!ctx.request.query || ctx.request.query === ctx.query) {
           ctx.request.query = ctx.query;
@@ -389,13 +413,27 @@ const wrapCommentsController = (controller, { sanitizeLimit = false, annotateRes
         }
 
         try {
-          const serialized = serializeQuery(ctx.query);
-          if (serialized || sanitized?.limit) {
-            ctx.request.querystring = serialized;
+          serializedQuerystring = serializeQuery(ctx.query);
+          didSerialize = true;
+          if (serializedQuerystring || sanitized?.limit) {
+            ctx.request.querystring = serializedQuerystring;
           }
         } catch (error) {
           ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
         }
+      }
+
+      if (!didSerialize) {
+        try {
+          serializedQuerystring = serializeQuery(ctx.query);
+          didSerialize = true;
+        } catch (error) {
+          ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
+        }
+      }
+
+      if (didSerialize) {
+        ctx.querystring = serializedQuerystring;
       }
     }
 

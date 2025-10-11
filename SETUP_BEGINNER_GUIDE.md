@@ -186,6 +186,7 @@ npm run dev
 
 - Strapi がまだ起動していなくてもコマンドが自動で待機し、CMS が利用可能になり次第サーバーが立ち上がります（既定ではタイムアウトなし。必要に応じて `STRAPI_WAIT_TIMEOUT_MS` で上限ミリ秒を指定できます）。
 - ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
+- トップページのカードに表示されるカバー画像は 16:9 の最大 140px（モバイルは 4:3・最大 110px）へ縮小されるため、旧レイアウトよりもタイルが詰まって見える点に注意してください。過去のスクリーンショットと比較しても意図した縮尺であることを確認します。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
   - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
@@ -205,7 +206,7 @@ npm run dev
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
 7. コメントフォームのメール欄は任意入力ですが、VirtusLab Comments 3.1.0 がメールアドレスを必須項目として検証するため、空欄や不正な値で送信した場合はフロントエンド側で `@comments.local` ドメインのダミーアドレスを生成して API リクエストを行います（ダミー宛に通知は送信されません）。バックエンドも同じドメインで不足分を補完します。返信通知を受け取りたい場合は正しいメールアドレスを入力してください（API から外部公開はされません）。
 8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
-9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプしたうえで `ctx.request.querystring` へ書き戻すため、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
+9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプしたうえで `ctx.request.querystring`・`ctx.querystring`・`ctx.state.query.pagination` へ書き戻すため、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
 10. 運営アカウントの返信は `COMMENTS_STAFF_*` と `authorUser` の情報から自動判定され、Web 側ではオレンジ色の「運営」バッジ（星アイコン付き）と名前色の強調が適用されます。新しい運営メールやドメインを登録した場合は `.env` を更新し、Strapi を再起動してから動作を確認してください。
 
 
