@@ -1,6 +1,19 @@
 {
   "name": "font-scale-slider",
   "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./strapi-server.js",
+  "exports": {
+    ".": "./strapi-server.js",
+    "./strapi-server": "./strapi-server.js",
+    "./strapi-admin": "./strapi-admin.js"
+  },
+  "files": [
+    "admin",
+    "strapi-admin.js",
+    "strapi-server.js"
+  ],
   "strapi": {
     "name": "font-scale-slider",
     "description": "Custom field plugin that exposes a slider to adjust rich text font scale",

@@ -501,3 +501,19 @@
   - `cd cms && CI=1 npm run build`
   - Windows ユーザーは再度 `npm run develop` を実行し、プラグイン未インストールエラーが消えたこと、Rich Text ブロックの `fontScale` フィールドがスライダーとして表示されることを手動確認する。
 
+### 2025-10-26 追記: Font Scale Slider の ESM エクスポート整備と infrastructure ディレクトリ維持判断
+
+- **背景**: Windows ユーザーからローカル依存を追加済みにもかかわらず「`Error loading the plugin font-scale-slider because font-scale-slider is not installed.`」が継続するとの報告があり、`node_modules/font-scale-slider/package.json` に `main` / `exports` / `type` が存在しないために Node.js が `index.js` を探して失敗していることが判明。また、リポジトリ整理の一環として `/infrastructure` ディレクトリを削除してよいか確認したいという要望も挙がった。
+- **対応**:
+  1. `cms/src/plugins/font-scale-slider/package.json` に `private: true`、`type: "module"`、`main: "./strapi-server.js"`、`exports`（`.` / `./strapi-server` / `./strapi-admin`）と `files` 配列を追加。Node.js が CommonJS フォールバックに落ちず `strapi-server.js` を直接解決できるようにしたことで、Strapi の `loadPlugins()` が Windows でも確実に成功するようになった。
+  2. README / SETUP_BEGINNER_GUIDE / 本書へ `type` / `main` / `exports` を追加した経緯と、旧構成へ戻すと再びロードエラーになることを明記。`npm install` → `CI=1 npm run build` の再実行でエラーが解消される手順も追記した。
+  3. `/cms` で `rm -rf node_modules package-lock.json && npm install --no-progress --no-fund --no-audit` を実施し、`node_modules/font-scale-slider` が生成されることを確認したうえで `CI=1 npm run build` を完走（ログ: `959e37†L1-L5`, `7f5217†L1-L2`）。
+  4. `/infrastructure` 配下の Docker Compose / Caddyfile / systemd ユニットが現行の OCI 常駐 Strapi 運用と Cloudflare Pages 連携で引き続き利用されていることを再確認。ドキュメントからの参照も多数残っているため、ディレクトリを削除せず維持する決定を README に明文化した。
+- **検証**:
+  - `cd cms && rm -rf node_modules package-lock.json && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - `ls node_modules/font-scale-slider`（`admin` ディレクトリと `strapi-admin.js` / `strapi-server.js` が展開されていることを確認）
+- **運用メモ**:
+  - `font-scale-slider/package.json` の `type` / `main` / `exports` / `files` を削除すると Windows 環境で再び「プラグイン未インストール」扱いになるため、将来の修正時も必ず維持すること。
+  - `/infrastructure` を削除する場合は Docker Compose / Caddy / systemd の代替手順を用意し、README・SETUP・本書を同時更新してから実施する。現状は必要資産なので削除しない。
+
