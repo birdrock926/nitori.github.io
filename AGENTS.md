@@ -545,3 +545,16 @@
 - **運用メモ**:
   - プラグイン撤去後も `cms/src/api/post/content-types/post/lifecycles.js` の `clampScaleValue` が 0.7〜1.8 に丸めるため、記事側で異常値を入力してもビルド時に正規化される。範囲変更時はライフサイクルとフロントエンド側の `clampRichTextScale`（`web/src/lib/strapi.ts`）を同時更新すること。
   - `npm install` 実行時に Windows で `ENOTEMPTY` が再発した場合は `node_modules/@inquirer/external-editor` 付近の残骸を削除して再度 `npm install` を実行する。今回の再インストールでは `rm -rf node_modules package-lock.json` → `npm install --no-fund --no-audit` で解消した。失敗ログは `cms-npm-install.log` に残しているので環境差分調査に活用する。
+
+### 2025-10-28 追記: Comments limit ループ対策とページサイズ統一
+
+- **背景**: Strapi 管理画面の **Comments** タブを開いた瞬間に `A valid integer must be provided to limit` が連続出力され、Knex の警告とともに画面がリロードループへ陥った。VirtusLab Comments プラグインが `pagination[pageSize]` や `_limit` など複数形式のクエリを受け取る際、空文字列を `limit` へ引き継いでしまうケースがあり、Windows 環境で再現率が高かった。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` に `sanitizeCommentsLimit()` と `withSanitizedLimit()` を追加し、`admin.findAll` と `client.findAll` / `findAllFlat` / `findAllInHierarchy` / `findAllPerAuthor` を全てラップ。`limit` / `_limit` / `pageSize` / `pagination[pageSize]` などの候補値を収集し、正の整数なら 1〜200 にクランプ、無効値しか見つからない場合は 50 件へフォールバックするよう統一した。不要なエイリアスキーは削除し、Knex へ渡る前に必ず整数へ正規化する。【F:cms/src/extensions/comments/strapi-server.js†L1-L238】
+  2. フロントエンドのコメント取得関数（`web/src/lib/comments.ts`）でもページサイズを 1〜200 件に丸め込み、バックエンドと上限値を共有するよう調整した。【F:web/src/lib/comments.ts†L209-L214】
+  3. README / SETUP_BEGINNER_GUIDE / 本書へ limit 正規化と上限調整の手順を追記し、同エラーが再発した場合の確認ポイントを明文化した。【F:README.md†L214-L219】【F:SETUP_BEGINNER_GUIDE.md†L206-L212】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - `cd web && npm install --no-progress --no-fund --no-audit`
+- **今後の指針**: limit の上限を変更する場合は `cms/src/extensions/comments/strapi-server.js` の `MAX_COMMENT_LIMIT` と `web/src/lib/comments.ts` のクランプ値を同時に更新し、README / SETUP / 本書の記載も即時修正する。Knex の警告が再度出力された場合は `sanitizeCommentsLimit()` に対象となるキーが不足していないか確認し、必要なら追加する。コメントプラグインをアップデートする際は本拡張が引き続き有効か、管理画面で一覧表示 → 詳細表示 → 通報・承認操作を一巡してリロードループが発生しないことを確認する。

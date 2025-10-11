@@ -5,6 +5,140 @@ const NUMERIC_PATTERN = /^\d+$/;
 const relationCache = new Map();
 const FALLBACK_EMAIL_DOMAIN = 'comments.local';
 const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
+const DEFAULT_COMMENT_LIMIT = 50;
+const MAX_COMMENT_LIMIT = 200;
+
+const coercePositiveInteger = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value).trim(), 10);
+
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximum = MAX_COMMENT_LIMIT } = {}) => {
+  if (!query || typeof query !== 'object') {
+    return null;
+  }
+
+  const pagination =
+    query.pagination && typeof query.pagination === 'object' ? { ...query.pagination } : undefined;
+
+  const aliasKeys = [
+    'limit',
+    '_limit',
+    'pageSize',
+    'page_size',
+    'pagination[limit]',
+    'pagination[pageSize]',
+    'pagination[page_size]',
+  ];
+
+  const paginationAliasKeys = ['limit', 'pageSize', 'page_size'];
+
+  let normalized = null;
+  let sawCandidate = false;
+
+  const consider = (value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    sawCandidate = true;
+    if (normalized !== null) {
+      return;
+    }
+    const parsed = coercePositiveInteger(value);
+    if (parsed !== null) {
+      normalized = parsed;
+    }
+  };
+
+  if (pagination) {
+    paginationAliasKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(pagination, key)) {
+        consider(pagination[key]);
+      }
+    });
+  }
+
+  aliasKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(query, key)) {
+      consider(query[key]);
+    }
+  });
+
+  const limitValue =
+    normalized !== null
+      ? Math.min(Math.max(normalized, 1), maximum)
+      : sawCandidate
+      ? Math.min(Math.max(fallback, 1), maximum)
+      : null;
+
+  aliasKeys.forEach((key) => {
+    if (key !== 'limit' && Object.prototype.hasOwnProperty.call(query, key)) {
+      delete query[key];
+    }
+  });
+
+  if (pagination) {
+    paginationAliasKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(pagination, key)) {
+        delete pagination[key];
+      }
+    });
+  }
+
+  if (limitValue !== null) {
+    query.limit = limitValue;
+    const nextPagination = { ...(pagination || {}) };
+    nextPagination.limit = limitValue;
+    nextPagination.pageSize = limitValue;
+    query.pagination = nextPagination;
+    return limitValue;
+  }
+
+  if (pagination) {
+    if (Object.keys(pagination).length > 0) {
+      query.pagination = pagination;
+    } else if (Object.prototype.hasOwnProperty.call(query, 'pagination')) {
+      delete query.pagination;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(query, 'limit')) {
+    delete query.limit;
+  }
+
+  return null;
+};
+
+const withSanitizedLimit = (controller) => {
+  if (typeof controller !== 'function') {
+    return controller;
+  }
+
+  return async function controllerWithSanitizedLimit(ctx, next) {
+    if (ctx) {
+      if (!ctx.query || typeof ctx.query !== 'object') {
+        ctx.query = {};
+      }
+
+      sanitizeCommentsLimit(ctx.query);
+
+      if (ctx.request && ctx.request.query && ctx.request.query !== ctx.query) {
+        ctx.request.query = { ...ctx.request.query, ...ctx.query };
+      }
+    }
+
+    return controller.call(this, ctx, next);
+  };
+};
 
 const coerceString = (value) => {
   if (typeof value === 'string') {
@@ -218,6 +352,18 @@ const annotateContent = (content, original) => {
 };
 
 export default (plugin) => {
+  if (plugin?.controllers?.admin?.findAll) {
+    plugin.controllers.admin.findAll = withSanitizedLimit(plugin.controllers.admin.findAll);
+  }
+
+  if (plugin?.controllers?.client) {
+    ['findAll', 'findAllFlat', 'findAllInHierarchy', 'findAllPerAuthor'].forEach((key) => {
+      if (typeof plugin.controllers.client[key] === 'function') {
+        plugin.controllers.client[key] = withSanitizedLimit(plugin.controllers.client[key]);
+      }
+    });
+  }
+
   if (plugin?.controllers?.client?.post) {
     const basePost = plugin.controllers.client.post;
 

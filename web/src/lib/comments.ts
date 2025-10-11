@@ -415,7 +415,10 @@ export const fetchComments = async (relationId: string, pageSize?: number): Prom
     return [];
   }
 
-  const normalizedPageSize = Number.isFinite(pageSize) && pageSize ? Math.max(1, Math.floor(pageSize)) : 50;
+  const normalizedPageSize =
+    Number.isFinite(pageSize) && pageSize
+      ? Math.min(200, Math.max(1, Math.floor(pageSize)))
+      : 50;
 
   const fetchPage = async (page: number): Promise<CommentsPage> => {
     try {
