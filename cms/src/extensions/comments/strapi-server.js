@@ -4,6 +4,7 @@ const COMMENTS_UID = 'plugin::comments.comment';
 const NUMERIC_PATTERN = /^\d+$/;
 
 const relationCache = new Map();
+
 const FALLBACK_EMAIL_DOMAIN = 'comments.local';
 const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
 const DEFAULT_COMMENT_LIMIT = 50;
@@ -20,37 +21,7 @@ const LIMIT_ALIAS_KEYS = [
 const PAGINATION_ALIAS_KEYS = ['limit', 'pageSize', 'page_size'];
 const PLACEHOLDER_SMTP_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev)$/i;
 
-const parseDelimitedList = (value) =>
-  String(value ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-
-const STAFF_EMAILS = new Set(
-  parseDelimitedList(process.env.COMMENTS_STAFF_EMAILS).map((email) => email.toLowerCase()),
-);
-
-const STAFF_EMAIL_DOMAINS = new Set(
-  parseDelimitedList(process.env.COMMENTS_STAFF_EMAIL_DOMAINS).map((domain) =>
-    domain.replace(/^@+/, '').toLowerCase(),
-  ),
-);
-
-const STAFF_AUTHOR_IDS = new Set(
-  parseDelimitedList(process.env.COMMENTS_STAFF_AUTHOR_IDS).map((id) => id.toLowerCase()),
-);
-
-const STAFF_BADGE_LABEL = process.env.COMMENTS_STAFF_BADGE_LABEL?.trim() || '運営';
-const STAFF_KEYWORD_PATTERN =
-  /(moderator|モデレーター|admin|staff|管理者|editor|official|運営|運營|运营|運営チーム|公式)/i;
-
-const looksLikeCommentEntity = (value) =>
-  value &&
-  typeof value === 'object' &&
-  (Object.prototype.hasOwnProperty.call(value, 'content') ||
-    Object.prototype.hasOwnProperty.call(value, 'blocked') ||
-    Object.prototype.hasOwnProperty.call(value, 'threadOf') ||
-    Object.prototype.hasOwnProperty.call(value, 'thread_of'));
+const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const coercePositiveInteger = (value) => {
   if (value === undefined || value === null) {
@@ -58,7 +29,6 @@ const coercePositiveInteger = (value) => {
   }
 
   const parsed = Number.parseInt(String(value).trim(), 10);
-
   if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed <= 0) {
     return null;
   }
@@ -78,7 +48,6 @@ const sanitizeCommentsLimit = (
     query.pagination && typeof query.pagination === 'object' ? { ...query.pagination } : undefined;
 
   let normalized = null;
-
   const consider = (value) => {
     if (value === undefined || value === null || normalized !== null) {
       return;
@@ -136,7 +105,6 @@ const serializeQuery = (query) => {
   }
 
   const params = new URLSearchParams();
-
   const appendEntry = (prefix, value) => {
     if (value === undefined || value === null) {
       return;
@@ -164,294 +132,6 @@ const serializeQuery = (query) => {
   });
 
   return params.toString();
-};
-
-const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
-
-const matchStaffKeyword = (value) => {
-  const normalized = normalizeString(value).toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return STAFF_KEYWORD_PATTERN.test(normalized);
-};
-
-const hasStaffDomain = (email) => {
-  const normalized = normalizeString(email).toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  if (STAFF_EMAILS.has(normalized)) {
-    return true;
-  }
-
-  const parts = normalized.split('@');
-  if (parts.length === 2) {
-    const domain = parts[1];
-    if (STAFF_EMAIL_DOMAINS.has(domain)) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const hasStaffAuthorId = (value) => {
-  const normalized = normalizeString(value).toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return STAFF_AUTHOR_IDS.has(normalized);
-};
-
-const ensureAuthorObject = (comment) => {
-  if (!comment.author || typeof comment.author !== 'object') {
-    comment.author = {};
-  }
-  return comment.author;
-};
-
-const isStaffComment = (comment) => {
-  if (!comment || typeof comment !== 'object') {
-    return false;
-  }
-
-  if (comment.isStaffResponse === true) {
-    return true;
-  }
-
-  const authorUser = comment.authorUser ?? comment.author_user;
-  if (authorUser) {
-    return true;
-  }
-
-  const authorType = comment.authorType ?? comment.author_type;
-  if (matchStaffKeyword(authorType)) {
-    return true;
-  }
-
-  const authorId = comment.authorId ?? comment.author_id;
-  if (hasStaffAuthorId(authorId)) {
-    return true;
-  }
-
-  const author = comment.author && typeof comment.author === 'object' ? comment.author : null;
-  if (!author) {
-    return false;
-  }
-
-  if (author.moderator === true) {
-    return true;
-  }
-
-  if (matchStaffKeyword(author.badge) || matchStaffKeyword(author.role) || matchStaffKeyword(author.type)) {
-    return true;
-  }
-
-  if (Array.isArray(author.badges) && author.badges.some(matchStaffKeyword)) {
-    return true;
-  }
-
-  if (Array.isArray(author.roles) && author.roles.some(matchStaffKeyword)) {
-    return true;
-  }
-
-  if (hasStaffDomain(author.email)) {
-    return true;
-  }
-
-  if (hasStaffAuthorId(author.id)) {
-    return true;
-  }
-
-  return false;
-};
-
-const annotateCommentEntity = (entity) => {
-  if (!entity || typeof entity !== 'object') {
-    return entity;
-  }
-
-  if (entity.attributes && typeof entity.attributes === 'object') {
-    annotateCommentEntity(entity.attributes);
-  }
-
-  if (!looksLikeCommentEntity(entity)) {
-    return entity;
-  }
-
-  const comment = entity;
-
-  if (Array.isArray(comment.children)) {
-    comment.children = comment.children.map((child) => annotateCommentEntity(child));
-  } else if (comment.children && typeof comment.children === 'object' && Array.isArray(comment.children.data)) {
-    comment.children.data = comment.children.data.map((child) => annotateCommentEntity(child));
-  }
-
-  if (comment.threadOf && typeof comment.threadOf === 'object') {
-    annotateCommentEntity(comment.threadOf);
-  }
-
-  if (!isStaffComment(comment)) {
-    return comment;
-  }
-
-  const author = ensureAuthorObject(comment);
-  author.moderator = true;
-
-  const badges = new Set();
-  if (typeof author.badge === 'string' && author.badge.trim().length > 0) {
-    badges.add(author.badge.trim());
-  }
-  if (Array.isArray(author.badges)) {
-    author.badges.forEach((badge) => {
-      if (typeof badge === 'string' && badge.trim().length > 0) {
-        badges.add(badge.trim());
-      }
-    });
-  }
-  badges.add(STAFF_BADGE_LABEL);
-  const badgeList = Array.from(badges);
-  author.badges = badgeList;
-  author.badge = badgeList[0] || STAFF_BADGE_LABEL;
-
-  const roles = new Set();
-  if (typeof author.role === 'string' && author.role.trim().length > 0) {
-    roles.add(author.role.trim());
-  }
-  if (Array.isArray(author.roles)) {
-    author.roles.forEach((role) => {
-      if (typeof role === 'string' && role.trim().length > 0) {
-        roles.add(role.trim());
-      }
-    });
-  }
-  roles.add(STAFF_BADGE_LABEL);
-  const roleList = Array.from(roles);
-  author.roles = roleList;
-  author.role = roleList[0] || STAFF_BADGE_LABEL;
-
-  comment.isStaffResponse = true;
-
-  return comment;
-};
-
-const annotateCommentPayload = (payload) => {
-  if (!payload || typeof payload !== 'object') {
-    return payload;
-  }
-
-  if (Array.isArray(payload)) {
-    return payload.map((item) => annotateCommentEntity(item));
-  }
-
-  if (looksLikeCommentEntity(payload)) {
-    return annotateCommentEntity(payload);
-  }
-
-  ['data', 'results', 'items', 'comments'].forEach((key) => {
-    if (!Object.prototype.hasOwnProperty.call(payload, key)) {
-      return;
-    }
-    const value = payload[key];
-    if (Array.isArray(value)) {
-      payload[key] = value.map((item) => annotateCommentEntity(item));
-    } else if (value && typeof value === 'object') {
-      payload[key] = annotateCommentPayload(value);
-    }
-  });
-
-  if (payload.result && typeof payload.result === 'object') {
-    payload.result = annotateCommentPayload(payload.result);
-  }
-
-  return payload;
-};
-
-const wrapCommentsController = (controller, { sanitizeLimit = false, annotateResponse = true } = {}) => {
-  if (typeof controller !== 'function') {
-    return controller;
-  }
-
-  return async function enhancedCommentsController(ctx, next) {
-    if (sanitizeLimit && ctx) {
-      if (!ctx.query || typeof ctx.query !== 'object') {
-        ctx.query = {};
-      }
-
-      const sanitized = sanitizeCommentsLimit(ctx.query);
-
-      if (ctx.state) {
-        if (!ctx.state.query || typeof ctx.state.query !== 'object') {
-          ctx.state.query = {};
-        }
-
-        if (ctx.query && typeof ctx.query === 'object') {
-          ctx.state.query = { ...ctx.state.query, ...ctx.query };
-
-          if (ctx.query.pagination && typeof ctx.query.pagination === 'object') {
-            const existingPagination =
-              ctx.state.query && typeof ctx.state.query.pagination === 'object'
-                ? ctx.state.query.pagination
-                : {};
-            ctx.state.query.pagination = {
-              ...existingPagination,
-              ...ctx.query.pagination,
-            };
-          }
-        }
-      }
-
-      let serializedQuerystring;
-      let didSerialize = false;
-
-      if (ctx.request) {
-        if (!ctx.request.query || ctx.request.query === ctx.query) {
-          ctx.request.query = ctx.query;
-        } else {
-          ctx.request.query = { ...ctx.request.query, ...ctx.query };
-        }
-
-        try {
-          serializedQuerystring = serializeQuery(ctx.query);
-          didSerialize = true;
-          if (serializedQuerystring || sanitized?.limit) {
-            ctx.request.querystring = serializedQuerystring;
-          }
-        } catch (error) {
-          ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
-        }
-      }
-
-      if (!didSerialize) {
-        try {
-          serializedQuerystring = serializeQuery(ctx.query);
-          didSerialize = true;
-        } catch (error) {
-          ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
-        }
-      }
-
-      if (didSerialize) {
-        ctx.querystring = serializedQuerystring;
-      }
-    }
-
-    const result = await controller.call(this, ctx, next);
-
-    if (annotateResponse) {
-      if (ctx && ctx.body) {
-        ctx.body = annotateCommentPayload(ctx.body);
-      }
-
-      if (result && result !== ctx.body) {
-        return annotateCommentPayload(result);
-      }
-    }
-
-    return result;
-  };
 };
 
 const coerceString = (value) => {
@@ -544,14 +224,6 @@ const coerceDocumentId = (post) => {
   }
 
   return normalizeRelationValue(post.documentId) ?? normalizeRelationValue(post.document_id);
-};
-
-const coerceRelationIdentifier = (post) => {
-  if (!post) {
-    return null;
-  }
-
-  return coerceEntryId(post) ?? coerceDocumentId(post);
 };
 
 const fetchPostByWhere = async (where) => {
@@ -809,11 +481,61 @@ const annotateContent = (content, original) => {
   return trimmedContent ? `${trimmedContent}\n\n${annotation}` : annotation;
 };
 
+const wrapCommentsController = (controller, { sanitizeLimit = false } = {}) => {
+  if (typeof controller !== 'function') {
+    return controller;
+  }
+
+  return async function enhancedCommentsController(ctx, next) {
+    if (sanitizeLimit && ctx) {
+      if (!ctx.query || typeof ctx.query !== 'object') {
+        ctx.query = {};
+      }
+
+      const sanitized = sanitizeCommentsLimit(ctx.query);
+
+      if (ctx.state) {
+        if (!ctx.state.query || typeof ctx.state.query !== 'object') {
+          ctx.state.query = {};
+        }
+
+        ctx.state.query = { ...ctx.state.query, ...ctx.query };
+
+        if (ctx.query?.pagination && typeof ctx.query.pagination === 'object') {
+          ctx.state.query.pagination = {
+            ...(ctx.state.query.pagination || {}),
+            ...ctx.query.pagination,
+          };
+        }
+      }
+
+      if (ctx.request) {
+        if (!ctx.request.query || ctx.request.query === ctx.query) {
+          ctx.request.query = ctx.query;
+        } else {
+          ctx.request.query = { ...ctx.request.query, ...ctx.query };
+        }
+
+        try {
+          const serialized = serializeQuery(ctx.query);
+          if (serialized || sanitized?.limit) {
+            ctx.request.querystring = serialized;
+          }
+          ctx.querystring = serialized;
+        } catch (error) {
+          ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
+        }
+      }
+    }
+
+    return controller.call(this, ctx, next);
+  };
+};
+
 export default (plugin) => {
   if (plugin?.controllers?.admin?.findAll) {
     plugin.controllers.admin.findAll = wrapCommentsController(plugin.controllers.admin.findAll, {
       sanitizeLimit: true,
-      annotateResponse: false,
     });
   }
 
@@ -821,21 +543,13 @@ export default (plugin) => {
     const sanitizeKeys = new Set(['findAll', 'findAllFlat', 'findAllInHierarchy', 'findAllPerAuthor']);
 
     Object.entries(plugin.controllers.client).forEach(([key, handler]) => {
-      if (typeof handler !== 'function') {
+      if (typeof handler !== 'function' || key === 'post') {
         return;
       }
 
-      if (key === 'post') {
-        return;
-      }
-
-      const sanitizeLimit = sanitizeKeys.has(key);
-      const annotateResponse = sanitizeLimit || key.startsWith('find');
-
-      if (annotateResponse) {
+      if (sanitizeKeys.has(key) || key.startsWith('find')) {
         plugin.controllers.client[key] = wrapCommentsController(handler, {
-          sanitizeLimit,
-          annotateResponse,
+          sanitizeLimit: sanitizeKeys.has(key),
         });
       }
     });
@@ -851,17 +565,7 @@ export default (plugin) => {
 
       ensureAuthorEmail(ctx);
 
-      const response = await basePost(ctx, next);
-
-      if (ctx && ctx.body) {
-        ctx.body = annotateCommentPayload(ctx.body);
-      }
-
-      if (response && response !== ctx.body) {
-        return annotateCommentPayload(response);
-      }
-
-      return response;
+      return basePost(ctx, next);
     };
   }
 

@@ -726,3 +726,14 @@
 - **運用メモ**:
   - 今後コメント relation の解決に失敗した場合は、`plugin::comments.comment` の `related` カラムが `api::post.post:<entryId>` 形式かを確認する。Document ID 形式が残っている場合は Strapi 再起動時の正規化ログをチェックし、必要に応じて SQL で一括更新する。
   - フロントエンドが Document ID しか取得できない記事詳細 API を提供している場合は、今回の変更で自動的にエントリー ID へ正規化されるが、API 応答に `id` を含めておくと余計な検索を避けられる。
+
+### 2025-10-27 追記: Comments 管理画面が空になる不具合の再修正（スタッフ演出撤回）
+
+- **背景**: Strapi 5.27.0 へ上げた後も、コメント管理画面が空白のまま読み込めないケースが続発。原因調査の結果、スタッフバッジ付与やレスポンス注入のために `cms/src/extensions/comments/strapi-server.js` へ追加したレスポンス整形が Admin 側の `lazyLoadComponents → setStore` 連鎖を再び誘発し、さらに `related` 正規化で Document ID を保持したままになったコメントがあると `Relation for field "related" does not exist` が発生して一覧が描画されないことが判明した。また、Web 側のバッジ UI も不要な差分として残っていた。ユーザー要望では「スタッフ表示よりもコメント管理が正常表示されること」が優先されるため、該当演出を撤回した上で、匿名投稿やリレーションの補正といった安全対策のみ残す方針へ改めた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` を再実装し、`sanitizeCommentsLimit()`・`ensureAuthorEmail()`・`normalizeRelation()`・`sendResponseNotification()`・`normalizeExistingCommentRelations()` といった必要最小限の拡張だけを残した軽量ラッパーに整理。レスポンスへスタッフメタ情報を注入する処理と、多段の再帰アノテーションを撤去し、Document ID/slug を受け取った場合でも最終的に `api::post.post:<entryId>` へ統一するよう正規化を継続。【F:cms/src/extensions/comments/strapi-server.js†L1-L356】
+  2. `web/src/components/comments/CommentsApp.tsx` からモデレーター判定・バッジ描画・クラス付与を削除し、コメント項目の className を一律化。これに合わせて `web/src/styles/global.css` からバッジや色付け用のスタイルを除去し、スタッフ演出が HTML/CSS ともに残らないよう統一。【F:web/src/components/comments/CommentsApp.tsx†L1004-L1103】【F:web/src/components/comments/CommentsApp.tsx†L1132-L1154】【F:web/src/styles/global.css†L1406-L1427】
+  3. コメント API 呼び出しユーティリティ（`web/src/lib/comments.ts`）は既存のフェイルセーフがそのまま利用できたため変更なし。過去に導入した匿名メール補完ロジックは維持されるため、サーバー側の軽量化と矛盾しないことを再確認。
+- **検証**:
+  - `cd cms && npm run build -- --help`（依存未導入のため `@strapi/strapi` を解決できず失敗。log: `c7ddf6†L1-L24`）
+- **今後の指針**: コメント拡張でレスポンスを書き換える場合は、Admin のストア更新や Vite HMR 再評価に巻き込まれないことをブラウザで必ず確認する。特に `ctx.body` の再帰加工や `annotateCommentPayload()` のような重い処理は導入前に UI へ与える副作用を検証すること。スタッフ向けの強調表示を再導入する際は、バックエンドでの属性追記ではなく、API から返る既存フィールドをクライアント側で条件描画する方針を徹底し、コメント一覧が空になる再発を防ぐ。

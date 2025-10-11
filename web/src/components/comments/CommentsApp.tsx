@@ -47,8 +47,6 @@ type Props = {
 const AUTHOR_STORAGE_KEY = 'knn-comments-author';
 const LONG_COMMENT_PREVIEW = 320;
 const GLOBAL_DEFAULT_AUTHOR = '名無しのユーザーさん';
-const STAFF_KEYWORD_PATTERN =
-  /(moderator|モデレーター|admin|staff|管理者|editor|official|運営|運營|运营|運営チーム|公式)/;
 
 const isPubliclyVisible = (comment: CommentNode) => {
   if (comment.removed || comment.blocked) {
@@ -66,42 +64,6 @@ const countComments = (items: CommentNode[]): number =>
     const childrenCount = item.children ? countComments(item.children) : 0;
     return total + visibleSelf + childrenCount;
   }, 0);
-
-const pruneHiddenComments = (nodes: CommentNode[]): CommentNode[] => {
-  if (!Array.isArray(nodes) || nodes.length === 0) {
-    return [];
-  }
-
-  const result: CommentNode[] = [];
-
-  nodes.forEach((node) => {
-    if (!node) {
-      return;
-    }
-
-    const children = pruneHiddenComments(node.children ?? []);
-    const hasChildren = children.length > 0;
-    const isHidden = Boolean(node.removed || node.blocked);
-
-    if (isHidden && !hasChildren) {
-      return;
-    }
-
-    if (hasChildren) {
-      result.push({ ...node, children });
-      return;
-    }
-
-    const nextNode: CommentNode = { ...node };
-    if (nextNode.children && nextNode.children.length === 0) {
-      delete (nextNode as { children?: CommentNode[] }).children;
-    }
-
-    result.push(nextNode);
-  });
-
-  return result;
-};
 
 const buildAuthorId = (name: string, email?: string) => {
   if (email && email.trim().length > 0) {
@@ -186,8 +148,8 @@ const toIdentifierString = (value: unknown): string | undefined => {
 
 const buildRelationCandidates = (entryId?: number | string, documentId?: string): string[] => {
   const candidates: string[] = [];
-  const documentIdentifier = toIdentifierString(documentId);
   const numericId = toNumericString(entryId);
+  const documentIdentifier = toIdentifierString(documentId);
 
   if (numericId) {
     candidates.push(numericId);
@@ -449,8 +411,7 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
 
   const applyComments = useCallback(
     (data: CommentNode[], options?: { goToLastPage?: boolean }) => {
-      const sanitized = pruneHiddenComments(data);
-      setComments(sanitized);
+      setComments(data);
 
       if (!mergedConfig.pageSize || mergedConfig.pageSize <= 0) {
         setPage(1);
@@ -459,7 +420,7 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
         return;
       }
 
-      const nextPageCount = Math.max(1, Math.ceil(sanitized.length / mergedConfig.pageSize));
+      const nextPageCount = Math.max(1, Math.ceil(data.length / mergedConfig.pageSize));
 
       setPage((previous) => {
         const nextPage = options?.goToLastPage ? nextPageCount : Math.min(previous, nextPageCount);
@@ -1011,42 +972,6 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
     [isEnabled, relationCandidates, reportDetails, reportReason],
   );
 
-  const isModeratorComment = useCallback((comment: CommentNode) => {
-    if (!comment) {
-      return false;
-    }
-
-    if (comment.isStaffResponse === true) {
-      return true;
-    }
-
-    const author = comment.author;
-    if (!author) {
-      return false;
-    }
-
-    if (author.moderator === true) {
-      return true;
-    }
-
-    const candidateValues = [
-      typeof author.badge === 'string' ? author.badge : undefined,
-      ...(author.badges ?? []),
-      author.role,
-      ...(author.roles ?? []),
-      author.type,
-      comment.isStaffResponse ? 'staff' : undefined,
-    ]
-      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-      .map((value) => value.trim().toLowerCase());
-
-    if (candidateValues.some((value) => STAFF_KEYWORD_PATTERN.test(value))) {
-      return true;
-    }
-
-    return false;
-  }, []);
-
   const renderStatusPill = useCallback((comment: CommentNode) => {
     if (comment.removed || comment.blocked) {
       return <span className="comment-status-pill comment-status-pill--blocked">非表示</span>;
@@ -1064,12 +989,6 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
     (comment: CommentNode) => {
       const isHidden = Boolean(comment.removed || comment.blocked);
       const isPending = Boolean(comment.approvalStatus && comment.approvalStatus !== 'APPROVED');
-      const hasVisibleChildren = Boolean(comment.children && comment.children.length > 0);
-
-      if (isHidden && !hasVisibleChildren) {
-        return null;
-      }
-
       const canReply =
         isEnabled &&
         !submitting &&
@@ -1082,19 +1001,12 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
         !reportSubmitting &&
         isPubliclyVisible(comment);
 
-      const isModerator = isModeratorComment(comment);
       const sanitizedContent = sanitizeContent(comment.content || '');
       const isLongComment = sanitizedContent.length > LONG_COMMENT_PREVIEW;
       const isExpanded = expandedComments[comment.id] ?? false;
       const isCollapsed = isLongComment && !isExpanded;
       const showContent = !isHidden && !isPending;
       const showReadMore = showContent && isLongComment;
-      const badgeCandidates = comment.author?.badges ?? [];
-      const moderatorLabel =
-        [comment.author?.badge, ...badgeCandidates]
-          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-          .map((value) => value.trim())[0] || '運営';
-      const moderatorBadgeLabel = `${moderatorLabel}からの返信`;
       const displayAuthorName = comment.author?.name?.trim().length
         ? comment.author.name.trim()
         : fallbackAuthorName;
@@ -1108,24 +1020,10 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       }
 
       return (
-        <div
-          key={comment.id}
-          className={`comment-item${isModerator ? ' comment-item--moderator' : ''}`}
-          data-comment-id={comment.id}
-        >
+        <div key={comment.id} className="comment-item" data-comment-id={comment.id}>
           <div className="comment-header">
             <div className="comment-author">
-              <span className={`comment-author__name${isModerator ? ' comment-author__name--moderator' : ''}`}>
-                {displayAuthorName}
-              </span>
-              {isModerator ? (
-                <span className="comment-moderator-badge" aria-label={moderatorBadgeLabel}>
-                  <span aria-hidden="true" className="comment-moderator-badge__icon">
-                    ★
-                  </span>
-                  <span className="comment-moderator-badge__label">{moderatorLabel}</span>
-                </span>
-              ) : null}
+              <span className="comment-author__name">{displayAuthorName}</span>
             </div>
             <div className="comment-meta">
               {comment.createdAt && (
@@ -1143,9 +1041,7 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
             </div>
           </div>
           {isHidden ? (
-            hasVisibleChildren ? (
-              <p className="comment-content">このコメントは管理者によって非表示になりました。</p>
-            ) : null
+            <p className="comment-content">このコメントは管理者によって非表示になりました。</p>
           ) : isPending ? (
             <p className="comment-content">このコメントは承認待ちです。</p>
           ) : (
@@ -1283,7 +1179,6 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       handleReportClick,
       handleReportSubmit,
       headingId,
-      isModeratorComment,
       isEnabled,
       mergedConfig.maxLength,
       renderStatusPill,
