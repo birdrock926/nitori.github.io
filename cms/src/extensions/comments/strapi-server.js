@@ -7,6 +7,7 @@ const FALLBACK_EMAIL_DOMAIN = 'comments.local';
 const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
 const DEFAULT_COMMENT_LIMIT = 50;
 const MAX_COMMENT_LIMIT = 200;
+const PLACEHOLDER_SMTP_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev)$/i;
 
 const parseDelimitedList = (value) =>
   String(value ?? '')
@@ -75,16 +76,12 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
   const paginationAliasKeys = ['limit', 'pageSize', 'page_size'];
 
   let normalized = null;
-  let sawCandidate = false;
 
   const consider = (value) => {
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || normalized !== null) {
       return;
     }
-    sawCandidate = true;
-    if (normalized !== null) {
-      return;
-    }
+
     const parsed = coercePositiveInteger(value);
     if (parsed !== null) {
       normalized = parsed;
@@ -105,49 +102,30 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
     }
   });
 
-  const limitValue =
-    normalized !== null
-      ? Math.min(Math.max(normalized, 1), maximum)
-      : sawCandidate
-      ? Math.min(Math.max(fallback, 1), maximum)
-      : null;
+  const safeFallback = Number.isFinite(fallback) ? fallback : DEFAULT_COMMENT_LIMIT;
+  const limitValue = Math.min(Math.max(normalized ?? safeFallback, 1), maximum);
+  const serializedLimit = String(limitValue);
 
-  aliasKeys.forEach((key) => {
-    if (key !== 'limit' && Object.prototype.hasOwnProperty.call(query, key)) {
-      delete query[key];
+  const nextPagination = { ...(pagination || {}) };
+  nextPagination.limit = limitValue;
+  nextPagination.pageSize = limitValue;
+
+  paginationAliasKeys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(nextPagination, key)) {
+      nextPagination[key] = limitValue;
     }
   });
 
-  if (pagination) {
-    paginationAliasKeys.forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(pagination, key)) {
-        delete pagination[key];
-      }
-    });
-  }
+  query.pagination = nextPagination;
+  query.limit = limitValue;
 
-  if (limitValue !== null) {
-    query.limit = limitValue;
-    const nextPagination = { ...(pagination || {}) };
-    nextPagination.limit = limitValue;
-    nextPagination.pageSize = limitValue;
-    query.pagination = nextPagination;
-    return limitValue;
-  }
-
-  if (pagination) {
-    if (Object.keys(pagination).length > 0) {
-      query.pagination = pagination;
-    } else if (Object.prototype.hasOwnProperty.call(query, 'pagination')) {
-      delete query.pagination;
+  aliasKeys.forEach((key) => {
+    if (key !== 'limit' && Object.prototype.hasOwnProperty.call(query, key)) {
+      query[key] = serializedLimit;
     }
-  }
+  });
 
-  if (Object.prototype.hasOwnProperty.call(query, 'limit')) {
-    delete query.limit;
-  }
-
-  return null;
+  return limitValue;
 };
 
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -441,20 +419,25 @@ const ensureAuthorEmail = (ctx) => {
   author.email = buildFallbackEmail(author, body.content);
 };
 
+const normalizeRelationValue = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return String(Math.trunc(value));
+  }
+
+  return null;
+};
+
 const coerceDocumentId = (post) => {
   if (!post) {
     return null;
   }
 
-  if (typeof post.documentId === 'string' && post.documentId.trim().length > 0) {
-    return post.documentId.trim();
-  }
-
-  if (typeof post.document_id === 'string' && post.document_id.trim().length > 0) {
-    return post.document_id.trim();
-  }
-
-  return null;
+  return normalizeRelationValue(post.documentId) ?? normalizeRelationValue(post.document_id);
 };
 
 const coerceRelationId = (post) => {
@@ -462,10 +445,13 @@ const coerceRelationId = (post) => {
     return null;
   }
 
-  const value = post.id ?? post.entryId ?? post.entry_id;
-  const parsed = Number(value);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return Math.trunc(parsed);
+  const candidates = [post.id, post.documentId, post.document_id, post.entryId, post.entry_id];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeRelationValue(candidate);
+    if (normalized) {
+      return normalized;
+    }
   }
 
   return null;
@@ -492,8 +478,16 @@ const resolveRelationId = async (identifier) => {
   let relationId = null;
 
   if (NUMERIC_PATTERN.test(identifier)) {
-    const post = await fetchPostByWhere({ id: Number(identifier) });
-    relationId = coerceRelationId(post);
+    const numericId = Number(identifier);
+    if (Number.isFinite(numericId)) {
+      const postByNumber = await fetchPostByWhere({ id: numericId });
+      relationId = coerceRelationId(postByNumber);
+    }
+
+    if (!relationId) {
+      const postByString = await fetchPostByWhere({ id: identifier });
+      relationId = coerceRelationId(postByString);
+    }
   }
 
   if (!relationId) {
@@ -507,17 +501,20 @@ const resolveRelationId = async (identifier) => {
     if (direct) {
       relationId = coerceRelationId(direct);
       if (!relationId) {
-        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
-        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
-          relationId = Math.trunc(Number(fallbackDocumentId));
-        }
+        relationId = coerceDocumentId(direct);
       }
     }
   }
 
   if (!relationId) {
     const bySlug = await fetchPostByWhere({ slug: identifier });
-    relationId = coerceRelationId(bySlug);
+    if (bySlug) {
+      relationId = coerceRelationId(bySlug) ?? coerceDocumentId(bySlug);
+    }
+  }
+
+  if (!relationId && NUMERIC_PATTERN.test(identifier)) {
+    relationId = identifier.trim();
   }
 
   relationCache.set(identifier, relationId);
@@ -741,6 +738,16 @@ export default (plugin) => {
         return null;
       }
 
+      const smtpHost = normalizeString(process.env.SMTP_HOST).toLowerCase();
+      if (
+        !smtpHost ||
+        PLACEHOLDER_SMTP_HOST_PATTERN.test(smtpHost) ||
+        smtpHost === '127.0.0.1' ||
+        smtpHost === 'localhost'
+      ) {
+        return null;
+      }
+
       try {
         await strapi
           .plugin('email')
@@ -762,8 +769,10 @@ Visit ${clientAppUrl} and continue the discussion.
 `,
           });
       } catch (error) {
-        strapi.log.error(error);
-        throw error;
+        strapi.log.warn('[comments] failed to send response notification email', {
+          error,
+        });
+        return null;
       }
 
       return null;

@@ -3,7 +3,7 @@
 このドキュメントは、初めて Node.js や Strapi、Astro を触る方でも環境構築からローカル確認、本番公開の流れまで一通り体験できるように丁寧に説明しています。作業に不慣れな場合は、上から順番に読みながら手を動かしてみてください。
 
 ## 0. 全体像をつかむ
-- **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
+- **CMS (/cms)**: Strapi v5.27.0 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
 - **カスタムフィールド**: 2025-10-27 に Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドへ戻しました。Windows で `Unsupported field type: plugin::font-scale-range.scale` が解消しきれなかったためです。現在は管理画面の数値入力で 0.7〜1.8 の範囲を直接編集し、空欄なら記事既定値 (1.0 倍) を適用します。値の丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js`（`clampScaleValue`）で制御しているので、必要に応じて調整してください。履歴と検証ログは AGENTS.md にまとまっています。
@@ -50,7 +50,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    | DB | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` など | `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は `OCI_*` を設定 | `oci` |
-   | メール | `SMTP_*` | 通知メール設定 | Gmail や SendGrid 等 |
+   | メール | `SMTP_*` | 通知メール設定。開発時は `SMTP_HOST=127.0.0.1` が自動投入され、通知メールは送信されずにスキップされます。 | Gmail や SendGrid 等 |
    | コメント | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメント通知に使用するサイト URL と通知先メールアドレス | `https://example.pages.dev` / `contact@example.com` |
    | コメント | `COMMENTS_ENABLED_COLLECTIONS` / `COMMENTS_APPROVAL_FLOW` | コメントを許可するコンテンツタイプと承認フロー設定 | `api::post.post` |
    | コメント | `COMMENTS_MODERATOR_ROLES` / `COMMENTS_BAD_WORDS` | 通知を受け取るロール / NG ワードフィルタの有効・無効 | `Authenticated` / `true` |
@@ -189,7 +189,7 @@ npm run dev
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
   - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
-  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
+  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（Document ID）と `documentId`（旧フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Strapi 5.27 では Document ID が正規キーのため、数値 ID や slug しか得られない場合でもバックエンドが Document ID へ再解決します。必要に応じて CMS を再起動し、ログに relation normalization メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
   - 管理画面でコメントを「ブロック」または「削除」すると、フロントエンドでは返信のないスレッドから自動的に除外され、返信が残っている場合のみ「このコメントは管理者によって非表示になりました。」のプレースホルダーが表示されます。ブロック済みコメントが一覧に残る場合は Strapi 側でコメント状態が更新されているか、キャッシュをクリアして再読込してください。
@@ -198,7 +198,7 @@ npm run dev
 
 ### 6-3. Comments プラグインを有効化してコメントを確認する
 1. Strapi 管理画面で **Settings → Comments** を開き、`Posts (api::post.post)` が **Enabled Collections** に追加されていることを確認します。承認制にしたい場合は **Approval Flow** にも `api::post.post` を登録し、`/web/.env` の `PUBLIC_COMMENTS_REQUIRE_APPROVAL` と一致させてください。
-2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。返信が付くと入力されたメールアドレス宛に通知が飛ぶため、送信テストで迷惑メール扱いにならないかも確認しましょう。
+2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。デフォルトでは `SMTP_HOST=127.0.0.1` が自動投入されており、このままだと通知は送信されません。実際にメールを飛ばしたい場合は実在する SMTP ホストと資格情報に置き換え、迷惑メール扱いにならないか送信テストも行ってください。
 3. Strapi 起動時の bootstrap が `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` を自動付与します。ロールを手動で編集した後は、必要に応じて再起動して権限が復元されたかをチェックしてください。
 4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。

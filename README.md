@@ -7,7 +7,7 @@
 
 ## 成果物（Deliverables）
 - **公開サイト**：Cloudflare Pages で配信される**静的サイト**（Astro + React Islands）
-- **管理システム**：OCI 無料枠上の **Strapi v5**（GUI で記事・画像・ブロックを管理）
+- **管理システム**：OCI 無料枠上の **Strapi v5.27.0**（GUI で記事・画像・ブロックを管理）
 - **コメント基盤**：Strapi 向け **VirtusLab – Comments** プラグイン（管理画面と統合されたモデレーション UI・メール通知・承認フロー）
 - **自動公開ライン**：Strapi Publish → Webhook → GitHub Actions → Pages 反映
 - **広告/同意**：ads.txt・AdSense タグ／Consent Mode v2 導線（CMP 連携フック）
@@ -46,8 +46,8 @@
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
 - **Strapi 管理画面**内のプラグインタブからコメントの承認／削除／エディット／通報確認／エクスポートを一元管理。
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
-- **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Document ID や slug を指定した古い投稿は自動でエントリー ID へ補正し、必要に応じてフォールバックします）。
-- **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
+- **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Strapi 5.27 以降は **Document ID** を正規キーとして扱い、数値 ID や slug を受け取った場合でも Document ID へ正規化してから保存します）。
+- **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。`limit`/`pagination[pageSize]` などのクエリは 1〜200 件に強制クランプされ、Knex の "A valid integer must be provided to limit" ループを防ぎます。
 - **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。管理側でコメントを「ブロック/削除」した場合は返信のないツリーから自動的に除外し、返信が残っているときだけ「このコメントは管理者によって非表示になりました。」のプレースホルダーを表示します。
 
 ### SEO / 収益
@@ -147,7 +147,7 @@
    | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
-   | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
+   | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。開発時は `SMTP_HOST=127.0.0.1` を既定値としており、通知メールは送信されずにスキップされます。 | `smtp.gmail.com` / `587` |
    | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメントメール内のサイト URL と通知先アドレス。 | `https://example.pages.dev` / `contact@example.com` |
    | `COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` | 運営バッジを付与したいメールアドレス・ドメイン・Strapi 管理ユーザー ID。空欄の場合は `authorUser` 情報のみで判定します。 | (空文字で運用可) |
    | `COMMENTS_STAFF_BADGE_LABEL` | 運営バッジに表示するラベル。 | `運営` |

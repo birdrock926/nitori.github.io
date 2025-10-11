@@ -12,7 +12,7 @@
 ## 0. リポジトリ全体像
 
 - モノレポ構成
-  - `/cms`: Strapi v5 (5.26.0) をベースとしたヘッドレス CMS。VirtusLab Comments、Color Picker、Review Workflows、Content Releases などを同梱。
+  - `/cms`: Strapi v5 (5.27.0) をベースとしたヘッドレス CMS。VirtusLab Comments、Color Picker、Review Workflows、Content Releases などを同梱。
   - `/web`: Astro 4.4 + React Islands。Strapi から記事・コメントを取得して静的サイト生成し、Cloudflare Pages へデプロイ。
   - `/infrastructure`: Docker Compose（PostgreSQL/Strapi/Caddy）、Caddyfile、systemd unit（`strapi.service`）など本番運用用アセット。
   - ルート直下: プロジェクト README、日本語セットアップガイド、現在の AGENTS.md。
@@ -33,7 +33,7 @@
 
 ### 1-1. `/cms`
 - `package.json`
-  - Strapi 関連パッケージ（`@strapi/strapi@5.26.0` 系）と周辺プラグインを固定バージョンで管理。
+  - Strapi 関連パッケージ（`@strapi/strapi@5.27.0` 系）と周辺プラグインを固定バージョンで管理。
   - スクリプト: `npm run develop/start/build/strapi/lint/test/postinstall`。どれも `scripts/run-strapi.mjs` 経由で Strapi CLI を起動。
   - `postinstall` で TypeScript が無い環境に対するパッチ適用と `patch-package` 実行を保証。
 - `config/`
@@ -194,7 +194,7 @@
 - **背景**: 2025-10-09〜10 に Rich Text ブロックの Typography Scale カスタムフィールドで props 未定義・配列オプションによるクラッシュを連続で修正した。最終調整後も互換性リスクが残っていないか再確認し、得られた知見を全ドキュメントへ反映することを指示された。
 - **実施内容**:
   1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` を再度レビューし、Strapi 5.26 が渡し得る `props` バリエーション（未定義/null/空配列/配列 + ネストオブジェクト/旧 `attribute.options` 形式）を手元知見とフォーラム情報をもとに再検証。`mergeOptions()` と `extractOptionObject()` がプレーンオブジェクト以外を弾くこと、`options`/`attributeOptions`/`attribute?.options` の優先順位が期待どおりかを確認した。
-  2. `register.js` のカスタムフィールド宣言が `options.base[].name` に `options.` プレフィックスを付けていること、`defaultValue` とスキーマの初期値が先述のコンポーネント既定値と一致していることを突き合わせ。Strapi 5.27 beta の breaking change ノートも確認し、現状の 5.26.0 と互換性が取れていることを記録。
+  2. `register.js` のカスタムフィールド宣言が `options.base[].name` に `options.` プレフィックスを付けていること、`defaultValue` とスキーマの初期値が先述のコンポーネント既定値と一致していることを突き合わせ。Strapi 5.27 beta の breaking change ノートも確認し、現状の 5.27.0 と互換性が取れていることを記録。
   3. `AGENTS.md` / `README.md` / `SETUP_BEGINNER_GUIDE.md` の各所に Typography Scale の挙動・エラー再発防止策・テスト状況を追記し、最新手順と整合させた。
   4. 他プラグイン（Comments/Color Picker/Content Releases）で props 分割代入を行っているカスタムコードは存在しないことを `rg "props ??"` / `rg "attribute" cms/src` でスキャンして確認。互換性リスクの高い箇所が Typography Scale のみに限定されていることを明確化した。
 - **テスト**:
@@ -247,7 +247,7 @@
   - `getFormatMessage()` は `window.strapi` から取得できた `formatMessage` をキャッシュしつつ例外を握り潰すフェイルセーフを継続。Intl がまだ初期化されていない場合は開発モードのみ警告を 1 度だけ表示する。
   - イベントハンドラはクラスフィールドでバインドし、`emitChange()` から Strapi 互換の `{ target: { name, value, type: 'float' } }` を送出するため既存のフォーム挙動に影響なし。
 - **検証**:
-  - 依存関係が未導入だと実行テストが行えないため、`cd cms && npm install --no-progress` を実施して Strapi 5.26.0 一式とパッチを展開（ログ: `0b2cbe†L1-L26`）。
+  - 依存関係が未導入だと実行テストが行えないため、`cd cms && npm install --no-progress` を実施して Strapi 5.27.0 一式とパッチを展開（ログ: `0b2cbe†L1-L26`）。
   - 依存導入後に `cd cms && CI=1 npm run build` を実行し、管理画面の本番ビルドが 96 秒で完了することを確認（ログ: `2ef1ba†L1-L9`, `58d2e9†L1-L1`）。ビルド完了後は追加警告やエラーなし。
 - **今後の指針**: Strapi プラグイン内で hooks を利用する必要がある場合でも、管理画面が dispatcher 未初期化でフィールドを評価する経路を想定し、最低限 `React.createElement` を返す純関数レイヤーを挟む。既存カスタムフィールドの監査時にはクラスコンポーネント化または dispatcher チェック導入を検討する。
 
@@ -284,8 +284,8 @@
   3. `handleSliderChange` / `handleNumberChange` / `handleReset` から `setState` 呼び出しを削除し、Strapi の `onChange` に対して正規化済みの数値または `null` を即時送信。これにより管理画面のフォームストアが唯一の真実のソースとなり、ローカル state と競合しない。
   4. Intl フォールバックとラベル描画ロジック（`resolveFormatMessage` / `fallbackFormatMessage`）は既存のキャッシュ方式を温存しつつ、PureComponent 化後も再利用されるようプロパティをインスタンス変数で維持。
 - **依存関係監査**:
-  - `cd cms && npm install --no-progress` を実行して Strapi 5.26.0 系パッケージとプラグイン依存を再展開し、React/Design System などのバージョン衝突が無いことを確認。インストールログでは 2236 パッケージの追加と 32 件の既知脆弱性（低～高）が報告されたが、いずれも上流依存によるもので `@strapi/*` と `react@18.3.1` の組み合わせに互換性問題は見られなかった（`e62646†L1-L18`）。
-  - `npm view @strapi/admin@5.26.0 peerDependencies` を再参照し、React 18 系と互換であることを再確認（`efd02d†L1-L6`）。追加の peer 依存 (`@strapi/data-transfer`) は既存ロックファイルで満たされている。
+  - `cd cms && npm install --no-progress` を実行して Strapi 5.27.0 系パッケージとプラグイン依存を再展開し、React/Design System などのバージョン衝突が無いことを確認。インストールログでは 2236 パッケージの追加と 32 件の既知脆弱性（低～高）が報告されたが、いずれも上流依存によるもので `@strapi/*` と `react@18.3.1` の組み合わせに互換性問題は見られなかった（`e62646†L1-L18`）。
+  - `npm view @strapi/admin@5.27.0 peerDependencies` を再参照し、React 18 系と互換であることを再確認（`efd02d†L1-L6`）。追加の peer 依存 (`@strapi/data-transfer`) は既存ロックファイルで満たされている。
 - **検証**:
   - `cd cms && CI=1 npm run build` を実施し、管理画面ビルドが 62 秒で完了することを確認（`2aa45c†L1-L9`, `fafe27†L1-L10`, `8cea5c†L1-L2`）。ビルド中に追加エラーや警告は発生せず、`TypographyScaleInput` のステートレス化による副作用は確認されなかった。
 - **ドキュメント/運用更新**:
@@ -323,7 +323,7 @@
   2. 配列形式のオプション（`base` 配列や `name: "options.min"` 形式）を `OPTION_ALIAS_MAP` と `OPTION_VALUE_FIELDS` で判定し、`value/defaultValue/initialValue` から数値のみを記録。候補が既に確定している場合は `Number.isFinite` 判定で再評価を即座にスキップし、同一ノードに対する重複アクセスを防いだ。
   3. `attribute` そのものを探索キューに追加しつつも、`WeakSet` で循環参照を防ぎ、旧実装のように `fields` や `components` を無差別に展開しないよう調整。これによりオプション抽出は最大 64 ノードに収束する。
 - **互換性監査**:
-  - `cd cms && npm install --no-progress` を再実行し、Strapi 5.26.0 と付属プラグインの依存関係を最新状態に展開（ログ: `c3ad13†L1-L28`）。
+  - `cd cms && npm install --no-progress` を再実行し、Strapi 5.27.0 と付属プラグインの依存関係を最新状態に展開（ログ: `c3ad13†L1-L28`）。
   - `cd cms && CI=1 npm run build` で管理画面ビルドが 44 秒で完了することを確認し、最適化後も本番ビルドが成功することを検証（ログ: `f0dacf†L1-L9`, `55e586†L1-L8`, `f1ad00†L1-L2`）。
   - `cd cms && npm ls react` を実行して React 18.3.1 が単一ツリーで解決されていることを確認し、Strapi Admin/Design System/外部プラグイン間でバージョン不一致がないことを証明（ログ: `451d27†L1-L134`）。
 - **ドキュメント更新**: README と SETUP_BEGINNER_GUIDE の Typography Scale セクションにノード制限と互換性監査の結果を追記し、将来的に同様のフリーズを再調査する際の手がかりを明文化した。
@@ -573,3 +573,18 @@
 - **運用メモ**:
   - 運営判定は `COMMENTS_STAFF_*` と `authorUser` の双方を利用します。運営アカウントを追加する際は `.env` の各リストを更新し、`npm run develop` を再起動してキャッシュをクリアしてください。`isStaffResponse` フラグは API レスポンスに含まれるため、外部クライアントでもバッジ表示が実装しやすくなりました。
   - `RichTextContent` は `fontScale` が未設定の場合 `data-font-scale` 属性を出力しません。計測用途で倍率を参照する際は属性の有無を確認してください。
+
+### 2025-10-30 追記: Strapi 5.27.0 アップグレードと Comments 正規化の再強化
+
+- **背景**: コメント投稿時に `Relation for field "related" does not exist` が再発し、管理画面の Comments タブも空白のまま読み込みが終わらない状態だった。Strapi 5.26 系で維持していたローカルパッチは 5.27.0 へ更新されておらず、Document ID を優先しない旧ロジックのままでは Documents 対応後の `related` 解決に失敗する。また開発用の `SMTP_HOST=smtp.example.com` が `getaddrinfo ENOTFOUND` でコメント投稿を巻き戻す問題も続いていた。
+- **対応**:
+  1. `cms/package.json` の Strapi 系依存をすべて `5.27.0` へ引き上げ、`cms/patches` 内のパッチも同じバージョン番号に合わせて再適用できるようリネームした。【F:cms/package.json†L24-L59】
+  2. Comments 拡張では `sanitizeCommentsLimit()` を見直して常に 1〜200 件へクランプした値を `limit` / `pagination` に反映し、Document ID を最優先で返す `normalizeRelationValue`・`coerceRelationId`・`resolveRelationId` を導入して `api::post.post:<documentId>` 形式を確実に組み立てるようにした。【F:cms/src/extensions/comments/strapi-server.js†L1-L129】【F:cms/src/extensions/comments/strapi-server.js†L422-L539】
+  3. 返信通知メールは `SMTP_HOST` がダミー (`127.0.0.1`/`localhost` や `example.com`) の場合に送信そのものをスキップし、エラーは警告ログに留めるよう `sendResponseNotification` を更新した。【F:cms/src/extensions/comments/strapi-server.js†L684-L779】
+  4. フロントエンドの `buildRelationCandidates` は Document ID を先頭に並べて投稿時の relation が常に UUID を優先するよう変更し、バックエンドの正規化と一致させた。【F:web/src/components/comments/CommentsApp.tsx†L187-L200】
+  5. `scripts/ensure-env.mjs`・`.env.sample`・`config/plugins.js` で `SMTP_HOST` の既定値を `127.0.0.1` に刷新し、README / SETUP ガイドにも開発時は通知を送らず実環境のみ設定を上書きする手順を追記した。【F:cms/scripts/ensure-env.mjs†L37-L170】【F:cms/.env.sample†L24-L38】【F:cms/config/plugins.js†L150-L171】【F:README.md†L8-L71】【F:README.md†L150-L219】【F:SETUP_BEGINNER_GUIDE.md†L5-L59】【F:SETUP_BEGINNER_GUIDE.md†L192-L214】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`【50040a†L1-L10】
+  - `cd cms && CI=1 npm run build`【93612b†L1-L2】
+  - `cd web && npm install --no-progress --no-fund --no-audit`【959481†L1-L11】
+  - `cd web && npm run build`【1c55c4†L1-L44】

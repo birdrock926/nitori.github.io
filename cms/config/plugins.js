@@ -156,7 +156,7 @@ export default ({ env }) => {
       config: {
         provider: '@strapi/provider-email-nodemailer',
         providerOptions: {
-          host: env('SMTP_HOST', 'smtp.example.com'),
+          host: env('SMTP_HOST', '127.0.0.1'),
           port: env.int('SMTP_PORT', 587),
           secure: env.bool('SMTP_SECURE', false),
           auth: {

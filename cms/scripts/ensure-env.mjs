@@ -36,6 +36,19 @@ const parseLines = (content) => {
 
 const PLACEHOLDER_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev|pages\.dev)$/i;
 
+const isPlaceholderHost = (value) => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  return PLACEHOLDER_HOST_PATTERN.test(trimmed);
+};
+
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const randomKeys = () => Array.from({ length: 4 }, () => randomHex(16)).join(',');
 
@@ -149,7 +162,13 @@ const main = () => {
   ensureValue('UPLOAD_PROVIDER', () => 'local', state, changes);
   ensureValue('UPLOAD_SIZE_LIMIT', () => '268435456', state, changes);
 
-  ensureValue('SMTP_HOST', () => 'smtp.example.com', state, changes);
+  ensureValue(
+    'SMTP_HOST',
+    () => '127.0.0.1',
+    state,
+    changes,
+    { treatAsMissing: isPlaceholderHost },
+  );
   ensureValue('SMTP_PORT', () => '587', state, changes);
   ensureValue('SMTP_SECURE', () => 'false', state, changes);
   ensureValue('SMTP_USERNAME', () => 'apikey', state, changes);
