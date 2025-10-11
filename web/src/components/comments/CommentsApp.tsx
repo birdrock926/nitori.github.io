@@ -186,15 +186,15 @@ const toIdentifierString = (value: unknown): string | undefined => {
 
 const buildRelationCandidates = (entryId?: number | string, documentId?: string): string[] => {
   const candidates: string[] = [];
-  const numericId = toNumericString(entryId);
   const documentIdentifier = toIdentifierString(documentId);
+  const numericId = toNumericString(entryId);
 
-  if (numericId) {
-    candidates.push(numericId);
+  if (documentIdentifier) {
+    candidates.push(documentIdentifier);
   }
 
-  if (documentIdentifier && !candidates.includes(documentIdentifier)) {
-    candidates.push(documentIdentifier);
+  if (numericId && !candidates.includes(numericId)) {
+    candidates.push(numericId);
   }
 
   return candidates;

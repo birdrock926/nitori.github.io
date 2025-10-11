@@ -528,12 +528,12 @@ const coerceDocumentId = (post) => {
   return normalizeRelationValue(post.documentId) ?? normalizeRelationValue(post.document_id);
 };
 
-const coerceRelationId = (post) => {
+const coerceEntryId = (post) => {
   if (!post) {
     return null;
   }
 
-  const candidates = [post.id, post.documentId, post.document_id, post.entryId, post.entry_id];
+  const candidates = [post.id, post.entryId, post.entry_id];
 
   for (const candidate of candidates) {
     const normalized = normalizeRelationValue(candidate);
@@ -543,6 +543,14 @@ const coerceRelationId = (post) => {
   }
 
   return null;
+};
+
+const coerceRelationIdentifier = (post) => {
+  if (!post) {
+    return null;
+  }
+
+  return coerceDocumentId(post) ?? coerceEntryId(post);
 };
 
 const fetchPostByWhere = async (where) => {
@@ -559,53 +567,55 @@ const resolveRelationId = async (identifier) => {
     return null;
   }
 
-  if (relationCache.has(identifier)) {
-    return relationCache.get(identifier);
+  const cacheKey = identifier;
+  if (relationCache.has(cacheKey)) {
+    return relationCache.get(cacheKey);
   }
 
+  const trimmedIdentifier = identifier.trim();
   let relationId = null;
 
-  if (NUMERIC_PATTERN.test(identifier)) {
-    const numericId = Number(identifier);
+  const resolveFromWhere = async (where) => {
+    const post = await fetchPostByWhere(where);
+    if (!post) {
+      return null;
+    }
+    return coerceRelationIdentifier(post);
+  };
+
+  if (NUMERIC_PATTERN.test(trimmedIdentifier)) {
+    const numericId = Number(trimmedIdentifier);
     if (Number.isFinite(numericId)) {
-      const postByNumber = await fetchPostByWhere({ id: numericId });
-      relationId = coerceRelationId(postByNumber);
+      relationId = await resolveFromWhere({ id: numericId });
     }
 
     if (!relationId) {
-      const postByString = await fetchPostByWhere({ id: identifier });
-      relationId = coerceRelationId(postByString);
+      relationId = await resolveFromWhere({ id: trimmedIdentifier });
     }
   }
 
   if (!relationId) {
-    const direct = await fetchPostByWhere({
+    relationId = await resolveFromWhere({
       $or: [
-        { documentId: identifier },
-        { document_id: identifier },
+        { documentId: trimmedIdentifier },
+        { document_id: trimmedIdentifier },
       ],
     });
-
-    if (direct) {
-      relationId = coerceRelationId(direct);
-      if (!relationId) {
-        relationId = coerceDocumentId(direct);
-      }
-    }
   }
 
   if (!relationId) {
-    const bySlug = await fetchPostByWhere({ slug: identifier });
-    if (bySlug) {
-      relationId = coerceRelationId(bySlug) ?? coerceDocumentId(bySlug);
-    }
+    relationId = await resolveFromWhere({ slug: trimmedIdentifier });
   }
 
-  if (!relationId && NUMERIC_PATTERN.test(identifier)) {
-    relationId = identifier.trim();
+  if (!relationId && NUMERIC_PATTERN.test(trimmedIdentifier)) {
+    relationId = trimmedIdentifier;
   }
 
-  relationCache.set(identifier, relationId);
+  if (!relationId) {
+    relationId = trimmedIdentifier;
+  }
+
+  relationCache.set(cacheKey, relationId);
   return relationId;
 };
 

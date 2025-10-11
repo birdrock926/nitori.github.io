@@ -612,6 +612,22 @@
   - 記事カードのカバー画像は `post.cover.formats` が存在しない場合に元画像を利用する。CDN リサイズを導入する場合は `PostCard.astro`
     の `<picture>` 内で `srcSet` を適切に更新し、`global.css` のアスペクト比とホバー効果がレイアウトに影響しないか確認する。
 
+### 2025-11-03 追記: Comments relation Document ID 正規化と管理画面空白の解消
+
+- **背景**: `http://localhost:1337/admin/plugins/comments` が空白のまま更新されず、サーバーログに `Relation for field "related" does not exist` が連続出力される事象を再現。Document API 化後もフロントエンドが数値エントリー ID を送信し、バックエンド拡張が `RELATION_PREFIX` を再計算する際に ID 優先で上書きしていたため、VirtusLab Comments 3.1.0 が期待する Document ID を失い 400/500 が発生していた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` に `coerceEntryId` / `coerceRelationIdentifier` を追加し、既存の `resolveRelationId()` が Document ID を最優先で返すようにリファクタ。slug や数値 ID が渡された場合も DB から Document ID を再解決し、失敗時のみ元の識別子へフォールバックする。既存キャッシュはトリム済みのキーで保存し、不要な再問い合わせを抑制。【F:cms/src/extensions/comments/strapi-server.js†L112-L170】【F:cms/src/extensions/comments/strapi-server.js†L188-L257】
+  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並べ替え、最初の成功候補として Document ID を優先。サーバーが Document ID を保持できるため、Rich Text やコメント一覧で再読み込みしても Relation 不整合が起こらない。【F:web/src/components/comments/CommentsApp.tsx†L175-L188】
+  3. README / SETUP_BEGINNER_GUIDE のコメント節を更新し、API パスの正規形が `<documentId>` であること、数値 ID や slug を送ってもバックエンドが Document ID へ揃えることを明記。これにより運用ドキュメントが最新アーキテクチャと一致する。【F:README.md†L23-L55】【F:README.md†L210-L217】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L192-L195】
+- **検証**:
+  - `CI=1 npm run build`（Strapi 管理画面の本番ビルドが完了）【26e295†L1-L7】【03337d†L1-L13】【c7c1dd†L1-L2】
+  - `npm install --no-progress --no-fund --no-audit`（Strapi 側依存関係の再解決は `npm run build` 開始時に完了）【8cd64a†L1-L24】
+  - `npm install --no-progress --no-fund --no-audit`（Web 側依存関係）【17a586†L1-L3】
+  - `npm run build`（Astro 側ビルドは Strapi 未起動のためフォールバックログありつつ正常完了）【de5fc9†L1-L11】【4563e3†L1-L5】【b8b44b†L1-L25】【b7548d†L1-L63】
+- **運用メモ**:
+  - 今後コメントの Relation エラーが再発した場合は、保存済みコメントの `related` カラムが Document ID (`api::post.post:<documentId>`) 形式になっているか確認する。エクスポート済みデータが数値 ID を含む場合は、Strapi 側でマイグレーションを行い Document ID へ書き換えること。
+  - フロントエンドがコメント取得に失敗した際は `relationCandidates` の先頭が Document ID になっているかを `localStorage` のキャッシュも含めて確認する。古いキャッシュをクリアすると再取得が走り、バックエンドの正規化と揃う。
+
 ### 2025-11-02 追記: Comments limit クエリストリング同期と記事カード比率の調整
 
 - **背景**: Strapi 管理画面の Comments タブで `A valid integer must be provided to limit` が再発し、Windows 環境では `lazyLoadComponents → setStore` のループではなく Koa の `ctx.request.querystring` が空文字のまま残ることが原因で Knex が 0 件と誤解釈していた。併せて Web 側ではカバー画像が 16:9 のまま高く表示され、カードの本文領域が圧迫されているとのフィードバックを受けた。

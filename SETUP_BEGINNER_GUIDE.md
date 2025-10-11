@@ -189,7 +189,7 @@ npm run dev
 - トップページのカードに表示されるカバー画像は 16:9 の最大 140px（モバイルは 4:3・最大 110px）へ縮小されるため、旧レイアウトよりもタイルが詰まって見える点に注意してください。過去のスクリーンショットと比較しても意図した縮尺であることを確認します。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
-  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
+  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<documentId>` が 200 を返すか（数値 ID や slug しか手元にない場合でも、バックエンドが Document ID へ解決して保存するため、最終的には Document ID ベースで確認します。CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
   - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（Document ID）と `documentId`（旧フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Strapi 5.27 では Document ID が正規キーのため、数値 ID や slug しか得られない場合でもバックエンドが Document ID へ再解決します。必要に応じて CMS を再起動し、ログに relation normalization メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
