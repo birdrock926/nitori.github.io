@@ -851,6 +851,33 @@ main > * {
   justify-content: space-between;
 }
 
+.post-card-cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: calc(var(--border-radius-lg) - 0.5rem);
+  line-height: 0;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-stronger);
+}
+
+.post-card-cover picture,
+.post-card-cover img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.post-card-cover img {
+  object-fit: cover;
+  transition: transform var(--transition-default);
+}
+
+.post-card:hover .post-card-cover img,
+.post-card:focus-within .post-card-cover img {
+  transform: scale(1.04);
+}
+
 .post-card-tags {
   display: flex;
   gap: 0.4rem;

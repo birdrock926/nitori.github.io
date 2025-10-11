@@ -5,6 +5,23 @@ import { formatDateTime, relative, toMultilineHtml } from '@lib/format';
 const { post } = Astro.props as { post: Post };
 ---
 <article class="post-card card hover-lift">
+  {post.cover?.url && (
+    <a class="post-card-cover" href={`/posts/${post.slug}/`} aria-hidden="true" tabindex="-1">
+      <picture>
+        {post.cover.formats?.medium?.url && (
+          <source srcSet={post.cover.formats.medium.url} media="(min-width: 768px)" />
+        )}
+        {post.cover.formats?.small?.url && (
+          <source srcSet={post.cover.formats.small.url} media="(min-width: 480px)" />
+        )}
+        <img
+          src={post.cover.formats?.thumbnail?.url ?? post.cover.url}
+          alt={post.cover.alternativeText ?? post.title}
+          loading="lazy"
+        />
+      </picture>
+    </a>
+  )}
   <header class="post-card-meta">
     <time dateTime={post.publishedAt} class="muted">
       {formatDateTime(post.publishedAt)}（{relative(post.publishedAt)}）

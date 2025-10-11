@@ -588,3 +588,26 @@
   - `cd cms && CI=1 npm run build`【93612b†L1-L2】
   - `cd web && npm install --no-progress --no-fund --no-audit`【959481†L1-L11】
   - `cd web && npm run build`【1c55c4†L1-L44】
+
+### 2025-10-31 追記: Comments 管理画面の空白解消と記事カードへのカバー画像反映
+
+- **背景**: Comments プラグインの管理 UI が空白表示のまま戻らないとの報告が続き、`wrapCommentsController()` が `admin.findAll`
+  のレスポンスを再加工していたことが原因と判明。Strapi 5.27.0 環境では admin API がデシリアライズ済みオブジェクトを返し、`annotateCommentPayload()` による再帰処理が不要な再レンダーを誘発していた。また Web 側では投稿にカバー画像を設定しても
+  一覧カードで表示されず、視覚的な訴求力が弱い状態だった。さらにコメント投稿時の relation 候補が Document ID を最優先していたため、
+  旧データで UUID が解決できないケースでは 400 応答まで到達してから entryId にフォールバックする挙動になっていた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` の admin 向けラッパーを `annotateResponse: false` で再登録し、limit 正規化だけを維持した
+     状態でレスポンスをそのまま返すよう修正。これにより管理画面は既定フォーマッタで描画され、空白状態が解消される。【F:cms/src/extensions/comments/strapi-server.js†L329-L336】
+  2. フロントエンドの `buildRelationCandidates()` を entryId 優先へ並び替え、Document ID 解決に失敗しても最初の試行で既存エントリ ID へ
+     投稿できるようにした。これにより 400 エラーが再発してもループせず、成功した候補を即座に採用する。【F:web/src/components/comments/CommentsApp.tsx†L187-L198】
+  3. `web/src/components/PostCard.astro` に `<picture>` ベースのカバー画像ブロックを追加し、`medium`/`small`/`thumbnail` フォーマットを
+     優先順に利用するよう実装。合わせて `web/src/styles/global.css` へ `.post-card-cover` のスタイルを追加し、ホバー時に僅かに拡大させ
+     る演出を加えた。【F:web/src/components/PostCard.astro†L8-L26】【F:web/src/styles/global.css†L848-L876】
+- **検証**:
+  - `cd cms && CI=1 npm run build`
+  - `cd web && npm run build`
+- **運用メモ**:
+  - Comments 管理画面の一覧が再度空白化した場合は `sanitizeCommentsLimit()` のログと `admin.findAll` ラッパーの設定を確認し、`
+    annotateResponse` を誤って有効化していないか検証する。必要に応じて `sanitizeCommentsLimit()` に対象キーを追加する。
+  - 記事カードのカバー画像は `post.cover.formats` が存在しない場合に元画像を利用する。CDN リサイズを導入する場合は `PostCard.astro`
+    の `<picture>` 内で `srcSet` を適切に更新し、`global.css` のアスペクト比とホバー効果がレイアウトに影響しないか確認する。

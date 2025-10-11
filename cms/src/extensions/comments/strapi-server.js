@@ -599,7 +599,7 @@ export default (plugin) => {
   if (plugin?.controllers?.admin?.findAll) {
     plugin.controllers.admin.findAll = wrapCommentsController(plugin.controllers.admin.findAll, {
       sanitizeLimit: true,
-      annotateResponse: true,
+      annotateResponse: false,
     });
   }
 
