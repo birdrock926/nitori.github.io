@@ -1,5 +1,3 @@
-import { PuzzlePiece } from '@strapi/icons';
-
 export default {
   config: {
     locales: ['ja'],
@@ -11,14 +9,5 @@ export default {
       },
     },
   },
-  bootstrap(app) {
-    app.addMenuLink({
-      to: '/plugins/content-type-builder',
-      icon: PuzzlePiece,
-      intlLabel: {
-        id: 'game-news.content-builder',
-        defaultMessage: 'コンテンツ設計',
-      },
-    });
-  },
+  bootstrap() {},
 };
