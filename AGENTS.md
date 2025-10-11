@@ -9,27 +9,10 @@
 
 ---
 
-## 2025-10-11 ロールバックメモ（`ca485eb` ベースへ復元）
-
-- ユーザー要望により、Strapi コメント管理画面が正常に閲覧できていたコミット `ca485eb0764fef241594ef9487ec60c30d236e58` 時点のソースに戻しました。
-- 直近で導入していた変更はすべて撤回済み：
-  - コメント UI の運営バッジ表示、名前色変更、fontScale のネイティブ decimal 化など。
-  - Comments プラグインへの追加サニタイザや limit クエリ再構築、Document ID 優先の正規化といった拡張。
-  - font-scale-range / font-scale-slider など新規カスタムフィールド、Strapi 5.27.0 系パッチファイル。
-- 復元後の主要構成：
-  - Strapi 5.26.0（`cms/package.json` 参照）。`cms/patches` は 5.26.0 系パッチのみ。
-  - コメント拡張（`cms/src/extensions/comments/strapi-server.js`）は数値 ID / Document ID / slug の順に解決する既存ロジック。
-  - Typography Scale カスタムフィールド（`cms/src/plugins/typography-scale`）を含む旧構成を再配置。
-  - フロントエンドはコメントバッジや fontScale 強制スタイルなしの旧 UI に戻し、投稿カードのカバー画像も元サイズへ戻しています。
-- 依存関係の追加なし。npm install / build コマンドは未実行（環境制約）。ローカル検証時は `cd cms && npm install && CI=1 npm run build`、`cd web && npm install && npm run build` を推奨。
-- 5.27.0 期に追記したセクションは履歴として残存しています。現行運用と齟齬がある場合は随時読み替えてください。
-
----
-
 ## 0. リポジトリ全体像
 
 - モノレポ構成
-  - `/cms`: Strapi v5 (5.27.0) をベースとしたヘッドレス CMS。VirtusLab Comments、Color Picker、Review Workflows、Content Releases などを同梱。
+  - `/cms`: Strapi v5 (5.26.0) をベースとしたヘッドレス CMS。VirtusLab Comments、Color Picker、Review Workflows、Content Releases などを同梱。
   - `/web`: Astro 4.4 + React Islands。Strapi から記事・コメントを取得して静的サイト生成し、Cloudflare Pages へデプロイ。
   - `/infrastructure`: Docker Compose（PostgreSQL/Strapi/Caddy）、Caddyfile、systemd unit（`strapi.service`）など本番運用用アセット。
   - ルート直下: プロジェクト README、日本語セットアップガイド、現在の AGENTS.md。
@@ -50,7 +33,7 @@
 
 ### 1-1. `/cms`
 - `package.json`
-  - Strapi 関連パッケージ（`@strapi/strapi@5.27.0` 系）と周辺プラグインを固定バージョンで管理。
+  - Strapi 関連パッケージ（`@strapi/strapi@5.26.0` 系）と周辺プラグインを固定バージョンで管理。
   - スクリプト: `npm run develop/start/build/strapi/lint/test/postinstall`。どれも `scripts/run-strapi.mjs` 経由で Strapi CLI を起動。
   - `postinstall` で TypeScript が無い環境に対するパッチ適用と `patch-package` 実行を保証。
 - `config/`
@@ -211,7 +194,7 @@
 - **背景**: 2025-10-09〜10 に Rich Text ブロックの Typography Scale カスタムフィールドで props 未定義・配列オプションによるクラッシュを連続で修正した。最終調整後も互換性リスクが残っていないか再確認し、得られた知見を全ドキュメントへ反映することを指示された。
 - **実施内容**:
   1. `cms/src/plugins/typography-scale/admin/src/components/TypographyScaleInput/index.jsx` を再度レビューし、Strapi 5.26 が渡し得る `props` バリエーション（未定義/null/空配列/配列 + ネストオブジェクト/旧 `attribute.options` 形式）を手元知見とフォーラム情報をもとに再検証。`mergeOptions()` と `extractOptionObject()` がプレーンオブジェクト以外を弾くこと、`options`/`attributeOptions`/`attribute?.options` の優先順位が期待どおりかを確認した。
-  2. `register.js` のカスタムフィールド宣言が `options.base[].name` に `options.` プレフィックスを付けていること、`defaultValue` とスキーマの初期値が先述のコンポーネント既定値と一致していることを突き合わせ。Strapi 5.27 beta の breaking change ノートも確認し、現状の 5.27.0 と互換性が取れていることを記録。
+  2. `register.js` のカスタムフィールド宣言が `options.base[].name` に `options.` プレフィックスを付けていること、`defaultValue` とスキーマの初期値が先述のコンポーネント既定値と一致していることを突き合わせ。Strapi 5.27 beta の breaking change ノートも確認し、現状の 5.26.0 と互換性が取れていることを記録。
   3. `AGENTS.md` / `README.md` / `SETUP_BEGINNER_GUIDE.md` の各所に Typography Scale の挙動・エラー再発防止策・テスト状況を追記し、最新手順と整合させた。
   4. 他プラグイン（Comments/Color Picker/Content Releases）で props 分割代入を行っているカスタムコードは存在しないことを `rg "props ??"` / `rg "attribute" cms/src` でスキャンして確認。互換性リスクの高い箇所が Typography Scale のみに限定されていることを明確化した。
 - **テスト**:
@@ -264,7 +247,7 @@
   - `getFormatMessage()` は `window.strapi` から取得できた `formatMessage` をキャッシュしつつ例外を握り潰すフェイルセーフを継続。Intl がまだ初期化されていない場合は開発モードのみ警告を 1 度だけ表示する。
   - イベントハンドラはクラスフィールドでバインドし、`emitChange()` から Strapi 互換の `{ target: { name, value, type: 'float' } }` を送出するため既存のフォーム挙動に影響なし。
 - **検証**:
-  - 依存関係が未導入だと実行テストが行えないため、`cd cms && npm install --no-progress` を実施して Strapi 5.27.0 一式とパッチを展開（ログ: `0b2cbe†L1-L26`）。
+  - 依存関係が未導入だと実行テストが行えないため、`cd cms && npm install --no-progress` を実施して Strapi 5.26.0 一式とパッチを展開（ログ: `0b2cbe†L1-L26`）。
   - 依存導入後に `cd cms && CI=1 npm run build` を実行し、管理画面の本番ビルドが 96 秒で完了することを確認（ログ: `2ef1ba†L1-L9`, `58d2e9†L1-L1`）。ビルド完了後は追加警告やエラーなし。
 - **今後の指針**: Strapi プラグイン内で hooks を利用する必要がある場合でも、管理画面が dispatcher 未初期化でフィールドを評価する経路を想定し、最低限 `React.createElement` を返す純関数レイヤーを挟む。既存カスタムフィールドの監査時にはクラスコンポーネント化または dispatcher チェック導入を検討する。
 
@@ -301,8 +284,8 @@
   3. `handleSliderChange` / `handleNumberChange` / `handleReset` から `setState` 呼び出しを削除し、Strapi の `onChange` に対して正規化済みの数値または `null` を即時送信。これにより管理画面のフォームストアが唯一の真実のソースとなり、ローカル state と競合しない。
   4. Intl フォールバックとラベル描画ロジック（`resolveFormatMessage` / `fallbackFormatMessage`）は既存のキャッシュ方式を温存しつつ、PureComponent 化後も再利用されるようプロパティをインスタンス変数で維持。
 - **依存関係監査**:
-  - `cd cms && npm install --no-progress` を実行して Strapi 5.27.0 系パッケージとプラグイン依存を再展開し、React/Design System などのバージョン衝突が無いことを確認。インストールログでは 2236 パッケージの追加と 32 件の既知脆弱性（低～高）が報告されたが、いずれも上流依存によるもので `@strapi/*` と `react@18.3.1` の組み合わせに互換性問題は見られなかった（`e62646†L1-L18`）。
-  - `npm view @strapi/admin@5.27.0 peerDependencies` を再参照し、React 18 系と互換であることを再確認（`efd02d†L1-L6`）。追加の peer 依存 (`@strapi/data-transfer`) は既存ロックファイルで満たされている。
+  - `cd cms && npm install --no-progress` を実行して Strapi 5.26.0 系パッケージとプラグイン依存を再展開し、React/Design System などのバージョン衝突が無いことを確認。インストールログでは 2236 パッケージの追加と 32 件の既知脆弱性（低～高）が報告されたが、いずれも上流依存によるもので `@strapi/*` と `react@18.3.1` の組み合わせに互換性問題は見られなかった（`e62646†L1-L18`）。
+  - `npm view @strapi/admin@5.26.0 peerDependencies` を再参照し、React 18 系と互換であることを再確認（`efd02d†L1-L6`）。追加の peer 依存 (`@strapi/data-transfer`) は既存ロックファイルで満たされている。
 - **検証**:
   - `cd cms && CI=1 npm run build` を実施し、管理画面ビルドが 62 秒で完了することを確認（`2aa45c†L1-L9`, `fafe27†L1-L10`, `8cea5c†L1-L2`）。ビルド中に追加エラーや警告は発生せず、`TypographyScaleInput` のステートレス化による副作用は確認されなかった。
 - **ドキュメント/運用更新**:
@@ -340,7 +323,7 @@
   2. 配列形式のオプション（`base` 配列や `name: "options.min"` 形式）を `OPTION_ALIAS_MAP` と `OPTION_VALUE_FIELDS` で判定し、`value/defaultValue/initialValue` から数値のみを記録。候補が既に確定している場合は `Number.isFinite` 判定で再評価を即座にスキップし、同一ノードに対する重複アクセスを防いだ。
   3. `attribute` そのものを探索キューに追加しつつも、`WeakSet` で循環参照を防ぎ、旧実装のように `fields` や `components` を無差別に展開しないよう調整。これによりオプション抽出は最大 64 ノードに収束する。
 - **互換性監査**:
-  - `cd cms && npm install --no-progress` を再実行し、Strapi 5.27.0 と付属プラグインの依存関係を最新状態に展開（ログ: `c3ad13†L1-L28`）。
+  - `cd cms && npm install --no-progress` を再実行し、Strapi 5.26.0 と付属プラグインの依存関係を最新状態に展開（ログ: `c3ad13†L1-L28`）。
   - `cd cms && CI=1 npm run build` で管理画面ビルドが 44 秒で完了することを確認し、最適化後も本番ビルドが成功することを検証（ログ: `f0dacf†L1-L9`, `55e586†L1-L8`, `f1ad00†L1-L2`）。
   - `cd cms && npm ls react` を実行して React 18.3.1 が単一ツリーで解決されていることを確認し、Strapi Admin/Design System/外部プラグイン間でバージョン不一致がないことを証明（ログ: `451d27†L1-L134`）。
 - **ドキュメント更新**: README と SETUP_BEGINNER_GUIDE の Typography Scale セクションにノード制限と互換性監査の結果を追記し、将来的に同様のフリーズを再調査する際の手がかりを明文化した。
@@ -575,182 +558,3 @@
   - `cd cms && CI=1 npm run build`
   - `cd web && npm install --no-progress --no-fund --no-audit`
 - **今後の指針**: limit の上限を変更する場合は `cms/src/extensions/comments/strapi-server.js` の `MAX_COMMENT_LIMIT` と `web/src/lib/comments.ts` のクランプ値を同時に更新し、README / SETUP / 本書の記載も即時修正する。Knex の警告が再度出力された場合は `sanitizeCommentsLimit()` に対象となるキーが不足していないか確認し、必要なら追加する。コメントプラグインをアップデートする際は本拡張が引き続き有効か、管理画面で一覧表示 → 詳細表示 → 通報・承認操作を一巡してリロードループが発生しないことを確認する。
-
-### 2025-10-29 追記: 運営バッジ表示と Rich Text 倍率反映の安定化
-
-- **背景**: Strapi 上で運営アカウントが返信しても Web 側では一般ユーザーと同じ表示になり、運営コメントを見分けにくいとの報告がありました。また Rich Text ブロックの `fontScale` を変更しても生成済みページの文字サイズが変化しないケースが確認され、`ensure-env.mjs` が任意設定を空文字で保持できず新しい Comments 向け環境変数の初期化が難しい問題も判明しました。
-- **対応**:
-  1. Comments 拡張 `cms/src/extensions/comments/strapi-server.js` にスタッフ検知ロジックを実装し、`authorUser` 関連や `COMMENTS_STAFF_*` 環境変数（メール / ドメイン / ID）と既存ロール・バッジ情報を解析して `author.moderator=true` と `isStaffResponse=true` を付与。全 `find*` コントローラと `client.post` をラップしてレスポンスへ統一的に反映するよう調整しました。
-  2. `ensure-env.mjs` に空文字許容オプションを追加し、`COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` を自動生成しても空欄を維持できるよう変更。`.env.sample` へ前述の変数と既定バッジ `COMMENTS_STAFF_BADGE_LABEL=運営` を追記しました。
-  3. フロントエンドの `web/src/lib/comments.ts`・`web/src/components/comments/CommentsApp.tsx`・`web/src/styles/global.css` を更新して `isStaffResponse` フラグと新規環境変数に基づいた運営バッジ表示（オレンジ系カラーと星アイコン付きバッジ）を実装。`STAFF_KEYWORD_PATTERN` によって過去データでもロール名が一致すればハイライトされる後方互換性を確保しました。
-  4. Rich Text コンポーネント `web/src/components/blocks/RichTextContent.tsx` でスケール値からフォントサイズ・行間を直接計算し、`data-font-scale` 属性としても出力することで、管理画面の数値入力が確実に記事本文へ反映されるようにしました。
-- **検証**:
-  - `cd cms && CI=1 npm run build`
-  - `cd web && npm run build`
-- **運用メモ**:
-  - 運営判定は `COMMENTS_STAFF_*` と `authorUser` の双方を利用します。運営アカウントを追加する際は `.env` の各リストを更新し、`npm run develop` を再起動してキャッシュをクリアしてください。`isStaffResponse` フラグは API レスポンスに含まれるため、外部クライアントでもバッジ表示が実装しやすくなりました。
-  - `RichTextContent` は `fontScale` が未設定の場合 `data-font-scale` 属性を出力しません。計測用途で倍率を参照する際は属性の有無を確認してください。
-
-### 2025-10-30 追記: Strapi 5.27.0 アップグレードと Comments 正規化の再強化
-
-- **背景**: コメント投稿時に `Relation for field "related" does not exist` が再発し、管理画面の Comments タブも空白のまま読み込みが終わらない状態だった。Strapi 5.26 系で維持していたローカルパッチは 5.27.0 へ更新されておらず、Document ID を優先しない旧ロジックのままでは Documents 対応後の `related` 解決に失敗する。また開発用の `SMTP_HOST=smtp.example.com` が `getaddrinfo ENOTFOUND` でコメント投稿を巻き戻す問題も続いていた。
-- **対応**:
-  1. `cms/package.json` の Strapi 系依存をすべて `5.27.0` へ引き上げ、`cms/patches` 内のパッチも同じバージョン番号に合わせて再適用できるようリネームした。【F:cms/package.json†L24-L59】
-  2. Comments 拡張では `sanitizeCommentsLimit()` を見直して常に 1〜200 件へクランプした値を `limit` / `pagination` に反映し、Document ID を最優先で返す `normalizeRelationValue`・`coerceRelationId`・`resolveRelationId` を導入して `api::post.post:<documentId>` 形式を確実に組み立てるようにした。【F:cms/src/extensions/comments/strapi-server.js†L1-L129】【F:cms/src/extensions/comments/strapi-server.js†L422-L539】
-  3. 返信通知メールは `SMTP_HOST` がダミー (`127.0.0.1`/`localhost` や `example.com`) の場合に送信そのものをスキップし、エラーは警告ログに留めるよう `sendResponseNotification` を更新した。【F:cms/src/extensions/comments/strapi-server.js†L684-L779】
-  4. フロントエンドの `buildRelationCandidates` は Document ID を先頭に並べて投稿時の relation が常に UUID を優先するよう変更し、バックエンドの正規化と一致させた。【F:web/src/components/comments/CommentsApp.tsx†L187-L200】
-  5. `scripts/ensure-env.mjs`・`.env.sample`・`config/plugins.js` で `SMTP_HOST` の既定値を `127.0.0.1` に刷新し、README / SETUP ガイドにも開発時は通知を送らず実環境のみ設定を上書きする手順を追記した。【F:cms/scripts/ensure-env.mjs†L37-L170】【F:cms/.env.sample†L24-L38】【F:cms/config/plugins.js†L150-L171】【F:README.md†L8-L71】【F:README.md†L150-L219】【F:SETUP_BEGINNER_GUIDE.md†L5-L59】【F:SETUP_BEGINNER_GUIDE.md†L192-L214】
-- **検証**:
-  - `cd cms && npm install --no-progress --no-fund --no-audit`【50040a†L1-L10】
-  - `cd cms && CI=1 npm run build`【93612b†L1-L2】
-  - `cd web && npm install --no-progress --no-fund --no-audit`【959481†L1-L11】
-  - `cd web && npm run build`【1c55c4†L1-L44】
-
-### 2025-10-31 追記: Comments 管理画面の空白解消と記事カードへのカバー画像反映
-
-- **背景**: Comments プラグインの管理 UI が空白表示のまま戻らないとの報告が続き、`wrapCommentsController()` が `admin.findAll`
-  のレスポンスを再加工していたことが原因と判明。Strapi 5.27.0 環境では admin API がデシリアライズ済みオブジェクトを返し、`annotateCommentPayload()` による再帰処理が不要な再レンダーを誘発していた。また Web 側では投稿にカバー画像を設定しても
-  一覧カードで表示されず、視覚的な訴求力が弱い状態だった。さらにコメント投稿時の relation 候補が Document ID を最優先していたため、
-  旧データで UUID が解決できないケースでは 400 応答まで到達してから entryId にフォールバックする挙動になっていた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の admin 向けラッパーを `annotateResponse: false` で再登録し、limit 正規化だけを維持した
-     状態でレスポンスをそのまま返すよう修正。これにより管理画面は既定フォーマッタで描画され、空白状態が解消される。【F:cms/src/extensions/comments/strapi-server.js†L329-L336】
-  2. フロントエンドの `buildRelationCandidates()` を entryId 優先へ並び替え、Document ID 解決に失敗しても最初の試行で既存エントリ ID へ
-     投稿できるようにした。これにより 400 エラーが再発してもループせず、成功した候補を即座に採用する。【F:web/src/components/comments/CommentsApp.tsx†L187-L198】
-  3. `web/src/components/PostCard.astro` に `<picture>` ベースのカバー画像ブロックを追加し、`medium`/`small`/`thumbnail` フォーマットを
-     優先順に利用するよう実装。合わせて `web/src/styles/global.css` へ `.post-card-cover` のスタイルを追加し、ホバー時に僅かに拡大させ
-     る演出を加えた。【F:web/src/components/PostCard.astro†L8-L26】【F:web/src/styles/global.css†L848-L876】
-- **検証**:
-  - `cd cms && CI=1 npm run build`
-  - `cd web && npm run build`
-- **運用メモ**:
-  - Comments 管理画面の一覧が再度空白化した場合は `sanitizeCommentsLimit()` のログと `admin.findAll` ラッパーの設定を確認し、`
-    annotateResponse` を誤って有効化していないか検証する。必要に応じて `sanitizeCommentsLimit()` に対象キーを追加する。
-  - 記事カードのカバー画像は `post.cover.formats` が存在しない場合に元画像を利用する。CDN リサイズを導入する場合は `PostCard.astro`
-    の `<picture>` 内で `srcSet` を適切に更新し、`global.css` のアスペクト比とホバー効果がレイアウトに影響しないか確認する。
-
-### 2025-11-03 追記: Comments relation Document ID 正規化と管理画面空白の解消
-
-- **背景**: `http://localhost:1337/admin/plugins/comments` が空白のまま更新されず、サーバーログに `Relation for field "related" does not exist` が連続出力される事象を再現。Document API 化後もフロントエンドが数値エントリー ID を送信し、バックエンド拡張が `RELATION_PREFIX` を再計算する際に ID 優先で上書きしていたため、VirtusLab Comments 3.1.0 が期待する Document ID を失い 400/500 が発生していた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` に `coerceEntryId` / `coerceRelationIdentifier` を追加し、既存の `resolveRelationId()` が Document ID を最優先で返すようにリファクタ。slug や数値 ID が渡された場合も DB から Document ID を再解決し、失敗時のみ元の識別子へフォールバックする。既存キャッシュはトリム済みのキーで保存し、不要な再問い合わせを抑制。【F:cms/src/extensions/comments/strapi-server.js†L112-L170】【F:cms/src/extensions/comments/strapi-server.js†L188-L257】
-  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並べ替え、最初の成功候補として Document ID を優先。サーバーが Document ID を保持できるため、Rich Text やコメント一覧で再読み込みしても Relation 不整合が起こらない。【F:web/src/components/comments/CommentsApp.tsx†L175-L188】
-  3. README / SETUP_BEGINNER_GUIDE のコメント節を更新し、API パスの正規形が `<documentId>` であること、数値 ID や slug を送ってもバックエンドが Document ID へ揃えることを明記。これにより運用ドキュメントが最新アーキテクチャと一致する。【F:README.md†L23-L55】【F:README.md†L210-L217】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L192-L195】
-- **検証**:
-  - `CI=1 npm run build`（Strapi 管理画面の本番ビルドが完了）【26e295†L1-L7】【03337d†L1-L13】【c7c1dd†L1-L2】
-  - `npm install --no-progress --no-fund --no-audit`（Strapi 側依存関係の再解決は `npm run build` 開始時に完了）【8cd64a†L1-L24】
-  - `npm install --no-progress --no-fund --no-audit`（Web 側依存関係）【17a586†L1-L3】
-  - `npm run build`（Astro 側ビルドは Strapi 未起動のためフォールバックログありつつ正常完了）【de5fc9†L1-L11】【4563e3†L1-L5】【b8b44b†L1-L25】【b7548d†L1-L63】
-- **運用メモ**:
-  - 今後コメントの Relation エラーが再発した場合は、保存済みコメントの `related` カラムが Document ID (`api::post.post:<documentId>`) 形式になっているか確認する。エクスポート済みデータが数値 ID を含む場合は、Strapi 側でマイグレーションを行い Document ID へ書き換えること。
-  - フロントエンドがコメント取得に失敗した際は `relationCandidates` の先頭が Document ID になっているかを `localStorage` のキャッシュも含めて確認する。古いキャッシュをクリアすると再取得が走り、バックエンドの正規化と揃う。
-
-### 2025-11-03 追記: Comments relation エントリー ID 正規化と既存データ移行
-
-- **背景**: `http://localhost:1337/admin/plugins/comments` が空白のままになり、サーバーログに `Relation for field "related" does not exist` が連続出力。Document ID 形式で保存された古いコメントが Strapi v5.27.0 のコメントプラグインによる関連エンティティ解決に失敗し、管理画面の一覧が描画されなくなっていた。フロントエンドも Document ID を優先送信していたため、新規投稿も同じ不整合を再生産していた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` をエントリー ID 優先に切り替え、Document ID/slug を入力された場合でも最終的に数値エントリー ID を返すよう修正。さらに `normalizeExistingCommentRelations()` を追加し、ブートストラップ時に `plugin::comments.comment` の `related` カラムをバッチ処理で走査して Document ID を数値 ID へ書き換えるようにした。既存プラグインの `bootstrap` をラップし、起動ごとに正規化が走る安全網を確保。【F:cms/src/extensions/comments/strapi-server.js†L524-L719】【F:cms/src/extensions/comments/strapi-server.js†L962-L978】
-  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` をエントリー ID → Document ID の順に並べ直し、ブラウザが常に数値 ID を最初に試行するよう統一。サーバー側の正規化と合わせて新規投稿が即座に数値 ID 化されるため、キャッシュが残っていても再読み込みで整合性が取れる。【F:web/src/components/comments/CommentsApp.tsx†L187-L200】
-  3. README / SETUP ガイドのコメント節を更新し、正規キーがエントリー ID であること、Document ID や slug しか取得できない場合でもブートストラップ時に自動補正されることを明記した。運用者が新仕様と移行ロジックを把握できるよう、再検証手順も差し替え。【F:README.md†L24-L82】【F:README.md†L211-L215】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L192-L205】
-- **検証**:
-  - `cd cms && npm install --no-progress --no-fund --no-audit`（依存取得が数千件規模で長時間化したため、Cloud IDE の制限により `^C` で中断。ログ: `5dfca4†L1-L66`）
-  - `cd cms && CI=1 npm run build`（上記依存導入が完了していないため未実行）
-  - `cd web && npm install --no-progress --no-fund --no-audit`（CMS と同様の理由で未実行）
-  - `cd web && npm run build`（依存未導入のため未実行）
-
-### 2025-11-02 追記: Comments limit クエリストリング同期と記事カード比率の調整
-
-- **背景**: Strapi 管理画面の Comments タブで `A valid integer must be provided to limit` が再発し、Windows 環境では `lazyLoadComponents → setStore` のループではなく Koa の `ctx.request.querystring` が空文字のまま残ることが原因で Knex が 0 件と誤解釈していた。併せて Web 側ではカバー画像が 16:9 のまま高く表示され、カードの本文領域が圧迫されているとのフィードバックを受けた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `sanitizeCommentsLimit()` をリファクタし、`LIMIT_ALIAS_KEYS` / `PAGINATION_ALIAS_KEYS` を共有定数化。正規化後の `limit` を返すよう変更し、`URLSearchParams` ベースの `serializeQuery()` で `ctx.request.querystring` を再生成することで、Strapi コントローラが必ず整数リミットを受け取れるようにした。また、シリアライズ失敗時は `ctx.log?.debug('comments.limit.serializeQuery.failed')` へ出力して原因特定を容易化。【F:cms/src/extensions/comments/strapi-server.js†L1-L120】【F:cms/src/extensions/comments/strapi-server.js†L320-L371】
-  2. `web/src/components/PostCard.astro` でカバー画像の `source`/`img` を配列ベースで生成し、`srcSet` / `sizes` / `decoding="async"` を付与。フォーマットが欠損しても `thumbnail → small → original` の優先順でフォールバックするよう整理した。【F:web/src/components/PostCard.astro†L1-L32】【F:web/src/components/PostCard.astro†L34-L55】
-  3. `web/src/styles/global.css` の `.post-card-cover` に 21:9 のレターボックス比率、最大高さ 180px（モバイルは 140px）、マージンを導入。カード本文との視覚バランスを整えつつホバー演出は維持した。【F:web/src/styles/global.css†L854-L881】
-  4. README / SETUP_BEGINNER_GUIDE に `ctx.request.querystring` への書き戻しとカード比率変更の背景を追記し、保守手順を最新化。【F:README.md†L47-L69】【F:README.md†L211-L216】【F:SETUP_BEGINNER_GUIDE.md†L204-L210】
-
-- **検証**:
-  - `cd cms && npm install --no-progress --no-fund --no-audit`【e4aa6b†L1-L35】
-  - `cd cms && CI=1 npm run build`【2e1709†L1-L9】【97b8cc†L1-L11】【e352eb†L1-L1】
-  - `cd web && npm install --no-progress --no-fund --no-audit`【2b24a0†L1-L3】【682a5a†L1-L7】【502c51†L1-L3】
-  - `cd web && npm run build`（Strapi 未起動のためフォールバック警告あり）【8f15ca†L1-L10】【1a6fb2†L1-L5】【7cf27f†L1-L63】
-
-- **運用メモ**:
-  - Comments プラグインをアップデートした際は `serializeQuery()` が新しいクエリパラメータを網羅しているか確認し、必要に応じて `LIMIT_ALIAS_KEYS` を拡張する。`comments.limit.serializeQuery.failed` ログが出た場合はエラー内容と併せて本書へ追記する。
-  - 記事カードの 21:9 比率は `max-height` を持つため、極端に幅の広いレイアウトで縦横比が崩れる場合は CSS カスタムプロパティ化を検討する。カバー画像のサイズ変更に合わせてライト/ダークテーマの余白や影が崩れないかを UI 側で確認すること。
-
-### 2025-10-19 追記: Comments limit querystring 同期と Post カバー縮小
-
-- **背景**: `http://localhost:1337/admin/plugins/comments` でコメント一覧が空のまま更新されず、ブラウザコンソールに `A valid integer must be provided to limit` が連続出力される事象を確認。既存の正規化は `ctx.request.querystring` のみ更新していたため、Strapi が内部で参照する `ctx.querystring` や `ctx.state.query.pagination` へ不正値が残り続け、Knex のバリデーションが再実行されていたと推測される。また、トップページの Post カードでカバー画像が依然として大きく感じられるとのフィードバックがあり、表示サイズの見直しが必要になった。
-- **実施内容**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `wrapCommentsController` を修正し、`sanitizeCommentsLimit()` 適用後に `ctx.state.query` を生成・マージする処理を追加。`pagination` オブジェクトの値も上書きし、`serializeQuery()` の結果を `ctx.request.querystring` と `ctx.querystring` の双方へ反映するよう統一した。シリアライズのリトライとログ出力も共通化し、管理画面が limit 警告でループする再発を防止。
-  2. `web/src/styles/global.css` の `.post-card-cover` を 16:9・最大 140px（モバイルは 4:3・最大 110px）へ縮小し、周囲コンテンツとのバランスを調整。README / SETUP_BEGINNER_GUIDE に新しい寸法を追記し、運用者が UI 変更を把握できるようにした。
-  3. README.md / SETUP_BEGINNER_GUIDE.md のコメント節を更新し、limit 正規化が `ctx.request.querystring`・`ctx.querystring`・`ctx.state.query.pagination` に作用すること、トップページのカードカバーが小型化されたことを明示。
-- **検証**:
-  - `cd cms && npm install --no-progress --no-fund --no-audit`
-  - `cd cms && CI=1 npm run build`
-  - `cd web && npm install --no-progress --no-fund --no-audit`
-  - `cd web && npm run build`（Strapi 未起動のため API フェッチはフォールバック応答を使用）
-- **今後の指針**: Comments まわりでクエリを補正する際は `ctx.request.query` / `ctx.request.querystring` / `ctx.querystring` / `ctx.state.query` の整合性を必ず取る。UI 変更は README / SETUP / 本書の三カ所へ同時反映し、既存スクリーンショットとの差異を説明する。必要に応じてストーリーブックやデザインカタログに新寸法を記録することも検討する。
-
-### 2025-11-04 追記: Comments relation を Document ID 正規化へ再度統一
-
-- **背景**: 2025-11-03 の「エントリー ID 正規化」導入後も、Strapi 管理画面の Comments プラグインで `Relation for field "related" does not exist` が継続し、Windows 環境では一覧が空白のまま更新されないとの報告あり。VirtusLab Comments 3.1.0 が Document Service を通じて関連エンティティを検証するため、`api::post.post:<entryId>` 形式では判定に失敗していた。さらにクライアントの relation 候補もエントリー ID を優先していたため、サーバー側の再解決が走っても直後の再読込で不整合が復活する状態だった。
-- **実施内容**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` を Document ID 優先へ戻し、`resolveRelationId()` が Document ID → 数値 ID → slug の順に記事を検索して Document ID を返すよう再実装。`normalizeExistingCommentRelations()` は数値識別子も更新対象とし、保存済みコメントの `related` を `api::post.post:<documentId>` 形式へ再書き込みする。【F:cms/src/extensions/comments/strapi-server.js†L524-L719】【F:cms/src/extensions/comments/strapi-server.js†L962-L978】
-  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並び替え、クライアントが Document ID を最初に送信するよう統一。【F:web/src/components/comments/CommentsApp.tsx†L175-L188】
-  3. README / SETUP ガイドのコメント節を更新し、正規キーが Document ID であること、エントリー ID や slug しか取得できなくてもバックエンドが Document ID へ再解決することを明記。【F:README.md†L23-L55】【F:README.md†L210-L216】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L188-L195】
-- **検証**:
-  - `cd cms && CI=1 npm run build` → 依存未導入のため `lodash/isPlainObject` モジュールが見つからず失敗（`b083a4†L1-L25`）。ローカルまたは CI ランナーで `npm install` 実行後に再試行すること。
-  - `cd web && npm run build` → `astro` CLI 未導入により `astro: not found` で失敗（`e05380†L1-L8`）。`npm install` を完了させてから再実行する。
-- **運用メモ**:
-  - 既存 DB に数値 ID が残っている場合は Strapi 起動時に `[comments] normalized stored comment relations` が出力されるか確認。出力されない場合は権限不足や例外ログをチェックし、必要に応じて SQL で `related` を Document ID へ手動更新する。
-  - フロントエンドが Document ID を取得できない場合は記事 API のレスポンスに `documentId` が含まれているか、`api::post.post` コントローラの populate 設定が変更されていないかを確認する。必要であればレスポンスへ Document ID を追加する。
-  - SMTP 接続エラー（`127.0.0.1:587`）は開発用のダミー設定が原因。実環境では `.env` の `SMTP_*` を本番値へ置き換える。`ensure-env.mjs` がプレースホルダーを検知してローカル値へ再生成する仕様のため、環境差異が出た場合は `.env` の実値を確認する。
-### 2025-11-05 追記: Comments 管理画面空白の再発に伴うエントリー ID 正規化
-- **背景**: VirtusLab Comments 管理画面で一覧が再び空白になり、API も `Relation for field "related" does not exist` を返す状態を再現。Document ID を正規キーにした前回の変更ではプラグイン本体がエントリー ID を想定しており、検証環境では投稿が失敗してモデレーション UI が描画されなくなった。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` / `resolveRelationId()` をエントリー ID 優先に戻し、Document ID や slug が渡されても最終的に数値エントリー ID を返すようキャッシュ付きで再実装。既存コメントもブートストラップ時に `api::post.post:<entryId>` へ自動置換するため、過去データが混在していても起動後に整合が取れる。【F:cms/src/extensions/comments/strapi-server.js†L524-L653】
-  2. `web/src/components/comments/CommentsApp.tsx` の relation 候補生成を数値エントリー ID → Document ID の順へ並べ替え、フロントエンドが常にエントリー ID を最初に試行するよう統一。Document ID しか取得できないケースでもバックエンド側で補正される。【F:web/src/components/comments/CommentsApp.tsx†L160-L201】
-  3. README / SETUP ガイドのコメント節を更新し、正規キーがエントリー ID であることと Document ID・slug 送信時の再解決フローを明記。【F:README.md†L20-L72】【F:SETUP_BEGINNER_GUIDE.md†L180-L210】
-- **テスト**:
-  - `cd cms && npm install --no-progress --no-fund --no-audit` はクラウド環境で応答が返らず途中で `Ctrl+C` 中断（要ローカル再実行）。
-  - `cd cms && CI=1 npm run build` → `Cannot find module '@strapi/strapi/package.json'`（依存未導入のため失敗）。【62309f†L1-L23】
-- **運用メモ**: Document ID 形式のコメントが DB に残っていても、次回起動時の正規化で自動的にエントリー ID へ置換される。手動で検証する場合は管理画面でコメント投稿→一覧表示を行い、エラーログが消えたかを確認すること。フロント側で relation 候補が空になる場合は `entryId` を API レスポンスに含めているか、`localStorage` に古い Document ID が残っていないかを併せて点検する。
-
-### 2025-11-06 追記: Comments Document ID 再統一と管理画面メニュー重複警告の解消
-
-- **背景**: 上記エントリー ID 正規化後も `http://localhost:1337/admin/plugins/comments` が空白のままになり、サーバーログには引き続き `Relation for field "related" does not exist` が出力された。VirtusLab Comments 3.1.0 の `admin.findAll` は Document Service 経由で `documentId` を参照しており、`api::post.post:<entryId>` 形式では検証に失敗する。さらに `cms/src/admin/app.js` が Content Type Builder へのナビリンクを重複追加していたため、React が `plugins/content-type-builder` の重複 key 警告を発していた。ブラウザ側でも relation 候補が数値 ID から始まることで、Document ID ベースへ戻しても再読込時に再び不整合が生じていた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` を Document ID 優先へ戻し、`resolveRelationId()` が取得したエントリーの Document ID をキャッシュするよう再実装。Document ID が解決できなかった場合はキャッシュへ `null` を保存し再試行を抑止しつつ、`normalizeRelation()` で警告ログを残す。ブートストラップ時の正規化も Document ID を返した場合のみ書き換える。【F:cms/src/extensions/comments/strapi-server.js†L526-L616】【F:cms/src/extensions/comments/strapi-server.js†L648-L706】
-  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並べ替え、クライアント投稿時の最初の試行で UUID を送るよう統一。【F:web/src/components/comments/CommentsApp.tsx†L187-L197】
-  3. `cms/src/admin/app.js` の不要な `app.addMenuLink()` 呼び出しを削除し、Content Type Builder のメニューを重複登録しないようにした。【F:cms/src/admin/app.js†L1-L12】
-  4. README / SETUP_BEGINNER_GUIDE のコメント節を再更新し、正規キーが Document ID であることと、数値 ID や slug しか得られなくてもサーバーが UUID へ再解決する運用を明記。【F:README.md†L23-L82】【F:SETUP_BEGINNER_GUIDE.md†L188-L195】
-- **検証**:
-  - `cd cms && CI=1 npm run build` → 依存導入前のため `Cannot find module '@strapi/strapi/package.json'` で失敗。【dd4b91†L1-L24】
-  - `cd web && npm run build` → `astro` CLI 未導入のため `astro: not found` で失敗。【655e54†L1-L6】
-- **運用メモ**:
-  - 今後コメントの relation が再び解決できない場合は、`[comments] failed to resolve relation identifier` 警告とともに `related` が Document ID (`api::post.post:<documentId>`) 形式になっているかを確認する。キャッシュが `null` を保持している場合は該当記事が削除済みの可能性があるため、コメントをアーカイブするか関連ポストを復元する。
-  - メニュー重複警告が再発した場合は、他プラグインが `app.addMenuLink` を呼んでいないか確認し、追加時は既存リンクの `to` パスと重複しないことを徹底する。
-
-### 2025-11-07 追記: Comments 正規キーをエントリー ID へ再統一 & クライアント候補順を同期
-
-- **背景**: 2025-11-06 の Document ID への揺り戻し後も、VirtusLab Comments 管理画面が空白のままという報告が続き、`Relation for field "related" does not exist` が再発。Strapi 5.27.0 ではコメント作成時に `ContentManagerService` が数値エントリー ID を参照するため、Document ID だけを保存するとモデレーション API が該当記事を特定できない事例が確認された。ユーザーから「運営バッジや文字サイズ調整は不要なので、とにかくコメント一覧が表示される状態に戻してほしい」との要望あり。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` をエントリー ID 優先へ変更し、`resolveRelationId()` が記事の数値 ID を返すようキャッシュを再実装。Document ID や slug が渡された場合でも該当記事を検索してエントリー ID を返し、`normalizeExistingCommentRelations()` が既存コメントの `related` を `api::post.post:<entryId>` 形式へ更新する。【F:cms/src/extensions/comments/strapi-server.js†L524-L653】【F:cms/src/extensions/comments/strapi-server.js†L670-L745】
-  2. フロントエンドの `buildRelationCandidates()` を数値エントリー ID → Document ID の順へ変更し、最初の投稿試行で必ずエントリー ID を送るよう同期。【F:web/src/components/comments/CommentsApp.tsx†L175-L188】
-  3. README / 初心者セットアップガイドのコメント節を更新し、正規キーがエントリー ID であること・Document ID や slug しか取得できなくてもサーバーが再解決すること・API ベース URL が `<entryId>` であることを明記。【F:README.md†L24-L82】【F:README.md†L215-L216】【F:README.md†L381-L382】【F:SETUP_BEGINNER_GUIDE.md†L188-L195】
-- **検証**:
-  - `cd cms && npm run build -- --help` → 依存未導入のため `Cannot find module '@strapi/strapi/package.json'` で失敗（`50dd95†L1-L24`）。ローカル検証時は `npm install` 後に再実行すること。
-- **運用メモ**:
-  - 今後コメント relation の解決に失敗した場合は、`plugin::comments.comment` の `related` カラムが `api::post.post:<entryId>` 形式かを確認する。Document ID 形式が残っている場合は Strapi 再起動時の正規化ログをチェックし、必要に応じて SQL で一括更新する。
-  - フロントエンドが Document ID しか取得できない記事詳細 API を提供している場合は、今回の変更で自動的にエントリー ID へ正規化されるが、API 応答に `id` を含めておくと余計な検索を避けられる。
-
-### 2025-10-27 追記: Comments 管理画面が空になる不具合の再修正（スタッフ演出撤回）
-
-- **背景**: Strapi 5.27.0 へ上げた後も、コメント管理画面が空白のまま読み込めないケースが続発。原因調査の結果、スタッフバッジ付与やレスポンス注入のために `cms/src/extensions/comments/strapi-server.js` へ追加したレスポンス整形が Admin 側の `lazyLoadComponents → setStore` 連鎖を再び誘発し、さらに `related` 正規化で Document ID を保持したままになったコメントがあると `Relation for field "related" does not exist` が発生して一覧が描画されないことが判明した。また、Web 側のバッジ UI も不要な差分として残っていた。ユーザー要望では「スタッフ表示よりもコメント管理が正常表示されること」が優先されるため、該当演出を撤回した上で、匿名投稿やリレーションの補正といった安全対策のみ残す方針へ改めた。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` を再実装し、`sanitizeCommentsLimit()`・`ensureAuthorEmail()`・`normalizeRelation()`・`sendResponseNotification()`・`normalizeExistingCommentRelations()` といった必要最小限の拡張だけを残した軽量ラッパーに整理。レスポンスへスタッフメタ情報を注入する処理と、多段の再帰アノテーションを撤去し、Document ID/slug を受け取った場合でも最終的に `api::post.post:<entryId>` へ統一するよう正規化を継続。【F:cms/src/extensions/comments/strapi-server.js†L1-L356】
-  2. `web/src/components/comments/CommentsApp.tsx` からモデレーター判定・バッジ描画・クラス付与を削除し、コメント項目の className を一律化。これに合わせて `web/src/styles/global.css` からバッジや色付け用のスタイルを除去し、スタッフ演出が HTML/CSS ともに残らないよう統一。【F:web/src/components/comments/CommentsApp.tsx†L1004-L1103】【F:web/src/components/comments/CommentsApp.tsx†L1132-L1154】【F:web/src/styles/global.css†L1406-L1427】
-  3. コメント API 呼び出しユーティリティ（`web/src/lib/comments.ts`）は既存のフェイルセーフがそのまま利用できたため変更なし。過去に導入した匿名メール補完ロジックは維持されるため、サーバー側の軽量化と矛盾しないことを再確認。
-- **検証**:
-  - `cd cms && npm run build -- --help`（依存未導入のため `@strapi/strapi` を解決できず失敗。log: `c7ddf6†L1-L24`）
-- **今後の指針**: コメント拡張でレスポンスを書き換える場合は、Admin のストア更新や Vite HMR 再評価に巻き込まれないことをブラウザで必ず確認する。特に `ctx.body` の再帰加工や `annotateCommentPayload()` のような重い処理は導入前に UI へ与える副作用を検証すること。スタッフ向けの強調表示を再導入する際は、バックエンドでの属性追記ではなく、API から返る既存フィールドをクライアント側で条件描画する方針を徹底し、コメント一覧が空になる再発を防ぐ。
