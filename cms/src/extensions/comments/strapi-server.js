@@ -551,7 +551,7 @@ const coerceRelationIdentifier = (post) => {
     return null;
   }
 
-  return coerceDocumentId(post) ?? coerceEntryId(post);
+  return coerceEntryId(post) ?? coerceDocumentId(post);
 };
 
 const fetchPostByWhere = async (where) => {
@@ -580,18 +580,46 @@ const resolveRelationId = async (identifier) => {
 
   let relationId = null;
 
+  const cacheIdentifiersForPost = (post, entryIdentifier, documentIdentifier) => {
+    const normalizedEntry = entryIdentifier ? String(entryIdentifier) : null;
+    const normalizedDocument = documentIdentifier ? String(documentIdentifier) : null;
+
+    if (normalizedEntry) {
+      relationCache.set(normalizedEntry, normalizedEntry);
+    }
+
+    if (normalizedDocument) {
+      relationCache.set(normalizedDocument, normalizedEntry ?? normalizedDocument);
+    }
+
+    if (typeof post?.slug === 'string') {
+      const slug = post.slug.trim();
+      if (slug) {
+        relationCache.set(slug, normalizedEntry ?? normalizedDocument ?? slug);
+      }
+    }
+  };
+
   const resolveFromWhere = async (where) => {
     const post = await fetchPostByWhere(where);
     if (!post) {
       return null;
     }
 
+    const entryIdentifier = coerceEntryId(post);
     const documentIdentifier = coerceDocumentId(post);
+
+    cacheIdentifiersForPost(post, entryIdentifier, documentIdentifier);
+
+    if (entryIdentifier) {
+      return entryIdentifier;
+    }
+
     if (documentIdentifier) {
       return documentIdentifier;
     }
 
-    return coerceEntryId(post);
+    return null;
   };
 
   relationId = await resolveFromWhere({

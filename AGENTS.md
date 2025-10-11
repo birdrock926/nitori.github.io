@@ -688,3 +688,13 @@
   - 既存 DB に数値 ID が残っている場合は Strapi 起動時に `[comments] normalized stored comment relations` が出力されるか確認。出力されない場合は権限不足や例外ログをチェックし、必要に応じて SQL で `related` を Document ID へ手動更新する。
   - フロントエンドが Document ID を取得できない場合は記事 API のレスポンスに `documentId` が含まれているか、`api::post.post` コントローラの populate 設定が変更されていないかを確認する。必要であればレスポンスへ Document ID を追加する。
   - SMTP 接続エラー（`127.0.0.1:587`）は開発用のダミー設定が原因。実環境では `.env` の `SMTP_*` を本番値へ置き換える。`ensure-env.mjs` がプレースホルダーを検知してローカル値へ再生成する仕様のため、環境差異が出た場合は `.env` の実値を確認する。
+### 2025-11-05 追記: Comments 管理画面空白の再発に伴うエントリー ID 正規化
+- **背景**: VirtusLab Comments 管理画面で一覧が再び空白になり、API も `Relation for field "related" does not exist` を返す状態を再現。Document ID を正規キーにした前回の変更ではプラグイン本体がエントリー ID を想定しており、検証環境では投稿が失敗してモデレーション UI が描画されなくなった。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` / `resolveRelationId()` をエントリー ID 優先に戻し、Document ID や slug が渡されても最終的に数値エントリー ID を返すようキャッシュ付きで再実装。既存コメントもブートストラップ時に `api::post.post:<entryId>` へ自動置換するため、過去データが混在していても起動後に整合が取れる。【F:cms/src/extensions/comments/strapi-server.js†L524-L653】
+  2. `web/src/components/comments/CommentsApp.tsx` の relation 候補生成を数値エントリー ID → Document ID の順へ並べ替え、フロントエンドが常にエントリー ID を最初に試行するよう統一。Document ID しか取得できないケースでもバックエンド側で補正される。【F:web/src/components/comments/CommentsApp.tsx†L160-L201】
+  3. README / SETUP ガイドのコメント節を更新し、正規キーがエントリー ID であることと Document ID・slug 送信時の再解決フローを明記。【F:README.md†L20-L72】【F:SETUP_BEGINNER_GUIDE.md†L180-L210】
+- **テスト**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit` はクラウド環境で応答が返らず途中で `Ctrl+C` 中断（要ローカル再実行）。
+  - `cd cms && CI=1 npm run build` → `Cannot find module '@strapi/strapi/package.json'`（依存未導入のため失敗）。【62309f†L1-L23】
+- **運用メモ**: Document ID 形式のコメントが DB に残っていても、次回起動時の正規化で自動的にエントリー ID へ置換される。手動で検証する場合は管理画面でコメント投稿→一覧表示を行い、エラーログが消えたかを確認すること。フロント側で relation 候補が空になる場合は `entryId` を API レスポンスに含めているか、`localStorage` に古い Document ID が残っていないかを併せて点検する。
