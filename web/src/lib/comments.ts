@@ -228,6 +228,63 @@ const commentActionPath = (identifier: string, commentId: number, action?: strin
   return `${base}/comment/${commentId}${actionSegment}`;
 };
 
+const FALLBACK_EMAIL_DOMAIN = 'comments.local';
+
+const coerceString = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+
+  return null;
+};
+
+const encodeBase64Url = (value: string): string => {
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(value, 'utf8')
+        .toString('base64')
+        .replace(/=+$/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+    }
+  } catch (error) {
+    console.warn('[comments] failed to encode fallback email with Buffer', error);
+  }
+
+  if (typeof btoa === 'function') {
+    try {
+      const binary = unescape(encodeURIComponent(value));
+      return btoa(binary).replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    } catch (error) {
+      console.warn('[comments] failed to encode fallback email with btoa', error);
+    }
+  }
+
+  return encodeURIComponent(value).replace(/%/g, '').slice(0, 96);
+};
+
+const buildFallbackEmail = (
+  author: Partial<CommentAuthor> | undefined,
+  content: string,
+): string => {
+  const source =
+    coerceString(author?.id) || coerceString(author?.name) || coerceString(content) || 'anonymous';
+
+  const encoded = encodeBase64Url(source)
+    .replace(/[^a-zA-Z0-9._-]+/g, '')
+    .replace(/_{2,}/g, '_')
+    .replace(/\.{2,}/g, '.')
+    .replace(/^-+|-+$/g, '');
+
+  const localPart = (encoded || 'anonymous').slice(0, 64);
+  return `${localPart}@${FALLBACK_EMAIL_DOMAIN}`;
+};
+
 const request = async (path: string, init?: RequestInit) => {
   if (!apiBase) {
     throw new Error('Strapi API URL is not configured');
@@ -358,7 +415,10 @@ export const fetchComments = async (relationId: string, pageSize?: number): Prom
     return [];
   }
 
-  const normalizedPageSize = Number.isFinite(pageSize) && pageSize ? Math.max(1, Math.floor(pageSize)) : 50;
+  const normalizedPageSize =
+    Number.isFinite(pageSize) && pageSize
+      ? Math.min(200, Math.max(1, Math.floor(pageSize)))
+      : 50;
 
   const fetchPage = async (page: number): Promise<CommentsPage> => {
     try {
@@ -419,10 +479,16 @@ export const submitComment = async (
   }
 
   if (payload.author && payload.author.name.trim().length > 0) {
+    const sanitizedContent = typeof payload.content === 'string' ? payload.content : '';
+    const trimmedEmail = payload.author.email?.trim();
+    const email = trimmedEmail && /.+@.+\..+/.test(trimmedEmail)
+      ? trimmedEmail
+      : buildFallbackEmail(payload.author, sanitizedContent);
+
     body.author = {
       ...payload.author,
       name: payload.author.name.trim(),
-      email: payload.author.email?.trim() || undefined,
+      email,
       id: payload.author.id?.toString(),
     };
   }
