@@ -11,12 +11,11 @@
       "required": true
     },
     "fontScale": {
-      "type": "customField",
-      "customField": "plugin::font-scale-range.scale",
+      "type": "decimal",
       "default": null,
+      "min": 0.7,
+      "max": 1.8,
       "options": {
-        "min": 0.7,
-        "max": 1.8,
         "step": 0.05,
         "defaultScale": 1
       }

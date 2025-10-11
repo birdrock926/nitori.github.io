@@ -531,3 +531,17 @@
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
 - **今後の指針**: プラグイン名称を変更する場合は `cms/package.json` のローカル依存、`config/plugins.js` の存在チェック、カスタムフィールド参照（components / lifecycles / Web 側レンダリング）を同時に更新し、サーバー起動時の `strapi.customFields.register` で型が宣言されているか確認する。Windows で再び `Could not find Custom Field` が発生した場合は `node_modules/font-scale-range` の生成有無と `strapi-server.js` の登録ログを必ず確認する。
+
+### 2025-10-27 追記: Font Scale プラグイン撤去と Decimal フィールドへの回帰
+
+- **背景**: Windows/WSL 環境で Rich Text ブロックの `fontScale` が「Unsupported field type: plugin::font-scale-range.scale」と表示され、数値入力が無効化される事象が再発。`npm run develop` 自体は起動するものの、管理画面がプラグイン登録前提のフィールドを扱えず入力欄がグレーアウトするため、記事側で倍率を調整できない状態が続いていた。複数回の修正でも Strapi のプラグインローダー挙動が安定しないことから、ローカルカスタムフィールドを撤去して Strapi 標準の Decimal フィールドへ戻す方針へ切り替えた。
+- **対応**:
+  1. `cms/src/components/content/rich-text.json` の `fontScale` を `type: "decimal"` に戻し、`min: 0.7` / `max: 1.8` / `options.step: 0.05` を直接定義して管理画面の数値入力で上下限を提示できるようにした。未入力時は引き続き NULL を保存し、ライフサイクルで 1.0 倍へフォールバックする。【F:cms/src/components/content/rich-text.json†L13-L22】【F:cms/src/api/post/content-types/post/lifecycles.js†L12-L51】
+  2. `cms/src/plugins/font-scale-range/` ディレクトリを完全に削除し、`cms/package.json` からローカル依存 `font-scale-range` を除去。合わせて `cms/config/plugins.js` から存在チェックロジックとプラグイン有効化処理を撤廃し、Strapi のプラグイン設定は既存の公式プラグインのみが読み込まれる構成へ整理した。【F:cms/package.json†L1-L56】【F:cms/config/plugins.js†L1-L196】
+  3. README / SETUP_BEGINNER_GUIDE / 本書の記述を更新し、Font Scale プラグイン撤去の理由と現在は Strapi 標準 Decimal フィールドで倍率を直入力する運用へ戻したこと、空欄時は 1.0 倍を適用すること、将来倍率の丸めや上下限を変更する際はライフサイクル (`clampScaleValue`) を調整することを明文化した。【F:README.md†L43-L97】【F:SETUP_BEGINNER_GUIDE.md†L1-L17】
+- **検証**:
+  - `cd cms && npm install --no-fund --no-audit`（初回は `ENOTEMPTY` に遭遇したため `rm -rf node_modules` で再実行、成功ログ: `e9ef18†L1-L38`）
+  - `cd cms && CI=1 npm run build`【985d1a†L1-L19】
+- **運用メモ**:
+  - プラグイン撤去後も `cms/src/api/post/content-types/post/lifecycles.js` の `clampScaleValue` が 0.7〜1.8 に丸めるため、記事側で異常値を入力してもビルド時に正規化される。範囲変更時はライフサイクルとフロントエンド側の `clampRichTextScale`（`web/src/lib/strapi.ts`）を同時更新すること。
+  - `npm install` 実行時に Windows で `ENOTEMPTY` が再発した場合は `node_modules/@inquirer/external-editor` 付近の残骸を削除して再度 `npm install` を実行する。今回の再インストールでは `rm -rf node_modules package-lock.json` → `npm install --no-fund --no-audit` で解消した。失敗ログは `cms-npm-install.log` に残しているので環境差分調査に活用する。

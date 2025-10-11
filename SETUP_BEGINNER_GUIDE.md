@@ -6,7 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
-- **カスタムフィールド**: 2025-10-26 に Rich Text ブロック向けの **Font Scale Range** プラグイン（`plugin::font-scale-range.scale`）へ移行しました。旧 Font Scale Slider は Windows 環境で `plugin::font-scale-slider.scale` を解決できず Strapi 起動時に `Could not find Custom Field` が発生したため撤去しています。Font Scale Range は `cms/package.json` のローカル依存 (`"font-scale-range": "file:src/plugins/font-scale-range"`) と `cms/config/plugins.js` の存在チェックで確実に読み込まれ、サーバー側でも `strapi.customFields.register` を実行して型を登録するため、マルチプラットフォームで安定して起動できます。管理画面では 0.7〜1.8 倍をスライダーと数値入力の両方で編集でき、空欄にすると記事既定の 1.0 倍を自動継承します。詳細な履歴と検証ログは AGENTS.md を参照してください。`cms/src/components/content/rich-text.json` や `cms/src/api/post/content-types/post/lifecycles.js` を更新すれば上下限や丸め処理をカスタマイズできます。
+- **カスタムフィールド**: 2025-10-27 に Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドへ戻しました。Windows で `Unsupported field type: plugin::font-scale-range.scale` が解消しきれなかったためです。現在は管理画面の数値入力で 0.7〜1.8 の範囲を直接編集し、空欄なら記事既定値 (1.0 倍) を適用します。値の丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js`（`clampScaleValue`）で制御しているので、必要に応じて調整してください。履歴と検証ログは AGENTS.md にまとまっています。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 

@@ -1,15 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const hasFontScaleRangePlugin = () => {
-  const pluginDir = path.join(__dirname, '..', 'src', 'plugins', 'font-scale-range');
-  return fs.existsSync(pluginDir);
-};
-
 const parseCsv = (value, fallback = []) => {
   if (!value) {
     return [...fallback];
@@ -183,12 +171,6 @@ export default ({ env }) => {
       },
     },
   };
-
-  if (hasFontScaleRangePlugin()) {
-    config['font-scale-range'] = {
-      enabled: true,
-    };
-  }
 
   return config;
 };

@@ -40,7 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
-  - RichText ブロックの本文倍率は 2025-10-26 に **Font Scale Range** カスタムフィールド（`plugin::font-scale-range.scale`）へ移行しました。旧 Font Scale Slider は Windows 環境で Strapi サーバーが `plugin::font-scale-slider.scale` を解決できず、`Could not find Custom Field` 例外で起動が止まることが判明したため廃止しています。新プラグインはサーバー起動時に `strapi.customFields.register` を実行して型情報を登録し、`cms/package.json` のローカル依存 (`"font-scale-range": "file:src/plugins/font-scale-range"`) と `cms/config/plugins.js` のディレクトリ存在チェックで冪等に読み込まれる構成です。管理画面では 0.7〜1.8 倍をスライダー + 数値入力で調整でき、未入力時は記事全体の既定値 (1.0 倍) が適用されます。導入手順と検証ログは AGENTS.md を参照してください。
+  - RichText ブロックの本文倍率は 2025-10-27 時点でローカルカスタムフィールド群を撤去し、Strapi 標準の **Decimal** 入力へ戻しました。Windows 環境で `Unsupported field type: plugin::font-scale-range.scale` が継続したことが直接の原因で、現在は管理画面の数値入力に 0.7〜1.8 の範囲を設定して直接倍率を記入します。空欄の場合は記事全体の既定値 (1.0 倍) を自動継承します。履歴と検証手順は AGENTS.md を参照してください。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -67,7 +67,7 @@
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-- RichText ブロックの `fontScale` は `font-scale-range` プラグインのカスタムフィールドで 0.7〜1.8 倍をスライダー操作できます。`cms/package.json` に `"font-scale-range": "file:src/plugins/font-scale-range"` を追加し、`cms/config/plugins.js` 側でプラグインディレクトリの存在チェックを行うことで、`npm install` 後に必ず依存関係へ組み込まれ、ディレクトリが欠落している場合は自動的に無効化されます。サーバー側でも `strapi.customFields.register` を実行して型を宣言しているため、Windows 環境でも `Could not find Custom Field: plugin::font-scale-range.scale` が発生せずに起動できます。未入力時は記事全体の既定値 (1.0 倍) が適用され、詳細な履歴・復旧手順は AGENTS.md にまとめています。
+- RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。詳細な移行手順と検証ログは AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー
