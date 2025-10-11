@@ -54,6 +54,8 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | コメント | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメント通知に使用するサイト URL と通知先メールアドレス | `https://example.pages.dev` / `contact@example.com` |
    | コメント | `COMMENTS_ENABLED_COLLECTIONS` / `COMMENTS_APPROVAL_FLOW` | コメントを許可するコンテンツタイプと承認フロー設定 | `api::post.post` |
    | コメント | `COMMENTS_MODERATOR_ROLES` / `COMMENTS_BAD_WORDS` | 通知を受け取るロール / NG ワードフィルタの有効・無効 | `Authenticated` / `true` |
+   | コメント | `COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` | 運営バッジを付与したいメールアドレス・ドメイン・Strapi 管理ユーザー ID。空欄のままでも `authorUser` で判定されます。 | (空文字で運用可) |
+   | コメント | `COMMENTS_STAFF_BADGE_LABEL` | バッジに表示するラベル文言。 | `運営` |
 
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
 
@@ -204,6 +206,7 @@ npm run dev
 7. コメントフォームのメール欄は任意入力ですが、VirtusLab Comments 3.1.0 がメールアドレスを必須項目として検証するため、空欄や不正な値で送信した場合はフロントエンド側で `@comments.local` ドメインのダミーアドレスを生成して API リクエストを行います（ダミー宛に通知は送信されません）。バックエンドも同じドメインで不足分を補完します。返信通知を受け取りたい場合は正しいメールアドレスを入力してください（API から外部公開はされません）。
 8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
 9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプされ、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
+10. 運営アカウントの返信は `COMMENTS_STAFF_*` と `authorUser` の情報から自動判定され、Web 側ではオレンジ色の「運営」バッジ（星アイコン付き）と名前色の強調が適用されます。新しい運営メールやドメインを登録した場合は `.env` を更新し、Strapi を再起動してから動作を確認してください。
 
 
 ### 6-4. ブロックエディタで装飾する
@@ -214,7 +217,7 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
-- Rich Text ブロックの `fontScale` は Font Scale Slider カスタムフィールドで 0.7〜1.8 倍をスライダー操作でき、空欄にすると記事の `bodyFontScale` 設定を継承します（既定 1.0 倍）。
+- Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドで 0.7〜1.8 倍の範囲を入力できます。空欄にすると記事の `bodyFontScale` 設定を継承し（既定 1.0 倍）、Astro 側は CSS 変数とインラインスタイルを使って倍率を即時に適用します。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。

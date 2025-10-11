@@ -60,14 +60,14 @@
 - テーマ（ライト/ダーク）・読みやすいタイポ・スケルトン/LQIP・アクセシビリティ AA 準拠  
 - トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング  
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
-  - Rich Text ブロックの本文倍率は管理画面の `fontScale` 数値入力で調整でき、未設定時は記事既定値 (1.0 倍) を自動適用
+  - Rich Text ブロックの本文倍率は管理画面の `fontScale` 数値入力で調整でき、未設定時は記事既定値 (1.0 倍) を自動適用。Astro 側のレンダリングはインラインスタイルでも倍率を指定するため、保存直後から記事本文に反映されます。
 
 ## データモデル（抜粋）
 - **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-- RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。詳細な移行手順と検証ログは AGENTS.md にまとめています。
+- RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。Astro 側では CSS 変数とインラインスタイルを併用して倍率を描画するため、管理画面で更新した値が必ず記事本文へ反映されます。詳細な移行手順と検証ログは AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー
@@ -149,6 +149,8 @@
    | `OCI_*` 一式 | OCI Object Storage のバケット情報・認証キー。 | 公式ドキュメント参照 |
    | `SMTP_*` 一式 | Strapi から通知メールを送る際の SMTP 情報。 | `smtp.gmail.com` / `587` |
    | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメントメール内のサイト URL と通知先アドレス。 | `https://example.pages.dev` / `contact@example.com` |
+   | `COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` | 運営バッジを付与したいメールアドレス・ドメイン・Strapi 管理ユーザー ID。空欄の場合は `authorUser` 情報のみで判定します。 | (空文字で運用可) |
+   | `COMMENTS_STAFF_BADGE_LABEL` | 運営バッジに表示するラベル。 | `運営` |
 
 > **開発時の GitHub Webhook**: `.env` が同梱プレースホルダー（`local-owner` / `local-repo` / `dispatch-workflow.yml` / `github-token-placeholder` など）のままの場合、Strapi は GitHub Actions 連携を自動的にスキップし、開発時の 401 エラーを防ぎます。実運用では GitHub Secrets を発行し、これらを本番値に置き換えてください。スキップ時はログに `[github] Webhook dispatch skipped` が出力されます。
 
@@ -215,6 +217,7 @@
 6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。VirtusLab Comments 3.1.0 では投稿時にメールアドレスが必須のため、フロントエンド側で空欄／不正値を検知した場合は `@comments.local` ドメインのダミーアドレスを生成して API へ送信し、リクエスト段階で 400 を回避します。バックエンドも同じドメインを使って不足分を再検証し、ダミー宛には通知を送らないようスキップしています。実際に返信通知を受けたい場合は有効なメールアドレスを入力し、SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定してからテスト送信で動作確認してください。
 7. Post コンテンツタイプには「コメント用デフォルト名」と「本文フォントサイズ」フィールドを追加しています。前者は記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。後者は本文全体のフォント倍率（標準/やや大きい/大きい）を CMS から選択でき、視認性を記事単位で調整できます。
 8. Strapi 管理画面でコメント一覧を開いた際に `A valid integer must be provided to limit` が繰り返し表示される場合は、`cms/src/extensions/comments/strapi-server.js` に追加したリミット正規化ロジックが動作しているか確認してください。クエリ文字列の `limit` / `pagination[pageSize]` が数値以外になった場合でも自動的に 50 件（最大 200 件まで）へ丸め込み、Knex の警告でリロードループに陥らないようになりました。フロントエンド側も `web/src/lib/comments.ts` でページサイズを 1〜200 件にクランプするため、必要に応じて双方の上限を同時に調整してください。
+9. 運営アカウントの返信は `COMMENTS_STAFF_*` と `authorUser` の情報から自動判定され、Web 側ではオレンジ色の「運営」バッジ（星アイコン付き）と名前色の強調が適用されます。新しい運営メールやドメインを追加した場合は `.env` を更新し、Strapi を再起動して反映させてください。
 
 ##### トラブルシューティング
 

@@ -47,6 +47,8 @@ type Props = {
 const AUTHOR_STORAGE_KEY = 'knn-comments-author';
 const LONG_COMMENT_PREVIEW = 320;
 const GLOBAL_DEFAULT_AUTHOR = '名無しのユーザーさん';
+const STAFF_KEYWORD_PATTERN =
+  /(moderator|モデレーター|admin|staff|管理者|editor|official|運営|運營|运营|運営チーム|公式)/;
 
 const isPubliclyVisible = (comment: CommentNode) => {
   if (comment.removed || comment.blocked) {
@@ -1010,6 +1012,14 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
   );
 
   const isModeratorComment = useCallback((comment: CommentNode) => {
+    if (!comment) {
+      return false;
+    }
+
+    if (comment.isStaffResponse === true) {
+      return true;
+    }
+
     const author = comment.author;
     if (!author) {
       return false;
@@ -1025,11 +1035,12 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       author.role,
       ...(author.roles ?? []),
       author.type,
+      comment.isStaffResponse ? 'staff' : undefined,
     ]
-      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
-      .filter((value) => value.length > 0);
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => value.trim().toLowerCase());
 
-    if (candidateValues.some((value) => /moderator|モデレーター|admin|staff|管理者|editor/.test(value))) {
+    if (candidateValues.some((value) => STAFF_KEYWORD_PATTERN.test(value))) {
       return true;
     }
 
@@ -1078,7 +1089,12 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       const isCollapsed = isLongComment && !isExpanded;
       const showContent = !isHidden && !isPending;
       const showReadMore = showContent && isLongComment;
-      const moderatorLabel = comment.author?.badge || comment.author?.badges?.[0] || 'モデレーター';
+      const badgeCandidates = comment.author?.badges ?? [];
+      const moderatorLabel =
+        [comment.author?.badge, ...badgeCandidates]
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .map((value) => value.trim())[0] || '運営';
+      const moderatorBadgeLabel = `${moderatorLabel}からの返信`;
       const displayAuthorName = comment.author?.name?.trim().length
         ? comment.author.name.trim()
         : fallbackAuthorName;
@@ -1103,7 +1119,12 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
                 {displayAuthorName}
               </span>
               {isModerator ? (
-                <span className="comment-moderator-badge" aria-label="モデレーターの返信">{moderatorLabel}</span>
+                <span className="comment-moderator-badge" aria-label={moderatorBadgeLabel}>
+                  <span aria-hidden="true" className="comment-moderator-badge__icon">
+                    ★
+                  </span>
+                  <span className="comment-moderator-badge__label">{moderatorLabel}</span>
+                </span>
               ) : null}
             </div>
             <div className="comment-meta">

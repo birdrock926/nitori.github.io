@@ -558,3 +558,18 @@
   - `cd cms && CI=1 npm run build`
   - `cd web && npm install --no-progress --no-fund --no-audit`
 - **今後の指針**: limit の上限を変更する場合は `cms/src/extensions/comments/strapi-server.js` の `MAX_COMMENT_LIMIT` と `web/src/lib/comments.ts` のクランプ値を同時に更新し、README / SETUP / 本書の記載も即時修正する。Knex の警告が再度出力された場合は `sanitizeCommentsLimit()` に対象となるキーが不足していないか確認し、必要なら追加する。コメントプラグインをアップデートする際は本拡張が引き続き有効か、管理画面で一覧表示 → 詳細表示 → 通報・承認操作を一巡してリロードループが発生しないことを確認する。
+
+### 2025-10-29 追記: 運営バッジ表示と Rich Text 倍率反映の安定化
+
+- **背景**: Strapi 上で運営アカウントが返信しても Web 側では一般ユーザーと同じ表示になり、運営コメントを見分けにくいとの報告がありました。また Rich Text ブロックの `fontScale` を変更しても生成済みページの文字サイズが変化しないケースが確認され、`ensure-env.mjs` が任意設定を空文字で保持できず新しい Comments 向け環境変数の初期化が難しい問題も判明しました。
+- **対応**:
+  1. Comments 拡張 `cms/src/extensions/comments/strapi-server.js` にスタッフ検知ロジックを実装し、`authorUser` 関連や `COMMENTS_STAFF_*` 環境変数（メール / ドメイン / ID）と既存ロール・バッジ情報を解析して `author.moderator=true` と `isStaffResponse=true` を付与。全 `find*` コントローラと `client.post` をラップしてレスポンスへ統一的に反映するよう調整しました。
+  2. `ensure-env.mjs` に空文字許容オプションを追加し、`COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` を自動生成しても空欄を維持できるよう変更。`.env.sample` へ前述の変数と既定バッジ `COMMENTS_STAFF_BADGE_LABEL=運営` を追記しました。
+  3. フロントエンドの `web/src/lib/comments.ts`・`web/src/components/comments/CommentsApp.tsx`・`web/src/styles/global.css` を更新して `isStaffResponse` フラグと新規環境変数に基づいた運営バッジ表示（オレンジ系カラーと星アイコン付きバッジ）を実装。`STAFF_KEYWORD_PATTERN` によって過去データでもロール名が一致すればハイライトされる後方互換性を確保しました。
+  4. Rich Text コンポーネント `web/src/components/blocks/RichTextContent.tsx` でスケール値からフォントサイズ・行間を直接計算し、`data-font-scale` 属性としても出力することで、管理画面の数値入力が確実に記事本文へ反映されるようにしました。
+- **検証**:
+  - `cd cms && CI=1 npm run build`
+  - `cd web && npm run build`
+- **運用メモ**:
+  - 運営判定は `COMMENTS_STAFF_*` と `authorUser` の双方を利用します。運営アカウントを追加する際は `.env` の各リストを更新し、`npm run develop` を再起動してキャッシュをクリアしてください。`isStaffResponse` フラグは API レスポンスに含まれるため、外部クライアントでもバッジ表示が実装しやすくなりました。
+  - `RichTextContent` は `fontScale` が未設定の場合 `data-font-scale` 属性を出力しません。計測用途で倍率を参照する際は属性の有無を確認してください。

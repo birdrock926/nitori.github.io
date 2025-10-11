@@ -62,26 +62,35 @@ const isPlaceholderUrl = (value) => {
 };
 
 const ensureValue = (key, generator, state, changes, options = {}) => {
-  const { treatAsMissing } = options;
+  const { treatAsMissing, allowEmpty = false } = options;
   const rawValue = process.env[key] ?? state.map.get(key);
-  const current = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+  const normalized =
+    typeof rawValue === 'string' ? rawValue.trim() : rawValue;
 
-  const isMissing =
-    !current ||
-    (typeof current === 'string' && current.length === 0) ||
-    (typeof current === 'string' && /replace-with/i.test(current)) ||
-    (typeof treatAsMissing === 'function' && treatAsMissing(current));
+  const isExplicitlyMissing = normalized === undefined || normalized === null;
+  const isEmptyString = typeof normalized === 'string' && normalized.length === 0;
+
+  let isMissing =
+    isExplicitlyMissing ||
+    (!allowEmpty && isEmptyString) ||
+    (typeof normalized === 'string' && /replace-with/i.test(normalized));
+
+  if (!isMissing && typeof treatAsMissing === 'function') {
+    isMissing = treatAsMissing(normalized);
+  }
 
   if (isMissing) {
     const next = generator();
-    state.map.set(key, next);
-    process.env[key] = next;
+    const stored = typeof next === 'string' ? next.trim() : next ?? '';
+    state.map.set(key, stored);
+    process.env[key] = stored;
     changes.push(key);
     return;
   }
 
-  state.map.set(key, current);
-  process.env[key] = current;
+  const stored = typeof normalized === 'string' ? normalized : normalized ?? '';
+  state.map.set(key, stored);
+  process.env[key] = stored;
 };
 
 const writeEnvFile = (state) => {
@@ -167,6 +176,10 @@ const main = () => {
   ensureValue('COMMENTS_BLOCKED_AUTHOR_PROPS', () => 'email', state, changes);
   ensureValue('COMMENTS_BAD_WORDS', () => 'true', state, changes);
   ensureValue('COMMENTS_VALIDATION_ENABLED', () => 'true', state, changes);
+  ensureValue('COMMENTS_STAFF_EMAILS', () => '', state, changes, { allowEmpty: true });
+  ensureValue('COMMENTS_STAFF_EMAIL_DOMAINS', () => '', state, changes, { allowEmpty: true });
+  ensureValue('COMMENTS_STAFF_AUTHOR_IDS', () => '', state, changes, { allowEmpty: true });
+  ensureValue('COMMENTS_STAFF_BADGE_LABEL', () => '運営', state, changes);
 
   if (changes.length > 0 && !isBuildLike) {
     writeEnvFile(state);

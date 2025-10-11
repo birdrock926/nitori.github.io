@@ -22,6 +22,7 @@ export type CommentNode = {
   blockReason?: string | null;
   removed?: boolean | null;
   approvalStatus?: string | null;
+  isStaffResponse?: boolean;
   threadOf?: number | null;
   author?: CommentAuthor | null;
   createdAt?: string;
@@ -168,6 +169,7 @@ const normalizeComment = (value: any): CommentNode | null => {
   const blocked = parseBoolean(value.blocked);
   const blockedThread = parseBoolean(value.blockedThread);
   const removed = parseBoolean(value.removed);
+  const staffResponse = parseBoolean(value.isStaffResponse ?? value.is_staff_response);
 
   const threadSource = value.threadOf ?? value.thread_of;
   const threadOf =
@@ -187,7 +189,7 @@ const normalizeComment = (value: any): CommentNode | null => {
 
   const approvalStatus = typeof value.approvalStatus === 'string' ? value.approvalStatus : undefined;
 
-  return {
+  const comment: CommentNode = {
     id: idValue,
     documentId: typeof value.documentId === 'string' ? value.documentId : undefined,
     content: typeof value.content === 'string' ? value.content : '',
@@ -202,6 +204,12 @@ const normalizeComment = (value: any): CommentNode | null => {
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : undefined,
     children,
   };
+
+  if (staffResponse === true) {
+    comment.isStaffResponse = true;
+  }
+
+  return comment;
 };
 
 const sanitizeRelationIdentifier = (value: string) => {
