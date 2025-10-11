@@ -41,6 +41,28 @@ const coerceRelationId = (post) => {
   return null;
 };
 
+const coerceRelationIdentifier = (post) => {
+  if (!post || typeof post !== 'object') {
+    return null;
+  }
+
+  const documentIdentifier = coerceDocumentId(post);
+  if (documentIdentifier) {
+    return documentIdentifier;
+  }
+
+  const numericIdentifier = coerceRelationId(post);
+  if (numericIdentifier) {
+    return String(numericIdentifier);
+  }
+
+  if (typeof post.slug === 'string' && post.slug.trim().length > 0) {
+    return post.slug.trim();
+  }
+
+  return null;
+};
+
 const fetchPostByWhere = async (strapi, where) => {
   try {
     return await strapi.db
@@ -52,7 +74,7 @@ const fetchPostByWhere = async (strapi, where) => {
   }
 };
 
-const resolvePostRelationId = async (strapi, identifier, cache) => {
+const resolvePostRelationIdentifier = async (strapi, identifier, cache) => {
   if (!identifier) {
     return null;
   }
@@ -61,18 +83,18 @@ const resolvePostRelationId = async (strapi, identifier, cache) => {
     return cache.get(identifier);
   }
 
-  let relationId = null;
+  let relationIdentifier = null;
 
   if (NUMERIC_PATTERN.test(identifier)) {
     const post = await fetchPostByWhere(strapi, { id: Math.trunc(Number(identifier)) });
-    relationId = coerceRelationId(post);
-    if (relationId) {
-      cache.set(identifier, relationId);
-      return relationId;
+    relationIdentifier = coerceRelationIdentifier(post);
+    if (relationIdentifier) {
+      cache.set(identifier, relationIdentifier);
+      return relationIdentifier;
     }
   }
 
-  if (!relationId) {
+  if (!relationIdentifier) {
     const direct = await fetchPostByWhere(strapi, {
       $or: [
         { documentId: identifier },
@@ -81,24 +103,18 @@ const resolvePostRelationId = async (strapi, identifier, cache) => {
     });
 
     if (direct) {
-      relationId = coerceRelationId(direct);
-      if (!relationId) {
-        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
-        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
-          relationId = Math.trunc(Number(fallbackDocumentId));
-        }
-      }
+      relationIdentifier = coerceRelationIdentifier(direct) || identifier;
     }
   }
 
-  if (!relationId) {
+  if (!relationIdentifier) {
     const bySlug = await fetchPostByWhere(strapi, { slug: identifier });
-    relationId = coerceRelationId(bySlug);
+    relationIdentifier = coerceRelationIdentifier(bySlug);
   }
 
-  if (relationId) {
-    cache.set(identifier, relationId);
-    return relationId;
+  if (relationIdentifier) {
+    cache.set(identifier, relationIdentifier);
+    return relationIdentifier;
   }
 
   cache.set(identifier, null);
@@ -133,12 +149,12 @@ const normalizeCommentRelations = async (strapi) => {
         continue;
       }
 
-      const resolvedRelationId = await resolvePostRelationId(strapi, identifier, cache);
-      if (!resolvedRelationId) {
+      const resolvedRelationIdentifier = await resolvePostRelationIdentifier(strapi, identifier, cache);
+      if (!resolvedRelationIdentifier) {
         continue;
       }
 
-      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedRelationId}`;
+      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedRelationIdentifier}`;
       if (normalizedRelation === comment.related) {
         continue;
       }
@@ -150,9 +166,9 @@ const normalizeCommentRelations = async (strapi) => {
       normalizedCount += 1;
     }
 
-    if (normalizedCount > 0) {
-      strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to entry IDs.`);
-    }
+      if (normalizedCount > 0) {
+        strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to document identifiers.`);
+      }
   } catch (error) {
     strapi.log.error('[comments] Failed to normalize comment relations.', error);
   }
