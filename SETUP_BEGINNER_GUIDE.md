@@ -3,10 +3,9 @@
 このドキュメントは、初めて Node.js や Strapi、Astro を触る方でも環境構築からローカル確認、本番公開の流れまで一通り体験できるように丁寧に説明しています。作業に不慣れな場合は、上から順番に読みながら手を動かしてみてください。
 
 ## 0. 全体像をつかむ
-- **CMS (/cms)**: Strapi v5.27.0 で記事・タグ・メディアを管理する管理画面と API。
+- **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
-- **カスタムフィールド**: 2025-10-27 に Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドへ戻しました。Windows で `Unsupported field type: plugin::font-scale-range.scale` が解消しきれなかったためです。現在は管理画面の数値入力で 0.7〜1.8 の範囲を直接編集し、空欄なら記事既定値 (1.0 倍) を適用します。値の丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js`（`clampScaleValue`）で制御しているので、必要に応じて調整してください。履歴と検証ログは AGENTS.md にまとまっています。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
@@ -50,12 +49,10 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    | DB | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` など | `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は `OCI_*` を設定 | `oci` |
-   | メール | `SMTP_*` | 通知メール設定。開発時は `SMTP_HOST=127.0.0.1` が自動投入され、通知メールは送信されずにスキップされます。 | Gmail や SendGrid 等 |
+   | メール | `SMTP_*` | 通知メール設定 | Gmail や SendGrid 等 |
    | コメント | `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` | コメント通知に使用するサイト URL と通知先メールアドレス | `https://example.pages.dev` / `contact@example.com` |
    | コメント | `COMMENTS_ENABLED_COLLECTIONS` / `COMMENTS_APPROVAL_FLOW` | コメントを許可するコンテンツタイプと承認フロー設定 | `api::post.post` |
    | コメント | `COMMENTS_MODERATOR_ROLES` / `COMMENTS_BAD_WORDS` | 通知を受け取るロール / NG ワードフィルタの有効・無効 | `Authenticated` / `true` |
-   | コメント | `COMMENTS_STAFF_EMAILS` / `COMMENTS_STAFF_EMAIL_DOMAINS` / `COMMENTS_STAFF_AUTHOR_IDS` | 運営バッジを付与したいメールアドレス・ドメイン・Strapi 管理ユーザー ID。空欄のままでも `authorUser` で判定されます。 | (空文字で運用可) |
-   | コメント | `COMMENTS_STAFF_BADGE_LABEL` | バッジに表示するラベル文言。 | `運営` |
 
    > `.env` をプレースホルダーのままにすると、Strapi が GitHub Actions 連携を自動的にスキップし、開発環境で 401 エラーが発生しません。実際に連携させたいタイミングで GitHub Secrets を発行し、`local-owner` や `github-token-placeholder` を本番値に差し替えましょう。ログに `[github] Webhook dispatch skipped` が出ていればスキップされています。
 
@@ -162,8 +159,6 @@ cd ..
 
 `/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` も `scripts/run-strapi.mjs` により Node 20 / Windows / WSL で安定して動作するようになりました。極端にメモリが少ない環境 (2GB 未満) では Vite がクラッシュする可能性があるため、その場合は公式 `strapi/strapi:5`（Node 18 ベース）コンテナでビルドするか、ホストでビルド済みの管理画面をコピーする運用を検討してください。
 
-> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール環境で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生します。ドキュメント更新時点では CI 環境に依存がないため、ローカルで検証するときは先に `npm install` を実行してください。
-
 
 > ✅ **2025-10-02 JST 動作検証ログ**: Node.js 20.19.4 + npm 10.8 (Debian/WSL) で `npm install` → `npm run develop` → `npm run build`（/cms）と `npm install` → `npm run build`（/web）を順番に実行し、すべて成功することを確認しました。Strapi 起動時には `[github] Webhook dispatch skipped` のデバッグメッセージが表示され、GitHub 連携が未設定でも 401 が発生しないことを確認済みです。
 
@@ -186,28 +181,24 @@ npm run dev
 
 - Strapi がまだ起動していなくてもコマンドが自動で待機し、CMS が利用可能になり次第サーバーが立ち上がります（既定ではタイムアウトなし。必要に応じて `STRAPI_WAIT_TIMEOUT_MS` で上限ミリ秒を指定できます）。
 - ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
-- トップページのカードに表示されるカバー画像は 16:9 の最大 140px（モバイルは 4:3・最大 110px）へ縮小されるため、旧レイアウトよりもタイルが詰まって見える点に注意してください。過去のスクリーンショットと比較しても意図した縮尺であることを確認します。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
-  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（Document ID や slug しか手元にない場合でも、バックエンドが対象記事を解決してエントリー ID へ変換して保存します。CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
-  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（数値エントリー ID）や `documentId`（UUID）など識別子が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Strapi 5.27.0 では数値エントリー ID が正規キーのため、Document ID や slug しか得られない場合でもバックエンドが起動時・投稿時にエントリー ID へ再解決します。必要に応じて CMS を再起動し、ログに relation normalization メッセージが出力されるか確認してください。
+  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
+  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
-  - 管理画面でコメントを「ブロック」または「削除」すると、フロントエンドでは返信のないスレッドから自動的に除外され、返信が残っている場合のみ「このコメントは管理者によって非表示になりました。」のプレースホルダーが表示されます。ブロック済みコメントが一覧に残る場合は Strapi 側でコメント状態が更新されているか、キャッシュをクリアして再読込してください。
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
 ### 6-3. Comments プラグインを有効化してコメントを確認する
 1. Strapi 管理画面で **Settings → Comments** を開き、`Posts (api::post.post)` が **Enabled Collections** に追加されていることを確認します。承認制にしたい場合は **Approval Flow** にも `api::post.post` を登録し、`/web/.env` の `PUBLIC_COMMENTS_REQUIRE_APPROVAL` と一致させてください。
-2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。デフォルトでは `SMTP_HOST=127.0.0.1` が自動投入されており、このままだと通知は送信されません。実際にメールを飛ばしたい場合は実在する SMTP ホストと資格情報に置き換え、迷惑メール扱いにならないか送信テストも行ってください。
+2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。返信が付くと入力されたメールアドレス宛に通知が飛ぶため、送信テストで迷惑メール扱いにならないかも確認しましょう。
 3. Strapi 起動時の bootstrap が `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` を自動付与します。ロールを手動で編集した後は、必要に応じて再起動して権限が復元されたかをチェックしてください。
 4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
-7. コメントフォームのメール欄は任意入力ですが、VirtusLab Comments 3.1.0 がメールアドレスを必須項目として検証するため、空欄や不正な値で送信した場合はフロントエンド側で `@comments.local` ドメインのダミーアドレスを生成して API リクエストを行います（ダミー宛に通知は送信されません）。バックエンドも同じドメインで不足分を補完します。返信通知を受け取りたい場合は正しいメールアドレスを入力してください（API から外部公開はされません）。
+7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
 8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
-9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプしたうえで `ctx.request.querystring`・`ctx.querystring`・`ctx.state.query.pagination` へ書き戻すため、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
-10. 運営アカウントの返信は `COMMENTS_STAFF_*` と `authorUser` の情報から自動判定され、Web 側ではオレンジ色の「運営」バッジ（星アイコン付き）と名前色の強調が適用されます。新しい運営メールやドメインを登録した場合は `.env` を更新し、Strapi を再起動してから動作を確認してください。
 
 
 ### 6-4. ブロックエディタで装飾する
@@ -218,7 +209,7 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
-- Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドで 0.7〜1.8 倍の範囲を入力できます。空欄にすると記事の `bodyFontScale` 設定を継承し（既定 1.0 倍）、Astro 側は CSS 変数とインラインスタイルを使って倍率を即時に適用します。
+- Rich Text ブロックにはカスタムフィールド「文字サイズ倍率」があり、スライダー（0.7〜1.8 倍）または数値入力で記事全体の既定値に対する倍率を調整できます。空欄のまま保存すると記事の `bodyFontScale` 設定を継承します。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。

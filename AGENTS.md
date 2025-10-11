@@ -9,6 +9,23 @@
 
 ---
 
+## 2025-10-11 ロールバックメモ（`ca485eb` ベースへ復元）
+
+- ユーザー要望により、Strapi コメント管理画面が正常に閲覧できていたコミット `ca485eb0764fef241594ef9487ec60c30d236e58` 時点のソースに戻しました。
+- 直近で導入していた変更はすべて撤回済み：
+  - コメント UI の運営バッジ表示、名前色変更、fontScale のネイティブ decimal 化など。
+  - Comments プラグインへの追加サニタイザや limit クエリ再構築、Document ID 優先の正規化といった拡張。
+  - font-scale-range / font-scale-slider など新規カスタムフィールド、Strapi 5.27.0 系パッチファイル。
+- 復元後の主要構成：
+  - Strapi 5.26.0（`cms/package.json` 参照）。`cms/patches` は 5.26.0 系パッチのみ。
+  - コメント拡張（`cms/src/extensions/comments/strapi-server.js`）は数値 ID / Document ID / slug の順に解決する既存ロジック。
+  - Typography Scale カスタムフィールド（`cms/src/plugins/typography-scale`）を含む旧構成を再配置。
+  - フロントエンドはコメントバッジや fontScale 強制スタイルなしの旧 UI に戻し、投稿カードのカバー画像も元サイズへ戻しています。
+- 依存関係の追加なし。npm install / build コマンドは未実行（環境制約）。ローカル検証時は `cd cms && npm install && CI=1 npm run build`、`cd web && npm install && npm run build` を推奨。
+- 5.27.0 期に追記したセクションは履歴として残存しています。現行運用と齟齬がある場合は随時読み替えてください。
+
+---
+
 ## 0. リポジトリ全体像
 
 - モノレポ構成

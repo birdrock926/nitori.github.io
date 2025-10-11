@@ -34,76 +34,20 @@ const parseLines = (content) => {
   return { lines, map, order };
 };
 
-const PLACEHOLDER_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev|pages\.dev)$/i;
-
-const isPlaceholderHost = (value) => {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return true;
-  }
-
-  return PLACEHOLDER_HOST_PATTERN.test(trimmed);
-};
-
 const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
 const randomKeys = () => Array.from({ length: 4 }, () => randomHex(16)).join(',');
 
-const isPlaceholderUrl = (value) => {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return true;
-  }
-
-  try {
-    const { hostname } = new URL(trimmed);
-    if (PLACEHOLDER_HOST_PATTERN.test(hostname)) {
-      return true;
-    }
-  } catch {
-    // Ignore parse failures and fall back to pattern matching against the raw string.
-  }
-
-  return PLACEHOLDER_HOST_PATTERN.test(trimmed);
-};
-
-const ensureValue = (key, generator, state, changes, options = {}) => {
-  const { treatAsMissing, allowEmpty = false } = options;
-  const rawValue = process.env[key] ?? state.map.get(key);
-  const normalized =
-    typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-
-  const isExplicitlyMissing = normalized === undefined || normalized === null;
-  const isEmptyString = typeof normalized === 'string' && normalized.length === 0;
-
-  let isMissing =
-    isExplicitlyMissing ||
-    (!allowEmpty && isEmptyString) ||
-    (typeof normalized === 'string' && /replace-with/i.test(normalized));
-
-  if (!isMissing && typeof treatAsMissing === 'function') {
-    isMissing = treatAsMissing(normalized);
-  }
-
-  if (isMissing) {
+const ensureValue = (key, generator, state, changes) => {
+  const current = process.env[key] ?? state.map.get(key);
+  if (!current || /replace-with/i.test(current) || current.trim() === '') {
     const next = generator();
-    const stored = typeof next === 'string' ? next.trim() : next ?? '';
-    state.map.set(key, stored);
-    process.env[key] = stored;
+    state.map.set(key, next);
+    process.env[key] = next;
     changes.push(key);
-    return;
+  } else {
+    state.map.set(key, current.trim());
+    process.env[key] = current.trim();
   }
-
-  const stored = typeof normalized === 'string' ? normalized : normalized ?? '';
-  state.map.set(key, stored);
-  process.env[key] = stored;
 };
 
 const writeEnvFile = (state) => {
@@ -132,13 +76,7 @@ const main = () => {
 
   ensureValue('HOST', () => '0.0.0.0', state, changes);
   ensureValue('PORT', () => '1337', state, changes);
-  ensureValue(
-    'PUBLIC_URL',
-    () => process.env.PUBLIC_URL || 'http://localhost:1337',
-    state,
-    changes,
-    { treatAsMissing: isPlaceholderUrl },
-  );
+  ensureValue('PUBLIC_URL', () => process.env.PUBLIC_URL || 'http://localhost:1337', state, changes);
   ensureValue('APP_KEYS', randomKeys, state, changes);
   ensureValue('API_TOKEN_SALT', () => randomHex(16), state, changes);
   ensureValue('ADMIN_JWT_SECRET', () => randomHex(32), state, changes);
@@ -162,13 +100,7 @@ const main = () => {
   ensureValue('UPLOAD_PROVIDER', () => 'local', state, changes);
   ensureValue('UPLOAD_SIZE_LIMIT', () => '268435456', state, changes);
 
-  ensureValue(
-    'SMTP_HOST',
-    () => '127.0.0.1',
-    state,
-    changes,
-    { treatAsMissing: isPlaceholderHost },
-  );
+  ensureValue('SMTP_HOST', () => 'smtp.example.com', state, changes);
   ensureValue('SMTP_PORT', () => '587', state, changes);
   ensureValue('SMTP_SECURE', () => 'false', state, changes);
   ensureValue('SMTP_USERNAME', () => 'apikey', state, changes);
@@ -176,13 +108,7 @@ const main = () => {
   ensureValue('SMTP_FROM', () => 'Kininatta News <noreply@example.com>', state, changes);
   ensureValue('SMTP_REPLY_TO', () => 'contact@example.com', state, changes);
 
-  ensureValue(
-    'COMMENTS_CLIENT_URL',
-    () => process.env.COMMENTS_CLIENT_URL || 'http://localhost:4321',
-    state,
-    changes,
-    { treatAsMissing: isPlaceholderUrl },
-  );
+  ensureValue('COMMENTS_CLIENT_URL', () => process.env.COMMENTS_CLIENT_URL || 'http://localhost:4321', state, changes);
   ensureValue(
     'COMMENTS_CONTACT_EMAIL',
     () => process.env.COMMENTS_CONTACT_EMAIL || process.env.SMTP_REPLY_TO || 'contact@example.com',
@@ -195,10 +121,6 @@ const main = () => {
   ensureValue('COMMENTS_BLOCKED_AUTHOR_PROPS', () => 'email', state, changes);
   ensureValue('COMMENTS_BAD_WORDS', () => 'true', state, changes);
   ensureValue('COMMENTS_VALIDATION_ENABLED', () => 'true', state, changes);
-  ensureValue('COMMENTS_STAFF_EMAILS', () => '', state, changes, { allowEmpty: true });
-  ensureValue('COMMENTS_STAFF_EMAIL_DOMAINS', () => '', state, changes, { allowEmpty: true });
-  ensureValue('COMMENTS_STAFF_AUTHOR_IDS', () => '', state, changes, { allowEmpty: true });
-  ensureValue('COMMENTS_STAFF_BADGE_LABEL', () => '運営', state, changes);
 
   if (changes.length > 0 && !isBuildLike) {
     writeEnvFile(state);

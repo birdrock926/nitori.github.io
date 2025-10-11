@@ -972,6 +972,33 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
     [isEnabled, relationCandidates, reportDetails, reportReason],
   );
 
+  const isModeratorComment = useCallback((comment: CommentNode) => {
+    const author = comment.author;
+    if (!author) {
+      return false;
+    }
+
+    if (author.moderator === true) {
+      return true;
+    }
+
+    const candidateValues = [
+      typeof author.badge === 'string' ? author.badge : undefined,
+      ...(author.badges ?? []),
+      author.role,
+      ...(author.roles ?? []),
+      author.type,
+    ]
+      .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+      .filter((value) => value.length > 0);
+
+    if (candidateValues.some((value) => /moderator|モデレーター|admin|staff|管理者|editor/.test(value))) {
+      return true;
+    }
+
+    return false;
+  }, []);
+
   const renderStatusPill = useCallback((comment: CommentNode) => {
     if (comment.removed || comment.blocked) {
       return <span className="comment-status-pill comment-status-pill--blocked">非表示</span>;
@@ -1001,12 +1028,14 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
         !reportSubmitting &&
         isPubliclyVisible(comment);
 
+      const isModerator = isModeratorComment(comment);
       const sanitizedContent = sanitizeContent(comment.content || '');
       const isLongComment = sanitizedContent.length > LONG_COMMENT_PREVIEW;
       const isExpanded = expandedComments[comment.id] ?? false;
       const isCollapsed = isLongComment && !isExpanded;
       const showContent = !isHidden && !isPending;
       const showReadMore = showContent && isLongComment;
+      const moderatorLabel = comment.author?.badge || comment.author?.badges?.[0] || 'モデレーター';
       const displayAuthorName = comment.author?.name?.trim().length
         ? comment.author.name.trim()
         : fallbackAuthorName;
@@ -1020,10 +1049,19 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       }
 
       return (
-        <div key={comment.id} className="comment-item" data-comment-id={comment.id}>
+        <div
+          key={comment.id}
+          className={`comment-item${isModerator ? ' comment-item--moderator' : ''}`}
+          data-comment-id={comment.id}
+        >
           <div className="comment-header">
             <div className="comment-author">
-              <span className="comment-author__name">{displayAuthorName}</span>
+              <span className={`comment-author__name${isModerator ? ' comment-author__name--moderator' : ''}`}>
+                {displayAuthorName}
+              </span>
+              {isModerator ? (
+                <span className="comment-moderator-badge" aria-label="モデレーターの返信">{moderatorLabel}</span>
+              ) : null}
             </div>
             <div className="comment-meta">
               {comment.createdAt && (
@@ -1179,6 +1217,7 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
       handleReportClick,
       handleReportSubmit,
       headingId,
+      isModeratorComment,
       isEnabled,
       mergedConfig.maxLength,
       renderStatusPill,
