@@ -1,7 +1,7 @@
 import pluginId from './pluginId';
 import register from './register';
 
-const pluginName = 'Font scale slider';
+const pluginName = 'Font scale range';
 
 export default {
   register(app) {

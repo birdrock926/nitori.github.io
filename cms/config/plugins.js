@@ -5,8 +5,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const hasFontScaleSliderPlugin = () => {
-  const pluginDir = path.join(__dirname, '..', 'src', 'plugins', 'font-scale-slider');
+const hasFontScaleRangePlugin = () => {
+  const pluginDir = path.join(__dirname, '..', 'src', 'plugins', 'font-scale-range');
   return fs.existsSync(pluginDir);
 };
 
@@ -184,8 +184,8 @@ export default ({ env }) => {
     },
   };
 
-  if (hasFontScaleSliderPlugin()) {
-    config['font-scale-slider'] = {
+  if (hasFontScaleRangePlugin()) {
+    config['font-scale-range'] = {
       enabled: true,
     };
   }

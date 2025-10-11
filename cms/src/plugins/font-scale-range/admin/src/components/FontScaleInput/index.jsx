@@ -109,7 +109,7 @@ const formatMessage = (message, fallback, values) => {
     try {
       return intl.formatMessage(message, values);
     } catch (error) {
-      console.warn('[font-scale-slider] failed to format message', { message, error });
+      console.warn('[font-scale-range] failed to format message', { message, error });
     }
   }
 
@@ -198,18 +198,18 @@ class FontScaleInput extends React.PureComponent {
 
     const statusMessage = isUsingDefault
       ? formatMessage(
-          { id: 'font-scale-slider.field.usingDefault', defaultMessage: '記事既定の文字サイズ（{value}倍）を使用しています。' },
+          { id: 'font-scale-range.field.usingDefault', defaultMessage: '記事既定の文字サイズ（{value}倍）を使用しています。' },
           `記事既定の文字サイズ（${displayText}倍）を使用しています。`,
           { value: displayText },
         )
       : formatMessage(
-          { id: 'font-scale-slider.field.preview', defaultMessage: '現在の倍率: {value}倍' },
+          { id: 'font-scale-range.field.preview', defaultMessage: '現在の倍率: {value}倍' },
           `現在の倍率: ${displayText}倍`,
           { value: displayText },
         );
 
     const sliderLabel = formatMessage(
-      { id: 'font-scale-slider.field.slider', defaultMessage: '文字サイズ倍率スライダー' },
+      { id: 'font-scale-range.field.slider', defaultMessage: '文字サイズ倍率スライダー' },
       '文字サイズ倍率スライダー',
     );
 
@@ -220,7 +220,7 @@ class FontScaleInput extends React.PureComponent {
             <Field.Label action={labelAction}>{labelText}</Field.Label>
             <Button variant="tertiary" size="S" onClick={this.handleReset} disabled={disabled}>
               {formatMessage(
-                { id: 'font-scale-slider.field.reset', defaultMessage: '既定値に戻す' },
+                { id: 'font-scale-range.field.reset', defaultMessage: '既定値に戻す' },
                 '既定値に戻す',
               )}
             </Button>
@@ -246,7 +246,7 @@ class FontScaleInput extends React.PureComponent {
               id={`${name}-number`}
               type="number"
               label={formatMessage(
-                { id: 'font-scale-slider.field.inputLabel', defaultMessage: '倍率' },
+                { id: 'font-scale-range.field.inputLabel', defaultMessage: '倍率' },
                 '倍率',
               )}
               name={`${name}-number`}

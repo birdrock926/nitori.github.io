@@ -19,7 +19,7 @@ const hasRegisteredField = (app) => {
       ? existing.some((field) => field && field.pluginId === pluginId && field.name === FIELD_NAME)
       : false;
   } catch (error) {
-    console.warn('[font-scale-slider] failed to inspect registered custom fields', error);
+    console.warn('[font-scale-range] failed to inspect registered custom fields', error);
     return false;
   }
 };
@@ -97,7 +97,7 @@ const register = (app) => {
   try {
     registerField(app);
   } catch (error) {
-    console.error('[font-scale-slider] failed to register custom field', error);
+    console.error('[font-scale-range] failed to register custom field', error);
   }
 };
 

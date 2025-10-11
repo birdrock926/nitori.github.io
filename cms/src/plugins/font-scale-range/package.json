@@ -1,5 +1,5 @@
 {
-  "name": "font-scale-slider",
+  "name": "font-scale-range",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -15,8 +15,8 @@
     "strapi-server.js"
   ],
   "strapi": {
-    "name": "font-scale-slider",
-    "description": "Custom field plugin that exposes a slider to adjust rich text font scale",
+    "name": "font-scale-range",
+    "description": "Custom field that exposes a range slider for rich text font scaling",
     "kind": "plugin"
   }
 }

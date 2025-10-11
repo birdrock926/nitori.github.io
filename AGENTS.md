@@ -463,10 +463,10 @@
   - Typography Scale プラグイン撤去後、Rich Text の `fontScale` を標準数値フィールドで入力する運用では編集体験が乏しく、倍率を変更してもプレビューしづらいとのフィードバックがあった。また、Strapi 管理画面の Rich Text ブロックでフォント倍率を調整しても Astro 側の出力が変化しないとの報告を受け、入力 UI と値の保存過程を再監査した。
   - コメント機能ではブロック済みコメントがフロントエンドに常時「このコメントは管理者によって非表示になりました。」と表示され、返信が無い場合でも placeholder が残ってしまい閲覧体験を損ねていた。`lazyLoadComponents → setStore` ループは解消されたが、コメントツリー側での非表示処理が未調整だったためである。
 - **対応**:
-  1. Strapi ローカルプラグイン `cms/src/plugins/font-scale-slider/` を新規作成し、カスタムフィールド `plugin::font-scale-slider.scale` を登録。【F:cms/src/plugins/font-scale-slider/admin/src/index.js†L1-L20】【F:cms/src/plugins/font-scale-slider/admin/src/register.js†L1-L79】 `app.customFields.getAll()` で冪等確認した上で登録し、`app.registerPlugin` は未登録時のみ実行して `lazyLoadComponents → setStore` の再発を防止した。
-  2. 管理画面コンポーネント `FontScaleInput` をクラスベースで実装し、`useEffect` や `useState` を使わずに Strapi のフォーム API (`onChange({ target: { name, value, type } })`) へ直接通知。【F:cms/src/plugins/font-scale-slider/admin/src/components/FontScaleInput/index.jsx†L1-L211】 スライダーと数値入力は同じ正規化ロジック (`normalizeValue`) を共有し、初期値が `null` の場合はオプション既定値（1.0 倍）をプレビューのみに反映してフィールド値は `null` を維持する。
+  1. Strapi ローカルプラグイン `cms/src/plugins/font-scale-range/`（導入当初は `font-scale-slider` 名称。2025-10-26 にサーバー登録を追加して現名称へ置き換え済み）を新規作成し、カスタムフィールド `plugin::font-scale-range.scale` を登録。【F:cms/src/plugins/font-scale-range/admin/src/index.js†L1-L22】【F:cms/src/plugins/font-scale-range/admin/src/register.js†L1-L104】 `app.customFields.getAll()` で冪等確認した上で登録し、`app.registerPlugin` は未登録時のみ実行して `lazyLoadComponents → setStore` の再発を防止した。
+  2. 管理画面コンポーネント `FontScaleInput` をクラスベースで実装し、`useEffect` や `useState` を使わずに Strapi のフォーム API (`onChange({ target: { name, value, type } })`) へ直接通知。【F:cms/src/plugins/font-scale-range/admin/src/components/FontScaleInput/index.jsx†L1-L211】 スライダーと数値入力は同じ正規化ロジック (`normalizeValue`) を共有し、初期値が `null` の場合はオプション既定値（1.0 倍）をプレビューのみに反映してフィールド値は `null` を維持する。
   3. コンポーネントスキーマ `cms/src/components/content/rich-text.json` をカスタムフィールド参照へ更新し、最小値・最大値・刻み幅・既定表示値を `options` に明示。【F:cms/src/components/content/rich-text.json†L10-L20】 `default: null` を指定して記事既定値の継承を維持しつつ、ライフサイクル `clampScaleValue` で 0.7〜1.8 倍に丸め込む既存ロジックと整合させた。
-  4. `cms/config/plugins.js` に `font-scale-slider` を登録し、Strapi プロジェクト起動時にプラグインが有効化されるよう設定。【F:cms/config/plugins.js†L105-L108】
+  4. `cms/config/plugins.js` に `font-scale-range` を登録し、Strapi プロジェクト起動時にプラグインが有効化されるよう設定。【F:cms/config/plugins.js†L187-L190】
   5. コメント UI (`web/src/components/comments/CommentsApp.tsx`) に `pruneHiddenComments()` を追加し、`blocked` / `removed` コメントを再帰的に除外。返信が存在するノードのみ placeholder を残すよう `renderComment()` を調整し、トップレベル・子レベルのいずれでも不要な「非表示」メッセージが出なくなった。【F:web/src/components/comments/CommentsApp.tsx†L55-L102】【F:web/src/components/comments/CommentsApp.tsx†L392-L470】【F:web/src/components/comments/CommentsApp.tsx†L1049-L1163】
 - **検証**:
   - `cd cms && npm install --no-progress --no-fund --no-audit`
@@ -477,43 +477,57 @@
   - Font Scale Slider の `options` を変更する際は、プラグイン登録コードとライフサイクル `clampScaleValue` の上下限・刻み幅が一致しているかを同時に確認する。React コンポーネントに副作用を追加すると dispatcher 未初期化環境で再び `Invalid hook call` が発生するため、クラスベースもしくは副作用ゼロの関数コンポーネントを維持すること。
   - コメント表示ロジックを更新する際は `pruneHiddenComments()` で `blocked` / `removed` ノードが除外されるか、`renderComment()` が `null` を返しても親の `.map()` が破綻しないかをブラウザで確認する。モデレーター向けの placeholder は返信が存在する場合のみ描画するルールを維持し、UI 文言を変更する場合は README / SETUP / 本書を同時更新する。
 
-### 2025-10-24 追記: Font Scale Slider プラグインのメタデータ修正とロードガード
+### 2025-10-24 追記: Font Scale Range（旧 Font Scale Slider）プラグインのメタデータ修正とロードガード
 
-- **背景**: Windows 環境で `npm run develop` を実行した際に Strapi CLI が `Error loading the plugin font-scale-slider because font-scale-slider is not installed.` と表示して起動に失敗。`cms/src/plugins/font-scale-slider/package.json` に `strapi.kind` が含まれておらず、Strapi 5 のプラグインローダーがローカルプラグインとして認識できていなかった。また `cms/config/plugins.js` が無条件で `'font-scale-slider': { enabled: true }` を返していたため、プラグインディレクトリが欠落した環境でも同じエラーが発生するリスクがあった。
+- **背景**: Windows 環境で `npm run develop` を実行した際に Strapi CLI が `Error loading the plugin font-scale-slider because font-scale-slider is not installed.` と表示して起動に失敗。命名変更前の `font-scale-slider`（現 `font-scale-range`）の `package.json` に `strapi.kind` が含まれておらず、Strapi 5 のプラグインローダーがローカルプラグインとして認識できていなかった。また `cms/config/plugins.js` が無条件で `'font-scale-slider': { enabled: true }` を返していたため、プラグインディレクトリが欠落した環境でも同じエラーが発生するリスクがあった。
 - **対応**:
-  1. `cms/src/plugins/font-scale-slider/package.json` に `strapi.description` と `strapi.kind: "plugin"` を追加し、Strapi のプラグイン検出要件を満たすよう修正。【F:cms/src/plugins/font-scale-slider/package.json†L1-L7】
-  2. `cms/config/plugins.js` に `fs.existsSync` と `fileURLToPath` を導入してローカルプラグインディレクトリの存在確認を行い、存在するときのみ `'font-scale-slider'` 設定を追加するよう更新。これにより、チェックアウト漏れや将来の削除作業時も安全に起動できる。【F:cms/config/plugins.js†L1-L21】【F:cms/config/plugins.js†L150-L174】
+  1. `cms/src/plugins/font-scale-range/package.json` に `strapi.description` と `strapi.kind: "plugin"` を追加し、Strapi のプラグイン検出要件を満たすよう修正（旧名称からの置き換え時も継承）。【F:cms/src/plugins/font-scale-range/package.json†L1-L19】
+  2. `cms/config/plugins.js` に `fs.existsSync` と `fileURLToPath` を導入してローカルプラグインディレクトリの存在確認を行い、存在するときのみ `'font-scale-range'` 設定を追加するよう更新。これにより、チェックアウト漏れや将来の削除作業時も安全に起動できる。【F:cms/config/plugins.js†L1-L21】【F:cms/config/plugins.js†L187-L190】
 - **検証**:
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
 - **備考**: プラグインディレクトリを削除した状態で Strapi を起動すると `fontScale` フィールドは標準の小数入力にフォールバックする。再度プラグインを利用する場合は Git からディレクトリを復元し、`npm run build` で管理画面の再ビルドを実施すること。
 
-### 2025-10-25 追記: npm 依存としての Font Scale Slider 登録
+### 2025-10-25 追記: npm 依存としての Font Scale Range 登録
 
-- **背景**: Windows 環境で `npm run develop` を実行すると、`Error loading the plugin font-scale-slider because font-scale-slider is not installed.` が再発。`cms/config/plugins.js` 側のディレクトリ存在チェックは成功しており、プラグインフォルダもリポジトリに含まれているにもかかわらず、Strapi のプラグインローダーが `node_modules/font-scale-slider` を検出できずに失敗していた。`npm ls font-scale-slider` を確認したところ依存ツリーにプラグインが出現しておらず、`package.json` にローカルファイル依存が未登録のままだったことが原因と判明。macOS/Linux では `require.resolve` が `src/plugins` 以下をフォールバック参照するため発覚が遅れていた。
+- **背景**: Windows 環境で `npm run develop` を実行すると、`Error loading the plugin font-scale-slider because font-scale-slider is not installed.` が再発。`cms/config/plugins.js` 側のディレクトリ存在チェックは成功しており、プラグインフォルダもリポジトリに含まれているにもかかわらず、Strapi のプラグインローダーが `node_modules/font-scale-range` を検出できずに失敗していた。`npm ls font-scale-slider` を確認したところ依存ツリーにプラグインが出現しておらず、`package.json` にローカルファイル依存が未登録のままだったことが原因と判明。macOS/Linux では `require.resolve` が `src/plugins` 以下をフォールバック参照するため発覚が遅れていた。
 - **対応**:
-  1. `cms/package.json` の `dependencies` に `"font-scale-slider": "file:src/plugins/font-scale-slider"` を追加し、`npm install` がローカルプラグインを `node_modules/font-scale-slider` へシンボリックリンクするよう明示。これにより Strapi の `loadPlugins()` が依存解決に成功する。
-  2. README / SETUP_BEGINNER_GUIDE にローカル依存を追加した旨と、`npm install` 実行で Windows/macOS でも確実にリンクされることを追記。既存のディレクトリ存在ガードとの役割分担（依存は必須だが、何らかの理由でディレクトリが欠落した場合は自動的にスキップ）も明文化した。
-  3. `strapi-admin.js` を ES Modules 形式へ書き換え、`export default` で `admin/src/index.js` のプラグインオブジェクトを再公開。従来の CommonJS `module.exports = require(...).default` だと Vite のビルドで「`"default" is not exported`」エラーとなり、`npm run build` / `npm run develop` が中断していた。同時に `strapi-server.js` も `export default` を返す最小実装へ統一し、将来の拡張時に ESM ベースで追記できるようにした。
+  1. `cms/package.json` の `dependencies` に `"font-scale-range": "file:src/plugins/font-scale-range"` を追加し、`npm install` がローカルプラグインを `node_modules/font-scale-range` へシンボリックリンクするよう明示。これにより Strapi の `loadPlugins()` が依存解決に成功する。【F:cms/package.json†L1-L56】
+  2. README / SETUP_BEGINNER_GUIDE にローカル依存を追加した旨と、`npm install` 実行で Windows/macOS でも確実にリンクされることを追記。既存のディレクトリ存在ガードとの役割分担（依存は必須だが、何らかの理由でディレクトリが欠落した場合は自動的にスキップ）も明文化した。【F:README.md†L39-L72】【F:SETUP_BEGINNER_GUIDE.md†L1-L13】
+  3. `strapi-admin.js` を ES Modules 形式へ書き換え、`export default` で `admin/src/index.js` のプラグインオブジェクトを再公開。従来の CommonJS `module.exports = require(...).default` だと Vite のビルドで「`"default" is not exported`」エラーとなり、`npm run build` / `npm run develop` が中断していた。同時に `strapi-server.js` も `export default` を返す最小実装へ統一し、将来の拡張時に ESM ベースで追記できるようにした。【F:cms/src/plugins/font-scale-range/strapi-admin.js†L1-L3】【F:cms/src/plugins/font-scale-range/strapi-server.js†L1-L20】
 - **影響**: `npm install` を実行し直すと lockfile なしでもローカルプラグインが `node_modules` に出現し、Strapi の CLI はエラーなく起動できる。プラグインディレクトリを削除した状態で `npm install` を行うと依存解決が失敗するため、ディレクトリ欠落時は依存行をコメントアウトするか、プラグインを Git から復元してから再インストールする運用とする。`cms/config/plugins.js` の存在チェックは引き続き有効で、ディレクトリが存在しなければ設定をスキップする。
 - **検証**:
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
   - Windows ユーザーは再度 `npm run develop` を実行し、プラグイン未インストールエラーが消えたこと、Rich Text ブロックの `fontScale` フィールドがスライダーとして表示されることを手動確認する。
 
-### 2025-10-26 追記: Font Scale Slider の ESM エクスポート整備と infrastructure ディレクトリ維持判断
+### 2025-10-26 追記: Font Scale Range の ESM エクスポート整備と infrastructure ディレクトリ維持判断
 
-- **背景**: Windows ユーザーからローカル依存を追加済みにもかかわらず「`Error loading the plugin font-scale-slider because font-scale-slider is not installed.`」が継続するとの報告があり、`node_modules/font-scale-slider/package.json` に `main` / `exports` / `type` が存在しないために Node.js が `index.js` を探して失敗していることが判明。また、リポジトリ整理の一環として `/infrastructure` ディレクトリを削除してよいか確認したいという要望も挙がった。
+- **背景**: Windows ユーザーからローカル依存を追加済みにもかかわらず「`Error loading the plugin font-scale-slider because font-scale-slider is not installed.`」が継続するとの報告があり、`node_modules/font-scale-slider/package.json` に `main` / `exports` / `type` が存在しないために Node.js が `index.js` を探して失敗していることが判明。命名統一後の `font-scale-range` でも同等の対策が必要である。また、リポジトリ整理の一環として `/infrastructure` ディレクトリを削除してよいか確認したいという要望も挙がった。
 - **対応**:
-  1. `cms/src/plugins/font-scale-slider/package.json` に `private: true`、`type: "module"`、`main: "./strapi-server.js"`、`exports`（`.` / `./strapi-server` / `./strapi-admin`）と `files` 配列を追加。Node.js が CommonJS フォールバックに落ちず `strapi-server.js` を直接解決できるようにしたことで、Strapi の `loadPlugins()` が Windows でも確実に成功するようになった。
+  1. `cms/src/plugins/font-scale-range/package.json` に `private: true`、`type: "module"`、`main: "./strapi-server.js"`、`exports`（`.` / `./strapi-server` / `./strapi-admin`）と `files` 配列を追加。Node.js が CommonJS フォールバックに落ちず `strapi-server.js` を直接解決できるようにしたことで、Strapi の `loadPlugins()` が Windows でも確実に成功するようになった。【F:cms/src/plugins/font-scale-range/package.json†L1-L19】
   2. README / SETUP_BEGINNER_GUIDE / 本書へ `type` / `main` / `exports` を追加した経緯と、旧構成へ戻すと再びロードエラーになることを明記。`npm install` → `CI=1 npm run build` の再実行でエラーが解消される手順も追記した。
-  3. `/cms` で `rm -rf node_modules package-lock.json && npm install --no-progress --no-fund --no-audit` を実施し、`node_modules/font-scale-slider` が生成されることを確認したうえで `CI=1 npm run build` を完走（ログ: `959e37†L1-L5`, `7f5217†L1-L2`）。
+  3. `/cms` で `rm -rf node_modules package-lock.json && npm install --no-progress --no-fund --no-audit` を実施し、`node_modules/font-scale-range` が生成されることを確認したうえで `CI=1 npm run build` を完走（ログ: `959e37†L1-L5`, `7f5217†L1-L2`）。
   4. `/infrastructure` 配下の Docker Compose / Caddyfile / systemd ユニットが現行の OCI 常駐 Strapi 運用と Cloudflare Pages 連携で引き続き利用されていることを再確認。ドキュメントからの参照も多数残っているため、ディレクトリを削除せず維持する決定を README に明文化した。
 - **検証**:
   - `cd cms && rm -rf node_modules package-lock.json && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
   - `ls node_modules/font-scale-slider`（`admin` ディレクトリと `strapi-admin.js` / `strapi-server.js` が展開されていることを確認）
 - **運用メモ**:
-  - `font-scale-slider/package.json` の `type` / `main` / `exports` / `files` を削除すると Windows 環境で再び「プラグイン未インストール」扱いになるため、将来の修正時も必ず維持すること。
+  - `font-scale-range/package.json` の `type` / `main` / `exports` / `files` を削除すると Windows 環境で再び「プラグイン未インストール」扱いになるため、将来の修正時も必ず維持すること。
   - `/infrastructure` を削除する場合は Docker Compose / Caddy / systemd の代替手順を用意し、README・SETUP・本書を同時更新してから実施する。現状は必要資産なので削除しない。
 
+
+### 2025-10-27 追記: Font Scale Range への置き換えとサーバー登録の明示化
+
+- **背景**: `plugin::font-scale-slider.scale` を参照していた Rich Text ブロックで Strapi 起動時に `Could not find Custom Field: plugin::font-scale-slider.scale` が発生。Windows 環境ではローカルプラグインの解決とサーバー側カスタムフィールド登録が不足していると判明したため、命名を `font-scale-range` へ統一すると同時にサーバー登録ロジックを追加した。
+- **対応**:
+  1. `cms/src/plugins/font-scale-range/` を新設し、`admin/src/index.js`・`admin/src/register.js`・`admin/src/components/FontScaleInput/index.jsx` を移行。登録処理は冪等ガード付きで新名称へ更新した。【F:cms/src/plugins/font-scale-range/admin/src/index.js†L1-L22】【F:cms/src/plugins/font-scale-range/admin/src/register.js†L1-L104】【F:cms/src/plugins/font-scale-range/admin/src/components/FontScaleInput/index.jsx†L1-L211】
+  2. サーバー側で `strapi.customFields.register` を実行するため、`cms/src/plugins/font-scale-range/strapi-server.js` を追加し、重複登録時は警告のみに抑えるようエラーハンドリングを調整した。【F:cms/src/plugins/font-scale-range/strapi-server.js†L1-L20】
+  3. `cms/src/components/content/rich-text.json` の `fontScale` 属性を `plugin::font-scale-range.scale` へ更新し、既存の最小値/最大値/刻み幅オプションを維持した。【F:cms/src/components/content/rich-text.json†L1-L23】
+  4. `cms/config/plugins.js` の検出関数を `hasFontScaleRangePlugin()` に置き換え、ディレクトリ存在時のみ `font-scale-range` を有効化するロジックへ更新した。【F:cms/config/plugins.js†L1-L21】【F:cms/config/plugins.js†L187-L190】
+  5. ルートドキュメント（README / SETUP_BEGINNER_GUIDE / 本書）から `font-scale-slider` の記述を `font-scale-range` へ差し替え、Windows での `Could not find Custom Field` 再発防止策と検証ログを追記した。【F:README.md†L39-L111】【F:SETUP_BEGINNER_GUIDE.md†L1-L13】【F:AGENTS.md†L440-L518】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+- **今後の指針**: プラグイン名称を変更する場合は `cms/package.json` のローカル依存、`config/plugins.js` の存在チェック、カスタムフィールド参照（components / lifecycles / Web 側レンダリング）を同時に更新し、サーバー起動時の `strapi.customFields.register` で型が宣言されているか確認する。Windows で再び `Could not find Custom Field` が発生した場合は `node_modules/font-scale-range` の生成有無と `strapi-server.js` の登録ログを必ず確認する。
