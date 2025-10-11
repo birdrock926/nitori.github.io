@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 import { STRAPI, TWITCH } from '@config/site';
 
 export type MediaFormat = {
@@ -147,96 +149,73 @@ const escapeHtml = (value: string) =>
 const escapeAttribute = (value: string) =>
   escapeHtml(value).replace(/`/g, '&#96;');
 
-const renderMarkdownInline = (value: string) => {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
-  let cursor = 0;
-  let output = '';
-  let match: RegExpExecArray | null;
+const markdownRenderer = (() => {
+  const renderer = new marked.Renderer();
 
-  while ((match = pattern.exec(value)) !== null) {
-    const [full] = match;
-    const start = match.index;
-    if (start > cursor) {
-      output += escapeHtml(value.slice(cursor, start));
+  renderer.link = (href, title, text) => {
+    const rawHref = typeof href === 'string' ? href.trim() : '';
+    const resolved = ensureAbsoluteUrl(rawHref) ?? rawHref;
+    if (!resolved) {
+      return text ?? '';
     }
+    const safeHref = escapeAttribute(resolved);
+    const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+    const label = text?.length ? text : resolved;
+    return `<a href="${safeHref}" rel="noopener" target="_blank"${titleAttr}>${label}</a>`;
+  };
 
-    if (match[1] !== undefined) {
-      const alt = match[1] ?? '';
-      const url = match[2] ?? '';
-      const title = match[3] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const altAttr = escapeAttribute(alt);
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
-      }
-    } else {
-      const label = match[4] ?? '';
-      const url = match[5] ?? '';
-      const title = match[6] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
-      }
+  renderer.image = (href, title, text) => {
+    const rawSrc = typeof href === 'string' ? href.trim() : '';
+    const resolved = ensureAbsoluteUrl(rawSrc) ?? rawSrc;
+    if (!resolved) {
+      return text ? escapeHtml(text) : '';
     }
+    const altAttr = escapeAttribute(text ?? '');
+    const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+    const caption = title?.trim() ? `<figcaption>${escapeHtml(title.trim())}</figcaption>` : '';
+    return `<figure class="richtext-figure"><img src="${escapeAttribute(resolved)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />${caption}</figure>`;
+  };
 
-    cursor = start + full.length;
-  }
+  renderer.code = (code, infostring) => {
+    const lang = typeof infostring === 'string' ? infostring.trim().split(/\s+/)[0] : '';
+    const classAttr = lang ? ` class="language-${escapeAttribute(lang)}"` : '';
+    return `<pre><code${classAttr}>${escapeHtml(code)}</code></pre>`;
+  };
 
-  if (cursor < value.length) {
-    output += escapeHtml(value.slice(cursor));
-  }
+  renderer.codespan = (code) => `<code>${escapeHtml(code)}</code>`;
+  renderer.strong = (text) => `<strong>${text}</strong>`;
+  renderer.em = (text) => `<em>${text}</em>`;
+  renderer.del = (text) => `<del>${text}</del>`;
+  renderer.paragraph = (text) => `<p>${text}</p>`;
+  renderer.blockquote = (quote) => `<blockquote>${quote}</blockquote>`;
+  renderer.br = () => '<br />';
 
-  return output;
-};
+  return renderer;
+})();
 
-const convertPlainTextToHtml = (value: string) => {
+const renderMarkdown = (value: string) => {
   const normalized = value.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return '';
-
-  const paragraphs = normalized.split(/\n{2,}/);
-  const rendered = paragraphs
-    .map((paragraph) => {
-      const trimmed = paragraph.trim();
-      if (!trimmed) return '';
-
-      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
-      if (figureMatch) {
-        const alt = figureMatch[1] ?? '';
-        const url = figureMatch[2] ?? '';
-        const title = figureMatch[3] ?? '';
-        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-        if (!resolvedUrl) {
-          return `<p>${escapeHtml(trimmed)}</p>`;
-        }
-        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
-        const altAttr = escapeAttribute(alt);
-        const urlAttr = escapeAttribute(resolvedUrl);
-        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
-        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
-      }
-
-      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
-      return `<p>${lines.join('<br />')}</p>`;
-    })
-    .filter((paragraph) => paragraph.length > 0);
-
-  return rendered.join('\n');
+  if (!normalized) {
+    return '';
+  }
+  return (
+    marked.parse(normalized, {
+      gfm: true,
+      breaks: true,
+      mangle: false,
+      headerIds: false,
+      renderer: markdownRenderer,
+    }) ?? ''
+  ).toString().trim();
 };
 
-const normalizeRichMarkup = (value: string) => {
+export const normalizeRichMarkup = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
   if (/<[a-z][^>]*>/i.test(trimmed)) {
     return trimmed;
   }
-  return convertPlainTextToHtml(trimmed);
+  return renderMarkdown(trimmed);
 };
 
 const parseMedia = (value: any): Media | undefined => {

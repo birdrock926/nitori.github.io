@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
 
+import { normalizeRichMarkup } from '@lib/strapi';
+
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 1.8;
 
@@ -28,7 +30,9 @@ const RichTextContent = ({ body, fontScale }: Props) => {
   const style: RichTextStyle | undefined =
     normalizedScale !== null ? { '--richtext-scale': normalizedScale } : undefined;
 
-  return <div className="richtext" style={style} dangerouslySetInnerHTML={{ __html: body }} />;
+  const html = typeof body === 'string' ? normalizeRichMarkup(body) : '';
+
+  return <div className="richtext" style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
 export default RichTextContent;
