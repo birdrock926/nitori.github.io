@@ -147,95 +147,247 @@ const escapeHtml = (value: string) =>
 const escapeAttribute = (value: string) =>
   escapeHtml(value).replace(/`/g, '&#96;');
 
-const renderMarkdownInline = (value: string) => {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
-  let cursor = 0;
-  let output = '';
-  let match: RegExpExecArray | null;
+const INLINE_PLACEHOLDER_BOUNDARY = '\u0000';
 
-  while ((match = pattern.exec(value)) !== null) {
-    const [full] = match;
-    const start = match.index;
-    if (start > cursor) {
-      output += escapeHtml(value.slice(cursor, start));
-    }
-
-    if (match[1] !== undefined) {
-      const alt = match[1] ?? '';
-      const url = match[2] ?? '';
-      const title = match[3] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const altAttr = escapeAttribute(alt);
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
-      }
-    } else {
-      const label = match[4] ?? '';
-      const url = match[5] ?? '';
-      const title = match[6] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
-      }
-    }
-
-    cursor = start + full.length;
-  }
-
-  if (cursor < value.length) {
-    output += escapeHtml(value.slice(cursor));
-  }
-
-  return output;
+const createPlaceholder = (html: string, placeholders: string[]) => {
+  const index = placeholders.length;
+  placeholders.push(html);
+  return `${INLINE_PLACEHOLDER_BOUNDARY}${index}${INLINE_PLACEHOLDER_BOUNDARY}`;
 };
 
-const convertPlainTextToHtml = (value: string) => {
-  const normalized = value.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return '';
+const restorePlaceholders = (value: string, placeholders: string[]) =>
+  value.replace(/\u0000(\d+)\u0000/g, (_, tokenIndex) => placeholders[Number(tokenIndex)] ?? '');
 
-  const paragraphs = normalized.split(/\n{2,}/);
-  const rendered = paragraphs
-    .map((paragraph) => {
-      const trimmed = paragraph.trim();
-      if (!trimmed) return '';
+const applyInlineFormatting = (input: string, placeholders: string[], depth = 0): string => {
+  if (!input) {
+    return '';
+  }
+  if (depth > 5) {
+    return input;
+  }
 
-      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
-      if (figureMatch) {
-        const alt = figureMatch[1] ?? '';
-        const url = figureMatch[2] ?? '';
-        const title = figureMatch[3] ?? '';
-        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-        if (!resolvedUrl) {
-          return `<p>${escapeHtml(trimmed)}</p>`;
+  let output = input;
+  let mutated = false;
+
+  const replacers: Array<[RegExp, (marker: string, content: string) => string]> = [
+    [
+      /(?<!\\)(\*\*\*|___)([\s\S]+?)(?<!\\)\1/g,
+      (_marker, content) => `<strong><em>${applyInlineFormatting(content, placeholders, depth + 1)}</em></strong>`,
+    ],
+    [
+      /(?<!\\)(\*\*|__)([\s\S]+?)(?<!\\)\1/g,
+      (_marker, content) => `<strong>${applyInlineFormatting(content, placeholders, depth + 1)}</strong>`,
+    ],
+    [
+      /(?<!\\)(~~)([\s\S]+?)(?<!\\)\1/g,
+      (_marker, content) => `<del>${applyInlineFormatting(content, placeholders, depth + 1)}</del>`,
+    ],
+    [
+      /(?<!\\)(\*|_)([\s\S]+?)(?<!\\)\1/g,
+      (_marker, content) => `<em>${applyInlineFormatting(content, placeholders, depth + 1)}</em>`,
+    ],
+  ];
+
+  for (const [pattern, wrap] of replacers) {
+    output = output.replace(pattern, (_match, marker: string, content: string) => {
+      mutated = true;
+      return wrap(marker, content);
+    });
+  }
+
+  if (!mutated) {
+    return output;
+  }
+
+  return applyInlineFormatting(output, placeholders, depth + 1);
+};
+
+const renderMarkdownInline = (value: string): string => {
+  if (!value) {
+    return '';
+  }
+
+  const placeholders: string[] = [];
+  const placeholderFor = (html: string) => createPlaceholder(html, placeholders);
+
+  let working = value;
+
+  working = working.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (match, alt, url, title) => {
+    const resolved = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+    if (!resolved) {
+      return match;
+    }
+    const altAttr = escapeAttribute(alt ?? '');
+    const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+    return placeholderFor(
+      `<img src="${escapeAttribute(resolved)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`,
+    );
+  });
+
+  working = working.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (match, label, url, title) => {
+    const resolved = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+    if (!resolved) {
+      return match;
+    }
+    const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+    return placeholderFor(
+      `<a href="${escapeAttribute(resolved)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`,
+    );
+  });
+
+  working = working.replace(/`([^`]+)`/g, (match, code) => placeholderFor(`<code>${escapeHtml(code)}</code>`));
+
+  const escaped = escapeHtml(working).replace(
+    /\\([\\`*_~\[\]()>#+\-.!])/g,
+    (_match, char: string) => escapeHtml(char),
+  );
+
+  const formatted = applyInlineFormatting(escaped, placeholders);
+
+  return restorePlaceholders(formatted, placeholders);
+};
+
+const convertPlainTextToHtml = (value: string): string => {
+  const normalized = value.replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  const blocks: string[] = [];
+  let index = 0;
+  const paragraph: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) {
+      return;
+    }
+    const raw = paragraph.join('\n');
+    paragraph.length = 0;
+    if (!raw.trim()) {
+      return;
+    }
+
+    const trimmed = raw.trim();
+    const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
+    if (figureMatch) {
+      const alt = figureMatch[1] ?? '';
+      const url = figureMatch[2] ?? '';
+      const title = (figureMatch[3] ?? '').trim();
+      const resolved = ensureAbsoluteUrl(url.trim()) ?? url.trim();
+      if (resolved) {
+        const altAttr = escapeAttribute(alt);
+        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+        const caption = title ? `<figcaption>${escapeHtml(title)}</figcaption>` : '';
+        blocks.push(
+          `<figure class="richtext-figure"><img src="${escapeAttribute(resolved)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />${caption}</figure>`,
+        );
+        return;
+      }
+    }
+
+    const html = renderMarkdownInline(raw).replace(/\n/g, '<br />');
+    blocks.push(`<p>${html}</p>`);
+  };
+
+  const consumeBlankLines = () => {
+    while (index < lines.length && lines[index].trim() === '') {
+      index += 1;
+    }
+  };
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (/^\s*```/.test(line)) {
+      flushParagraph();
+      const fence = /^\s*```(\w+)?/.exec(line);
+      const lang = fence?.[1]?.trim() ?? '';
+      index += 1;
+      const codeLines: string[] = [];
+      while (index < lines.length && !/^\s*```/.test(lines[index])) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) {
+        index += 1;
+      }
+      const classAttr = lang ? ` class="language-${escapeAttribute(lang)}"` : '';
+      blocks.push(`<pre><code${classAttr}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+      consumeBlankLines();
+      continue;
+    }
+
+    if (/^\s*>/.test(line)) {
+      flushParagraph();
+      const quoteLines: string[] = [];
+      while (index < lines.length && /^\s*>/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*> ?/, ''));
+        index += 1;
+      }
+      const quoteHtml = convertPlainTextToHtml(quoteLines.join('\n'));
+      blocks.push(`<blockquote>${quoteHtml}</blockquote>`);
+      consumeBlankLines();
+      continue;
+    }
+
+    if (/^\s*[-+*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+      flushParagraph();
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const items: string[] = [];
+      while (
+        index < lines.length &&
+        (ordered ? /^\s*\d+\.\s+/.test(lines[index]) : /^\s*[-+*]\s+/.test(lines[index]))
+      ) {
+        const current = lines[index];
+        index += 1;
+        const contentLines: string[] = [
+          current.replace(ordered ? /^\s*\d+\.\s+/ : /^\s*[-+*]\s+/, ''),
+        ];
+        while (
+          index < lines.length &&
+          lines[index].trim().length > 0 &&
+          !/^\s*[-+*]\s+/.test(lines[index]) &&
+          !/^\s*\d+\.\s+/.test(lines[index]) &&
+          !/^\s*```/.test(lines[index]) &&
+          !/^\s*>/.test(lines[index])
+        ) {
+          contentLines.push(lines[index].replace(/^\s{2,}/, ''));
+          index += 1;
         }
-        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
-        const altAttr = escapeAttribute(alt);
-        const urlAttr = escapeAttribute(resolvedUrl);
-        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
-        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
+        const itemContent = convertPlainTextToHtml(contentLines.join('\n')).trim();
+        if (itemContent.startsWith('<p>') && itemContent.endsWith('</p>')) {
+          items.push(`<li>${itemContent.slice(3, -4)}</li>`);
+        } else if (itemContent) {
+          items.push(`<li>${itemContent}</li>`);
+        } else {
+          items.push('<li></li>');
+        }
+        consumeBlankLines();
       }
+      blocks.push(`${ordered ? '<ol>' : '<ul>'}${items.join('')}${ordered ? '</ol>' : '</ul>'}`);
+      continue;
+    }
 
-      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
-      return `<p>${lines.join('<br />')}</p>`;
-    })
-    .filter((paragraph) => paragraph.length > 0);
+    if (line.trim() === '') {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
 
-  return rendered.join('\n');
+    paragraph.push(line);
+    index += 1;
+  }
+
+  flushParagraph();
+
+  return blocks.join('\n');
 };
 
-const normalizeRichMarkup = (value: string) => {
+export const normalizeRichMarkup = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
+
   if (/<[a-z][^>]*>/i.test(trimmed)) {
     return trimmed;
   }
+
   return convertPlainTextToHtml(trimmed);
 };
 

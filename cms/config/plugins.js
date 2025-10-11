@@ -1,3 +1,5 @@
+const EMPTY_TOKENS = new Set(['', '[]', 'null', 'undefined']);
+
 const parseCsv = (value, fallback = []) => {
   if (!value) {
     return [...fallback];
@@ -6,7 +8,7 @@ const parseCsv = (value, fallback = []) => {
   const items = value
     .split(',')
     .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+    .filter((entry) => !EMPTY_TOKENS.has(entry.toLowerCase()));
 
   if (!items.length) {
     return [...fallback];
@@ -50,6 +52,10 @@ const buildCommentsConfig = (env) => {
     parseCsv(env('COMMENTS_ENABLED_COLLECTIONS'), [defaultCollection]),
     [defaultCollection]
   );
+
+  if (!enabledCollections.includes(defaultCollection)) {
+    enabledCollections.push(defaultCollection);
+  }
   const approvalFlow = withEnsuredCollection(
     parseCsv(env('COMMENTS_APPROVAL_FLOW'), [defaultCollection]),
     []
@@ -137,40 +143,50 @@ const buildUploadConfig = (env) => {
   };
 };
 
-export default ({ env }) => ({
-  seo: {
-    enabled: true,
-  },
-  'users-permissions': {
-    config: {
-      jwtSecret: env('JWT_SECRET'),
+export default ({ env }) => {
+  const config = {
+    seo: {
+      enabled: true,
     },
-  },
-  'color-picker': {
-    enabled: true,
-  },
-  'typography-scale': {
-    enabled: true,
-    resolve: './src/plugins/typography-scale',
-  },
-  upload: buildUploadConfig(env),
-  comments: buildCommentsConfig(env),
-  email: {
-    config: {
-      provider: '@strapi/provider-email-nodemailer',
-      providerOptions: {
-        host: env('SMTP_HOST', 'smtp.example.com'),
-        port: env.int('SMTP_PORT', 587),
-        secure: env.bool('SMTP_SECURE', false),
-        auth: {
-          user: env('SMTP_USERNAME'),
-          pass: env('SMTP_PASSWORD'),
+    graphql: {
+      enabled: true,
+      config: {
+        defaultLimit: 25,
+        maxLimit: 200,
+        apolloServer: {
+          introspection: true,
         },
       },
-      settings: {
-        defaultFrom: env('SMTP_FROM', 'noreply@example.com'),
-        defaultReplyTo: env('SMTP_REPLY_TO', 'contact@example.com'),
+    },
+    'users-permissions': {
+      config: {
+        jwtSecret: env('JWT_SECRET'),
       },
     },
-  },
-});
+    'color-picker': {
+      enabled: true,
+    },
+    upload: buildUploadConfig(env),
+    comments: buildCommentsConfig(env),
+    email: {
+      config: {
+        provider: '@strapi/provider-email-nodemailer',
+        providerOptions: {
+          host: env('SMTP_HOST', 'smtp.example.com'),
+          port: env.int('SMTP_PORT', 587),
+          secure: env.bool('SMTP_SECURE', false),
+          auth: {
+            user: env('SMTP_USERNAME'),
+            pass: env('SMTP_PASSWORD'),
+          },
+        },
+        settings: {
+          defaultFrom: env('SMTP_FROM', 'noreply@example.com'),
+          defaultReplyTo: env('SMTP_REPLY_TO', 'contact@example.com'),
+        },
+      },
+    },
+  };
+
+  return config;
+};
