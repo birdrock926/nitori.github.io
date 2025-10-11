@@ -477,3 +477,14 @@
   - Font Scale Slider の `options` を変更する際は、プラグイン登録コードとライフサイクル `clampScaleValue` の上下限・刻み幅が一致しているかを同時に確認する。React コンポーネントに副作用を追加すると dispatcher 未初期化環境で再び `Invalid hook call` が発生するため、クラスベースもしくは副作用ゼロの関数コンポーネントを維持すること。
   - コメント表示ロジックを更新する際は `pruneHiddenComments()` で `blocked` / `removed` ノードが除外されるか、`renderComment()` が `null` を返しても親の `.map()` が破綻しないかをブラウザで確認する。モデレーター向けの placeholder は返信が存在する場合のみ描画するルールを維持し、UI 文言を変更する場合は README / SETUP / 本書を同時更新する。
 
+### 2025-10-24 追記: Font Scale Slider プラグインのメタデータ修正とロードガード
+
+- **背景**: Windows 環境で `npm run develop` を実行した際に Strapi CLI が `Error loading the plugin font-scale-slider because font-scale-slider is not installed.` と表示して起動に失敗。`cms/src/plugins/font-scale-slider/package.json` に `strapi.kind` が含まれておらず、Strapi 5 のプラグインローダーがローカルプラグインとして認識できていなかった。また `cms/config/plugins.js` が無条件で `'font-scale-slider': { enabled: true }` を返していたため、プラグインディレクトリが欠落した環境でも同じエラーが発生するリスクがあった。
+- **対応**:
+  1. `cms/src/plugins/font-scale-slider/package.json` に `strapi.description` と `strapi.kind: "plugin"` を追加し、Strapi のプラグイン検出要件を満たすよう修正。【F:cms/src/plugins/font-scale-slider/package.json†L1-L7】
+  2. `cms/config/plugins.js` に `fs.existsSync` と `fileURLToPath` を導入してローカルプラグインディレクトリの存在確認を行い、存在するときのみ `'font-scale-slider'` 設定を追加するよう更新。これにより、チェックアウト漏れや将来の削除作業時も安全に起動できる。【F:cms/config/plugins.js†L1-L21】【F:cms/config/plugins.js†L150-L174】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+- **備考**: プラグインディレクトリを削除した状態で Strapi を起動すると `fontScale` フィールドは標準の小数入力にフォールバックする。再度プラグインを利用する場合は Git からディレクトリを復元し、`npm run build` で管理画面の再ビルドを実施すること。
+

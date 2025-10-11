@@ -1,9 +1,9 @@
 {
   "name": "font-scale-slider",
   "version": "1.0.0",
-  "private": true,
   "strapi": {
     "name": "font-scale-slider",
-    "type": "plugin"
+    "description": "Custom field plugin that exposes a slider to adjust rich text font scale",
+    "kind": "plugin"
   }
 }

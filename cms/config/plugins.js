@@ -1,3 +1,15 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const hasFontScaleSliderPlugin = () => {
+  const pluginDir = path.join(__dirname, '..', 'src', 'plugins', 'font-scale-slider');
+  return fs.existsSync(pluginDir);
+};
+
 const parseCsv = (value, fallback = []) => {
   if (!value) {
     return [...fallback];
@@ -137,39 +149,46 @@ const buildUploadConfig = (env) => {
   };
 };
 
-export default ({ env }) => ({
-  seo: {
-    enabled: true,
-  },
-  'users-permissions': {
-    config: {
-      jwtSecret: env('JWT_SECRET'),
+export default ({ env }) => {
+  const config = {
+    seo: {
+      enabled: true,
     },
-  },
-  'color-picker': {
-    enabled: true,
-  },
-  'font-scale-slider': {
-    enabled: true,
-  },
-  upload: buildUploadConfig(env),
-  comments: buildCommentsConfig(env),
-  email: {
-    config: {
-      provider: '@strapi/provider-email-nodemailer',
-      providerOptions: {
-        host: env('SMTP_HOST', 'smtp.example.com'),
-        port: env.int('SMTP_PORT', 587),
-        secure: env.bool('SMTP_SECURE', false),
-        auth: {
-          user: env('SMTP_USERNAME'),
-          pass: env('SMTP_PASSWORD'),
+    'users-permissions': {
+      config: {
+        jwtSecret: env('JWT_SECRET'),
+      },
+    },
+    'color-picker': {
+      enabled: true,
+    },
+    upload: buildUploadConfig(env),
+    comments: buildCommentsConfig(env),
+    email: {
+      config: {
+        provider: '@strapi/provider-email-nodemailer',
+        providerOptions: {
+          host: env('SMTP_HOST', 'smtp.example.com'),
+          port: env.int('SMTP_PORT', 587),
+          secure: env.bool('SMTP_SECURE', false),
+          auth: {
+            user: env('SMTP_USERNAME'),
+            pass: env('SMTP_PASSWORD'),
+          },
+        },
+        settings: {
+          defaultFrom: env('SMTP_FROM', 'noreply@example.com'),
+          defaultReplyTo: env('SMTP_REPLY_TO', 'contact@example.com'),
         },
       },
-      settings: {
-        defaultFrom: env('SMTP_FROM', 'noreply@example.com'),
-        defaultReplyTo: env('SMTP_REPLY_TO', 'contact@example.com'),
-      },
     },
-  },
-});
+  };
+
+  if (hasFontScaleSliderPlugin()) {
+    config['font-scale-slider'] = {
+      enabled: true,
+    };
+  }
+
+  return config;
+};

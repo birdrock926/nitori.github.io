@@ -40,7 +40,7 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
-  - RichText ブロックの本文倍率は 2025-10-24 に **Font Scale Slider** カスタムフィールド（`plugin::font-scale-slider.scale`）へ移行しました。Strapi 管理画面で 0.7〜1.8 倍の範囲をスライダー + 数値入力で直感的に調整でき、未入力時は記事全体の既定値 (1.0 倍) を自動採用します。旧 Typography Scale 実装で発生していた `lazyLoadComponents → setStore` ループは新プラグインの冪等登録と副作用ゼロのクラスコンポーネントにより再発せず、詳細な経緯と検証ログは AGENTS.md に保存しています。必要に応じて JSON スキーマや `clampScaleValue` の上下限を編集すれば範囲・刻み幅を拡張できます。
+  - RichText ブロックの本文倍率は 2025-10-24 に **Font Scale Slider** カスタムフィールド（`plugin::font-scale-slider.scale`）へ移行しました。Strapi 管理画面で 0.7〜1.8 倍の範囲をスライダー + 数値入力で直感的に調整でき、未入力時は記事全体の既定値 (1.0 倍) を自動採用します。2025-10-24 時点で `font-scale-slider` の `package.json` に `strapi.kind` が欠落していたため Windows 環境で「プラグインがインストールされていない」エラーが発生したことから、メタデータを修正しつつ `cms/config/plugins.js` でディレクトリ存在チェックを挟み、プラグインがない環境では自動的に設定をスキップする冪等設計へ更新しました。旧 Typography Scale 実装で発生していた `lazyLoadComponents → setStore` ループは新プラグインの冪等登録と副作用ゼロのクラスコンポーネントにより再発せず、詳細な経緯と検証ログは AGENTS.md に保存しています。必要に応じて JSON スキーマや `clampScaleValue` の上下限を編集すれば範囲・刻み幅を拡張できます。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -67,7 +67,7 @@
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-- RichText ブロックの `fontScale` は `font-scale-slider` プラグインのカスタムフィールドで 0.7〜1.8 倍をスライダー操作できます。未入力時は記事全体の既定値 (1.0 倍) が適用され、詳細な履歴・復旧手順は AGENTS.md にまとめています。
+- RichText ブロックの `fontScale` は `font-scale-slider` プラグインのカスタムフィールドで 0.7〜1.8 倍をスライダー操作できます。`package.json` の `strapi.kind` を補完したことで Strapi 5 がローカルプラグインとして正しく検出され、`cms/config/plugins.js` がプラグインディレクトリの存在確認後に有効化するため、クリーン環境や古いブランチからのチェックアウト直後でも起動エラーなく利用できます。未入力時は記事全体の既定値 (1.0 倍) が適用され、詳細な履歴・復旧手順は AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー

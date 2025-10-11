@@ -6,7 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
-- **カスタムフィールド**: 2025-10-24 に Rich Text ブロック向けの **Font Scale Slider** プラグイン（`plugin::font-scale-slider.scale`）を導入しました。Strapi 管理画面上で 0.7〜1.8 倍の範囲をスライダーと数値入力の両方で調整でき、空欄にすると記事既定の 1.0 倍を自動継承します。旧 Typography Scale プラグインで発生していた `lazyLoadComponents → setStore` ループは、冪等な登録ガードと副作用のないクラスコンポーネント実装により再発しないことを確認済みです。履歴・検証ログは AGENTS.md に保存しており、`cms/src/components/content/rich-text.json` や `cms/src/api/post/content-types/post/lifecycles.js` を編集すれば範囲や刻み幅をカスタマイズできます。
+- **カスタムフィールド**: 2025-10-24 に Rich Text ブロック向けの **Font Scale Slider** プラグイン（`plugin::font-scale-slider.scale`）を導入しました。Strapi 管理画面上で 0.7〜1.8 倍の範囲をスライダーと数値入力の両方で調整でき、空欄にすると記事既定の 1.0 倍を自動継承します。導入当初は `package.json` の `strapi.kind` 欠落によりクリーン環境で「font-scale-slider がインストールされていない」と起動時に拒否されるケースが判明したため、メタデータを補完し、さらに `cms/config/plugins.js` でローカルプラグインディレクトリの存在を確認してから有効化するフェイルセーフを追加しました。旧 Typography Scale プラグインで発生していた `lazyLoadComponents → setStore` ループは、冪等な登録ガードと副作用のないクラスコンポーネント実装により再発しないことを確認済みです。履歴・検証ログは AGENTS.md に保存しており、`cms/src/components/content/rich-text.json` や `cms/src/api/post/content-types/post/lifecycles.js` を編集すれば範囲や刻み幅をカスタマイズできます。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
