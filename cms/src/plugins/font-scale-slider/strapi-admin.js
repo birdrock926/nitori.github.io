@@ -1,3 +1,3 @@
-'use strict';
+import plugin from './admin/src/index.js';
 
-module.exports = require('./admin/src').default;
+export default plugin;

@@ -488,3 +488,16 @@
   - `cd cms && CI=1 npm run build`
 - **備考**: プラグインディレクトリを削除した状態で Strapi を起動すると `fontScale` フィールドは標準の小数入力にフォールバックする。再度プラグインを利用する場合は Git からディレクトリを復元し、`npm run build` で管理画面の再ビルドを実施すること。
 
+### 2025-10-25 追記: npm 依存としての Font Scale Slider 登録
+
+- **背景**: Windows 環境で `npm run develop` を実行すると、`Error loading the plugin font-scale-slider because font-scale-slider is not installed.` が再発。`cms/config/plugins.js` 側のディレクトリ存在チェックは成功しており、プラグインフォルダもリポジトリに含まれているにもかかわらず、Strapi のプラグインローダーが `node_modules/font-scale-slider` を検出できずに失敗していた。`npm ls font-scale-slider` を確認したところ依存ツリーにプラグインが出現しておらず、`package.json` にローカルファイル依存が未登録のままだったことが原因と判明。macOS/Linux では `require.resolve` が `src/plugins` 以下をフォールバック参照するため発覚が遅れていた。
+- **対応**:
+  1. `cms/package.json` の `dependencies` に `"font-scale-slider": "file:src/plugins/font-scale-slider"` を追加し、`npm install` がローカルプラグインを `node_modules/font-scale-slider` へシンボリックリンクするよう明示。これにより Strapi の `loadPlugins()` が依存解決に成功する。
+  2. README / SETUP_BEGINNER_GUIDE にローカル依存を追加した旨と、`npm install` 実行で Windows/macOS でも確実にリンクされることを追記。既存のディレクトリ存在ガードとの役割分担（依存は必須だが、何らかの理由でディレクトリが欠落した場合は自動的にスキップ）も明文化した。
+  3. `strapi-admin.js` を ES Modules 形式へ書き換え、`export default` で `admin/src/index.js` のプラグインオブジェクトを再公開。従来の CommonJS `module.exports = require(...).default` だと Vite のビルドで「`"default" is not exported`」エラーとなり、`npm run build` / `npm run develop` が中断していた。同時に `strapi-server.js` も `export default` を返す最小実装へ統一し、将来の拡張時に ESM ベースで追記できるようにした。
+- **影響**: `npm install` を実行し直すと lockfile なしでもローカルプラグインが `node_modules` に出現し、Strapi の CLI はエラーなく起動できる。プラグインディレクトリを削除した状態で `npm install` を行うと依存解決が失敗するため、ディレクトリ欠落時は依存行をコメントアウトするか、プラグインを Git から復元してから再インストールする運用とする。`cms/config/plugins.js` の存在チェックは引き続き有効で、ディレクトリが存在しなければ設定をスキップする。
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`
+  - `cd cms && CI=1 npm run build`
+  - Windows ユーザーは再度 `npm run develop` を実行し、プラグイン未インストールエラーが消えたこと、Rich Text ブロックの `fontScale` フィールドがスライダーとして表示されることを手動確認する。
+

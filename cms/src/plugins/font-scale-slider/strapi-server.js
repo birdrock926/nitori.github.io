@@ -1,3 +1,3 @@
-'use strict';
+const plugin = () => ({});
 
-module.exports = () => ({});
+export default plugin;
