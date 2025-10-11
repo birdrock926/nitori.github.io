@@ -628,6 +628,19 @@
   - 今後コメントの Relation エラーが再発した場合は、保存済みコメントの `related` カラムが Document ID (`api::post.post:<documentId>`) 形式になっているか確認する。エクスポート済みデータが数値 ID を含む場合は、Strapi 側でマイグレーションを行い Document ID へ書き換えること。
   - フロントエンドがコメント取得に失敗した際は `relationCandidates` の先頭が Document ID になっているかを `localStorage` のキャッシュも含めて確認する。古いキャッシュをクリアすると再取得が走り、バックエンドの正規化と揃う。
 
+### 2025-11-03 追記: Comments relation エントリー ID 正規化と既存データ移行
+
+- **背景**: `http://localhost:1337/admin/plugins/comments` が空白のままになり、サーバーログに `Relation for field "related" does not exist` が連続出力。Document ID 形式で保存された古いコメントが Strapi v5.27.0 のコメントプラグインによる関連エンティティ解決に失敗し、管理画面の一覧が描画されなくなっていた。フロントエンドも Document ID を優先送信していたため、新規投稿も同じ不整合を再生産していた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` をエントリー ID 優先に切り替え、Document ID/slug を入力された場合でも最終的に数値エントリー ID を返すよう修正。さらに `normalizeExistingCommentRelations()` を追加し、ブートストラップ時に `plugin::comments.comment` の `related` カラムをバッチ処理で走査して Document ID を数値 ID へ書き換えるようにした。既存プラグインの `bootstrap` をラップし、起動ごとに正規化が走る安全網を確保。【F:cms/src/extensions/comments/strapi-server.js†L524-L719】【F:cms/src/extensions/comments/strapi-server.js†L962-L978】
+  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` をエントリー ID → Document ID の順に並べ直し、ブラウザが常に数値 ID を最初に試行するよう統一。サーバー側の正規化と合わせて新規投稿が即座に数値 ID 化されるため、キャッシュが残っていても再読み込みで整合性が取れる。【F:web/src/components/comments/CommentsApp.tsx†L187-L200】
+  3. README / SETUP ガイドのコメント節を更新し、正規キーがエントリー ID であること、Document ID や slug しか取得できない場合でもブートストラップ時に自動補正されることを明記した。運用者が新仕様と移行ロジックを把握できるよう、再検証手順も差し替え。【F:README.md†L24-L82】【F:README.md†L211-L215】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L192-L205】
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`（依存取得が数千件規模で長時間化したため、Cloud IDE の制限により `^C` で中断。ログ: `5dfca4†L1-L66`）
+  - `cd cms && CI=1 npm run build`（上記依存導入が完了していないため未実行）
+  - `cd web && npm install --no-progress --no-fund --no-audit`（CMS と同様の理由で未実行）
+  - `cd web && npm run build`（依存未導入のため未実行）
+
 ### 2025-11-02 追記: Comments limit クエリストリング同期と記事カード比率の調整
 
 - **背景**: Strapi 管理画面の Comments タブで `A valid integer must be provided to limit` が再発し、Windows 環境では `lazyLoadComponents → setStore` のループではなく Koa の `ctx.request.querystring` が空文字のまま残ることが原因で Knex が 0 件と誤解釈していた。併せて Web 側ではカバー画像が 16:9 のまま高く表示され、カードの本文領域が圧迫されているとのフィードバックを受けた。
@@ -660,3 +673,18 @@
   - `cd web && npm install --no-progress --no-fund --no-audit`
   - `cd web && npm run build`（Strapi 未起動のため API フェッチはフォールバック応答を使用）
 - **今後の指針**: Comments まわりでクエリを補正する際は `ctx.request.query` / `ctx.request.querystring` / `ctx.querystring` / `ctx.state.query` の整合性を必ず取る。UI 変更は README / SETUP / 本書の三カ所へ同時反映し、既存スクリーンショットとの差異を説明する。必要に応じてストーリーブックやデザインカタログに新寸法を記録することも検討する。
+
+### 2025-11-04 追記: Comments relation を Document ID 正規化へ再度統一
+
+- **背景**: 2025-11-03 の「エントリー ID 正規化」導入後も、Strapi 管理画面の Comments プラグインで `Relation for field "related" does not exist` が継続し、Windows 環境では一覧が空白のまま更新されないとの報告あり。VirtusLab Comments 3.1.0 が Document Service を通じて関連エンティティを検証するため、`api::post.post:<entryId>` 形式では判定に失敗していた。さらにクライアントの relation 候補もエントリー ID を優先していたため、サーバー側の再解決が走っても直後の再読込で不整合が復活する状態だった。
+- **実施内容**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` を Document ID 優先へ戻し、`resolveRelationId()` が Document ID → 数値 ID → slug の順に記事を検索して Document ID を返すよう再実装。`normalizeExistingCommentRelations()` は数値識別子も更新対象とし、保存済みコメントの `related` を `api::post.post:<documentId>` 形式へ再書き込みする。【F:cms/src/extensions/comments/strapi-server.js†L524-L719】【F:cms/src/extensions/comments/strapi-server.js†L962-L978】
+  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並び替え、クライアントが Document ID を最初に送信するよう統一。【F:web/src/components/comments/CommentsApp.tsx†L175-L188】
+  3. README / SETUP ガイドのコメント節を更新し、正規キーが Document ID であること、エントリー ID や slug しか取得できなくてもバックエンドが Document ID へ再解決することを明記。【F:README.md†L23-L55】【F:README.md†L210-L216】【F:README.md†L381-L383】【F:SETUP_BEGINNER_GUIDE.md†L188-L195】
+- **検証**:
+  - `cd cms && CI=1 npm run build` → 依存未導入のため `lodash/isPlainObject` モジュールが見つからず失敗（`b083a4†L1-L25`）。ローカルまたは CI ランナーで `npm install` 実行後に再試行すること。
+  - `cd web && npm run build` → `astro` CLI 未導入により `astro: not found` で失敗（`e05380†L1-L8`）。`npm install` を完了させてから再実行する。
+- **運用メモ**:
+  - 既存 DB に数値 ID が残っている場合は Strapi 起動時に `[comments] normalized stored comment relations` が出力されるか確認。出力されない場合は権限不足や例外ログをチェックし、必要に応じて SQL で `related` を Document ID へ手動更新する。
+  - フロントエンドが Document ID を取得できない場合は記事 API のレスポンスに `documentId` が含まれているか、`api::post.post` コントローラの populate 設定が変更されていないかを確認する。必要であればレスポンスへ Document ID を追加する。
+  - SMTP 接続エラー（`127.0.0.1:587`）は開発用のダミー設定が原因。実環境では `.env` の `SMTP_*` を本番値へ置き換える。`ensure-env.mjs` がプレースホルダーを検知してローカル値へ再生成する仕様のため、環境差異が出た場合は `.env` の実値を確認する。

@@ -1,5 +1,6 @@
 const RELATION_PREFIX = 'api::post.post:';
 const POST_UID = 'api::post.post';
+const COMMENTS_UID = 'plugin::comments.comment';
 const NUMERIC_PATTERN = /^\d+$/;
 
 const relationCache = new Map();
@@ -573,6 +574,10 @@ const resolveRelationId = async (identifier) => {
   }
 
   const trimmedIdentifier = identifier.trim();
+  if (!trimmedIdentifier) {
+    return null;
+  }
+
   let relationId = null;
 
   const resolveFromWhere = async (where) => {
@@ -580,10 +585,23 @@ const resolveRelationId = async (identifier) => {
     if (!post) {
       return null;
     }
-    return coerceRelationIdentifier(post);
+
+    const documentIdentifier = coerceDocumentId(post);
+    if (documentIdentifier) {
+      return documentIdentifier;
+    }
+
+    return coerceEntryId(post);
   };
 
-  if (NUMERIC_PATTERN.test(trimmedIdentifier)) {
+  relationId = await resolveFromWhere({
+    $or: [
+      { documentId: trimmedIdentifier },
+      { document_id: trimmedIdentifier },
+    ],
+  });
+
+  if (!relationId && NUMERIC_PATTERN.test(trimmedIdentifier)) {
     const numericId = Number(trimmedIdentifier);
     if (Number.isFinite(numericId)) {
       relationId = await resolveFromWhere({ id: numericId });
@@ -595,20 +613,7 @@ const resolveRelationId = async (identifier) => {
   }
 
   if (!relationId) {
-    relationId = await resolveFromWhere({
-      $or: [
-        { documentId: trimmedIdentifier },
-        { document_id: trimmedIdentifier },
-      ],
-    });
-  }
-
-  if (!relationId) {
     relationId = await resolveFromWhere({ slug: trimmedIdentifier });
-  }
-
-  if (!relationId && NUMERIC_PATTERN.test(trimmedIdentifier)) {
-    relationId = trimmedIdentifier;
   }
 
   if (!relationId) {
@@ -635,6 +640,87 @@ const normalizeRelation = async (relation) => {
   }
 
   return `${RELATION_PREFIX}${relationId}`;
+};
+
+const normalizeExistingCommentRelations = async () => {
+  const pageSize = 200;
+  let processed = 0;
+  let updated = 0;
+  let lastId = null;
+
+  while (true) {
+    const where =
+      lastId === null
+        ? { related: { $startsWith: RELATION_PREFIX } }
+        : {
+            $and: [
+              { related: { $startsWith: RELATION_PREFIX } },
+              { id: { $gt: lastId } },
+            ],
+          };
+
+    const comments = await strapi.db.query(COMMENTS_UID).findMany({
+      where,
+      select: ['id', 'related'],
+      orderBy: { id: 'asc' },
+      limit: pageSize,
+    });
+
+    if (!comments || comments.length === 0) {
+      break;
+    }
+
+    for (const comment of comments) {
+      processed += 1;
+      lastId = comment.id;
+
+      const related = typeof comment.related === 'string' ? comment.related : '';
+      if (!related.startsWith(RELATION_PREFIX)) {
+        continue;
+      }
+
+      const identifier = related.slice(RELATION_PREFIX.length).trim();
+      if (!identifier) {
+        continue;
+      }
+
+      const resolved = await resolveRelationId(identifier);
+      if (!resolved || resolved === identifier) {
+        continue;
+      }
+
+      const nextRelation = `${RELATION_PREFIX}${resolved}`;
+      if (nextRelation === related) {
+        continue;
+      }
+
+      try {
+        await strapi.db.query(COMMENTS_UID).update({
+          where: { id: comment.id },
+          data: { related: nextRelation },
+        });
+        updated += 1;
+      } catch (error) {
+        strapi.log.warn('[comments] failed to normalize stored comment relation', {
+          commentId: comment.id,
+          related,
+          nextRelation,
+          error,
+        });
+      }
+    }
+
+    if (comments.length < pageSize) {
+      break;
+    }
+  }
+
+  if (updated > 0) {
+    strapi.log.info('[comments] normalized stored comment relations', {
+      processed,
+      updated,
+    });
+  }
 };
 
 const mapReportReason = (value) => {
@@ -876,6 +962,22 @@ Visit ${clientAppUrl} and continue the discussion.
       return null;
     };
   }
+
+  const originalBootstrap = typeof plugin.bootstrap === 'function' ? plugin.bootstrap : null;
+
+  plugin.bootstrap = async function commentsBootstrap(...args) {
+    if (originalBootstrap) {
+      await originalBootstrap.apply(this, args);
+    }
+
+    try {
+      await normalizeExistingCommentRelations();
+    } catch (error) {
+      strapi.log.error('[comments] failed to normalize stored relations during bootstrap', {
+        error,
+      });
+    }
+  };
 
   return plugin;
 };
