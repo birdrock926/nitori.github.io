@@ -3,21 +3,48 @@ import type { Post } from '@lib/strapi';
 import { formatDateTime, relative, toMultilineHtml } from '@lib/format';
 
 const { post } = Astro.props as { post: Post };
+const coverImage = post.cover;
+
+const coverSources = [
+  coverImage?.formats?.medium?.url && {
+    media: '(min-width: 960px)',
+    srcSet: coverImage.formats.medium.url,
+  },
+  coverImage?.formats?.small?.url && {
+    media: '(min-width: 600px)',
+    srcSet: coverImage.formats.small.url,
+  },
+].filter(Boolean) as Array<{ media: string; srcSet: string }>;
+
+const coverSrc =
+  coverImage?.formats?.thumbnail?.url ?? coverImage?.formats?.small?.url ?? coverImage?.url ?? '';
+
+const coverSrcSet = [
+  coverImage?.formats?.thumbnail?.url && `${coverImage.formats.thumbnail.url} 150w`,
+  coverImage?.formats?.small?.url && `${coverImage.formats.small.url} 480w`,
+  coverImage?.formats?.medium?.url && `${coverImage.formats.medium.url} 768w`,
+  coverImage?.url && `${coverImage.url} 1200w`,
+]
+  .filter(Boolean)
+  .join(', ');
+
+const coverSizes = '(min-width: 1280px) 320px, (min-width: 768px) 45vw, 92vw';
+const coverAlt = coverImage?.alternativeText ?? post.title;
 ---
 <article class="post-card card hover-lift">
-  {post.cover?.url && (
+  {coverImage?.url && (
     <a class="post-card-cover" href={`/posts/${post.slug}/`} aria-hidden="true" tabindex="-1">
       <picture>
-        {post.cover.formats?.medium?.url && (
-          <source srcSet={post.cover.formats.medium.url} media="(min-width: 768px)" />
-        )}
-        {post.cover.formats?.small?.url && (
-          <source srcSet={post.cover.formats.small.url} media="(min-width: 480px)" />
-        )}
+        {coverSources.map((source) => (
+          <source srcSet={source.srcSet} media={source.media} />
+        ))}
         <img
-          src={post.cover.formats?.thumbnail?.url ?? post.cover.url}
-          alt={post.cover.alternativeText ?? post.title}
+          src={coverSrc}
+          srcSet={coverSrcSet || undefined}
+          sizes={coverSrcSet ? coverSizes : undefined}
+          alt={coverAlt}
           loading="lazy"
+          decoding="async"
         />
       </picture>
     </a>

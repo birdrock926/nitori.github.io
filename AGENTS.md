@@ -611,3 +611,22 @@
     annotateResponse` を誤って有効化していないか検証する。必要に応じて `sanitizeCommentsLimit()` に対象キーを追加する。
   - 記事カードのカバー画像は `post.cover.formats` が存在しない場合に元画像を利用する。CDN リサイズを導入する場合は `PostCard.astro`
     の `<picture>` 内で `srcSet` を適切に更新し、`global.css` のアスペクト比とホバー効果がレイアウトに影響しないか確認する。
+
+### 2025-11-02 追記: Comments limit クエリストリング同期と記事カード比率の調整
+
+- **背景**: Strapi 管理画面の Comments タブで `A valid integer must be provided to limit` が再発し、Windows 環境では `lazyLoadComponents → setStore` のループではなく Koa の `ctx.request.querystring` が空文字のまま残ることが原因で Knex が 0 件と誤解釈していた。併せて Web 側ではカバー画像が 16:9 のまま高く表示され、カードの本文領域が圧迫されているとのフィードバックを受けた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `sanitizeCommentsLimit()` をリファクタし、`LIMIT_ALIAS_KEYS` / `PAGINATION_ALIAS_KEYS` を共有定数化。正規化後の `limit` を返すよう変更し、`URLSearchParams` ベースの `serializeQuery()` で `ctx.request.querystring` を再生成することで、Strapi コントローラが必ず整数リミットを受け取れるようにした。また、シリアライズ失敗時は `ctx.log?.debug('comments.limit.serializeQuery.failed')` へ出力して原因特定を容易化。【F:cms/src/extensions/comments/strapi-server.js†L1-L120】【F:cms/src/extensions/comments/strapi-server.js†L320-L371】
+  2. `web/src/components/PostCard.astro` でカバー画像の `source`/`img` を配列ベースで生成し、`srcSet` / `sizes` / `decoding="async"` を付与。フォーマットが欠損しても `thumbnail → small → original` の優先順でフォールバックするよう整理した。【F:web/src/components/PostCard.astro†L1-L32】【F:web/src/components/PostCard.astro†L34-L55】
+  3. `web/src/styles/global.css` の `.post-card-cover` に 21:9 のレターボックス比率、最大高さ 180px（モバイルは 140px）、マージンを導入。カード本文との視覚バランスを整えつつホバー演出は維持した。【F:web/src/styles/global.css†L854-L881】
+  4. README / SETUP_BEGINNER_GUIDE に `ctx.request.querystring` への書き戻しとカード比率変更の背景を追記し、保守手順を最新化。【F:README.md†L47-L69】【F:README.md†L211-L216】【F:SETUP_BEGINNER_GUIDE.md†L204-L210】
+
+- **検証**:
+  - `cd cms && npm install --no-progress --no-fund --no-audit`【e4aa6b†L1-L35】
+  - `cd cms && CI=1 npm run build`【2e1709†L1-L9】【97b8cc†L1-L11】【e352eb†L1-L1】
+  - `cd web && npm install --no-progress --no-fund --no-audit`【2b24a0†L1-L3】【682a5a†L1-L7】【502c51†L1-L3】
+  - `cd web && npm run build`（Strapi 未起動のためフォールバック警告あり）【8f15ca†L1-L10】【1a6fb2†L1-L5】【7cf27f†L1-L63】
+
+- **運用メモ**:
+  - Comments プラグインをアップデートした際は `serializeQuery()` が新しいクエリパラメータを網羅しているか確認し、必要に応じて `LIMIT_ALIAS_KEYS` を拡張する。`comments.limit.serializeQuery.failed` ログが出た場合はエラー内容と併せて本書へ追記する。
+  - 記事カードの 21:9 比率は `max-height` を持つため、極端に幅の広いレイアウトで縦横比が崩れる場合は CSS カスタムプロパティ化を検討する。カバー画像のサイズ変更に合わせてライト/ダークテーマの余白や影が崩れないかを UI 側で確認すること。

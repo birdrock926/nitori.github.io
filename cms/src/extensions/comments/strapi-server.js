@@ -7,6 +7,16 @@ const FALLBACK_EMAIL_DOMAIN = 'comments.local';
 const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
 const DEFAULT_COMMENT_LIMIT = 50;
 const MAX_COMMENT_LIMIT = 200;
+const LIMIT_ALIAS_KEYS = [
+  'limit',
+  '_limit',
+  'pageSize',
+  'page_size',
+  'pagination[limit]',
+  'pagination[pageSize]',
+  'pagination[page_size]',
+];
+const PAGINATION_ALIAS_KEYS = ['limit', 'pageSize', 'page_size'];
 const PLACEHOLDER_SMTP_HOST_PATTERN = /(^|\.)example\.(?:com|net|org|dev)$/i;
 
 const parseDelimitedList = (value) =>
@@ -55,25 +65,16 @@ const coercePositiveInteger = (value) => {
   return parsed;
 };
 
-const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximum = MAX_COMMENT_LIMIT } = {}) => {
+const sanitizeCommentsLimit = (
+  query,
+  { fallback = DEFAULT_COMMENT_LIMIT, maximum = MAX_COMMENT_LIMIT } = {},
+) => {
   if (!query || typeof query !== 'object') {
-    return null;
+    return { limit: Math.min(Math.max(fallback ?? DEFAULT_COMMENT_LIMIT, 1), maximum) };
   }
 
   const pagination =
     query.pagination && typeof query.pagination === 'object' ? { ...query.pagination } : undefined;
-
-  const aliasKeys = [
-    'limit',
-    '_limit',
-    'pageSize',
-    'page_size',
-    'pagination[limit]',
-    'pagination[pageSize]',
-    'pagination[page_size]',
-  ];
-
-  const paginationAliasKeys = ['limit', 'pageSize', 'page_size'];
 
   let normalized = null;
 
@@ -89,14 +90,14 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
   };
 
   if (pagination) {
-    paginationAliasKeys.forEach((key) => {
+    PAGINATION_ALIAS_KEYS.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(pagination, key)) {
         consider(pagination[key]);
       }
     });
   }
 
-  aliasKeys.forEach((key) => {
+  LIMIT_ALIAS_KEYS.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(query, key)) {
       consider(query[key]);
     }
@@ -110,7 +111,7 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
   nextPagination.limit = limitValue;
   nextPagination.pageSize = limitValue;
 
-  paginationAliasKeys.forEach((key) => {
+  PAGINATION_ALIAS_KEYS.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(nextPagination, key)) {
       nextPagination[key] = limitValue;
     }
@@ -119,13 +120,49 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
   query.pagination = nextPagination;
   query.limit = limitValue;
 
-  aliasKeys.forEach((key) => {
+  LIMIT_ALIAS_KEYS.forEach((key) => {
     if (key !== 'limit' && Object.prototype.hasOwnProperty.call(query, key)) {
       query[key] = serializedLimit;
     }
   });
 
-  return limitValue;
+  return { limit: limitValue, serialized: serializedLimit };
+};
+
+const serializeQuery = (query) => {
+  if (!query || typeof query !== 'object') {
+    return '';
+  }
+
+  const params = new URLSearchParams();
+
+  const appendEntry = (prefix, value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        appendEntry(prefix, item);
+      });
+      return;
+    }
+
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([childKey, childValue]) => {
+        appendEntry(`${prefix}[${childKey}]`, childValue);
+      });
+      return;
+    }
+
+    params.set(prefix, String(value));
+  };
+
+  Object.entries(query).forEach(([key, value]) => {
+    appendEntry(key, value);
+  });
+
+  return params.toString();
 };
 
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -342,10 +379,23 @@ const wrapCommentsController = (controller, { sanitizeLimit = false, annotateRes
         ctx.query = {};
       }
 
-      sanitizeCommentsLimit(ctx.query);
+      const sanitized = sanitizeCommentsLimit(ctx.query);
 
-      if (ctx.request && ctx.request.query && ctx.request.query !== ctx.query) {
-        ctx.request.query = { ...ctx.request.query, ...ctx.query };
+      if (ctx.request) {
+        if (!ctx.request.query || ctx.request.query === ctx.query) {
+          ctx.request.query = ctx.query;
+        } else {
+          ctx.request.query = { ...ctx.request.query, ...ctx.query };
+        }
+
+        try {
+          const serialized = serializeQuery(ctx.query);
+          if (serialized || sanitized?.limit) {
+            ctx.request.querystring = serialized;
+          }
+        } catch (error) {
+          ctx.log?.debug?.('comments.limit.serializeQuery.failed', { error });
+        }
       }
     }
 
