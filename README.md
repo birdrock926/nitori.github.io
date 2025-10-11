@@ -21,7 +21,7 @@
 - **フロント（/web）**：Astro SSG
   - 記事は**Strapi の published のみ**をビルド時取得
   - **Dynamic Zone**を React コンポーネントにマップ（RichText / ColoredText / Figure / Gallery / Columns / Callout / Separator / Twitch / YouTube / Inline Ad Slot）
-- **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事の **数値エントリー ID** を正規キーとして保存（Document ID や slug が送信されてもバックエンドが該当エントリー ID へ再解決）。React 島がフォームとツリー UI を提供。
+- **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事の **Document ID (UUID)** を正規キーとして保存（数値エントリー ID や slug が送信されてもバックエンドが該当 Document ID へ再解決）。React 島がフォームとツリー UI を提供。
 - **CMS（/cms）**：Strapi v5
   - 記事・タグ・メディア・埋め込みブロックを GUI で管理
   - **Webhook** が GitHub Actions を起動し、Cloudflare Pages へ再デプロイ
@@ -46,7 +46,7 @@
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
 - **Strapi 管理画面**内のプラグインタブからコメントの承認／削除／エディット／通報確認／エクスポートを一元管理。
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
-- **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供します（Document ID や slug しか取得できない環境でもバックエンドが対象記事を特定し、最終的に数値エントリー ID を正規キーとして保存するため整合性が保たれます）。
+- **REST API**：`/api/comments/api::post.post:<documentId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供します（数値エントリー ID や slug しか取得できない環境でもバックエンドが対象記事を特定し、最終的に Document ID を正規キーとして保存するため整合性が保たれます）。
 - **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。`limit`/`pagination[pageSize]` などのクエリは 1〜200 件に強制クランプしたうえで、Koa の `ctx.request.querystring` / `ctx.querystring` / `ctx.state.query` まで同期するため、Windows で空文字が送られても Knex の "A valid integer must be provided to limit" ループへ陥りません。
 - **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。管理側でコメントを「ブロック/削除」した場合は返信のないツリーから自動的に除外し、返信が残っているときだけ「このコメントは管理者によって非表示になりました。」のプレースホルダーを表示します。
 
@@ -68,7 +68,7 @@
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
 - RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。Astro 側では CSS 変数とインラインスタイルを併用して倍率を描画するため、管理画面で更新した値が必ず記事本文へ反映されます。詳細な移行手順と検証ログは AGENTS.md にまとめています。
-- **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) の数値エントリー ID（Document ID や slug で送信された場合もブートストラップ時・投稿時に再解決）と紐付け
+- **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) の Document ID（数値エントリー ID や slug で送信された場合もブートストラップ時・投稿時に再解決）と紐付け
 
 ## ワークフロー
 1. **編集**：Strapi GUI で記事作成 → 画像アップ → ブロック配置 → 下書き保存  
@@ -212,7 +212,7 @@
 1. `.env` の `COMMENTS_CLIENT_URL` / `COMMENTS_CONTACT_EMAIL` を実運用の URL / 連絡先に更新します（開発では `scripts/ensure-env.mjs` がプレースホルダーを自動生成します）。
 2. Strapi 管理画面へログインし、左メニューの **Plugins → Comments** でモデレーションポリシー（承認フロー、禁止ワード、通知先など）を調整します。承認フローを有効にするとコメントは「保留」として保存され、公開操作を行うまでフロントには表示されません。
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` / `Comments: Report abuse` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
-4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<entryId>` が正規形です。Astro 側はエントリー ID を優先で送信し、Document ID や slug しか取得できない場合でもバックエンドが対象記事を解決してからエントリー ID へ変換・保存します。
+4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<documentId>` が正規形です。Astro 側は Document ID を優先で送信し、数値エントリー ID や slug しか取得できない場合でもバックエンドが対象記事を解決してから Document ID へ変換・保存します。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。ニックネーム欄は空欄でも投稿でき、その場合は記事に設定したデフォルト名（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値）が自動で表示に使われます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
 6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。VirtusLab Comments 3.1.0 では投稿時にメールアドレスが必須のため、フロントエンド側で空欄／不正値を検知した場合は `@comments.local` ドメインのダミーアドレスを生成して API へ送信し、リクエスト段階で 400 を回避します。バックエンドも同じドメインを使って不足分を再検証し、ダミー宛には通知を送らないようスキップしています。実際に返信通知を受けたい場合は有効なメールアドレスを入力し、SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定してからテスト送信で動作確認してください。
 7. Post コンテンツタイプには「コメント用デフォルト名」と「本文フォントサイズ」フィールドを追加しています。前者は記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。後者は本文全体のフォント倍率（標準/やや大きい/大きい）を CMS から選択でき、視認性を記事単位で調整できます。
@@ -378,7 +378,7 @@ npm run preview
 ### 通報・監視とバックアップ
 
 - `Reported` タブでは読者の通報を一覧できます。対応後は **Report resolved** を押して履歴を残してください。Slack やメールに転送したい場合は Strapi Webhook を利用すると自動連携できます。
-- コメントは Strapi 管理画面の **Comments → All** で確認できます。Document ID や slug で投稿されていた古いコメントも、起動時の正規化処理によって数値エントリー ID へ変換されるため、リロードすれば該当記事のスレッドが表示されます。
+- コメントは Strapi 管理画面の **Comments → All** で確認できます。数値エントリー ID や slug で投稿されていた古いコメントも、起動時の正規化処理によって Document ID へ変換されるため、リロードすれば該当記事のスレッドが表示されます。
 - フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。`スパム` など独自の理由はバックエンドで `OTHER / BAD_LANGUAGE / DISCRIMINATION` のいずれかに正規化され、元の入力内容はメモとして追記されるため、管理画面で迷子になりません。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
 - SMTP を設定しておくと、新着コメントや通報をメールで即時受け取れます。SPF/DKIM を整備し、迷惑メール判定されないようにしてください。
 - コメントデータのバックアップは **Content Manager → plugin::comments.comment → Export** で CSV/JSON を取得できます。月次のエクスポートと DB スナップショットを併用すると、誤削除時のリカバリが容易になります。

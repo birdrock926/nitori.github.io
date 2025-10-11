@@ -698,3 +698,18 @@
   - `cd cms && npm install --no-progress --no-fund --no-audit` はクラウド環境で応答が返らず途中で `Ctrl+C` 中断（要ローカル再実行）。
   - `cd cms && CI=1 npm run build` → `Cannot find module '@strapi/strapi/package.json'`（依存未導入のため失敗）。【62309f†L1-L23】
 - **運用メモ**: Document ID 形式のコメントが DB に残っていても、次回起動時の正規化で自動的にエントリー ID へ置換される。手動で検証する場合は管理画面でコメント投稿→一覧表示を行い、エラーログが消えたかを確認すること。フロント側で relation 候補が空になる場合は `entryId` を API レスポンスに含めているか、`localStorage` に古い Document ID が残っていないかを併せて点検する。
+
+### 2025-11-06 追記: Comments Document ID 再統一と管理画面メニュー重複警告の解消
+
+- **背景**: 上記エントリー ID 正規化後も `http://localhost:1337/admin/plugins/comments` が空白のままになり、サーバーログには引き続き `Relation for field "related" does not exist` が出力された。VirtusLab Comments 3.1.0 の `admin.findAll` は Document Service 経由で `documentId` を参照しており、`api::post.post:<entryId>` 形式では検証に失敗する。さらに `cms/src/admin/app.js` が Content Type Builder へのナビリンクを重複追加していたため、React が `plugins/content-type-builder` の重複 key 警告を発していた。ブラウザ側でも relation 候補が数値 ID から始まることで、Document ID ベースへ戻しても再読込時に再び不整合が生じていた。
+- **対応**:
+  1. `cms/src/extensions/comments/strapi-server.js` の `coerceRelationIdentifier()` を Document ID 優先へ戻し、`resolveRelationId()` が取得したエントリーの Document ID をキャッシュするよう再実装。Document ID が解決できなかった場合はキャッシュへ `null` を保存し再試行を抑止しつつ、`normalizeRelation()` で警告ログを残す。ブートストラップ時の正規化も Document ID を返した場合のみ書き換える。【F:cms/src/extensions/comments/strapi-server.js†L526-L616】【F:cms/src/extensions/comments/strapi-server.js†L648-L706】
+  2. `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID → 数値 ID の順に並べ替え、クライアント投稿時の最初の試行で UUID を送るよう統一。【F:web/src/components/comments/CommentsApp.tsx†L187-L197】
+  3. `cms/src/admin/app.js` の不要な `app.addMenuLink()` 呼び出しを削除し、Content Type Builder のメニューを重複登録しないようにした。【F:cms/src/admin/app.js†L1-L12】
+  4. README / SETUP_BEGINNER_GUIDE のコメント節を再更新し、正規キーが Document ID であることと、数値 ID や slug しか得られなくてもサーバーが UUID へ再解決する運用を明記。【F:README.md†L23-L82】【F:SETUP_BEGINNER_GUIDE.md†L188-L195】
+- **検証**:
+  - `cd cms && CI=1 npm run build` → 依存導入前のため `Cannot find module '@strapi/strapi/package.json'` で失敗。【dd4b91†L1-L24】
+  - `cd web && npm run build` → `astro` CLI 未導入のため `astro: not found` で失敗。【655e54†L1-L6】
+- **運用メモ**:
+  - 今後コメントの relation が再び解決できない場合は、`[comments] failed to resolve relation identifier` 警告とともに `related` が Document ID (`api::post.post:<documentId>`) 形式になっているかを確認する。キャッシュが `null` を保持している場合は該当記事が削除済みの可能性があるため、コメントをアーカイブするか関連ポストを復元する。
+  - メニュー重複警告が再発した場合は、他プラグインが `app.addMenuLink` を呼んでいないか確認し、追加時は既存リンクの `to` パスと重複しないことを徹底する。

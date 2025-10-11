@@ -551,7 +551,7 @@ const coerceRelationIdentifier = (post) => {
     return null;
   }
 
-  return coerceEntryId(post) ?? coerceDocumentId(post);
+  return coerceDocumentId(post) ?? coerceEntryId(post);
 };
 
 const fetchPostByWhere = async (where) => {
@@ -584,18 +584,18 @@ const resolveRelationId = async (identifier) => {
     const normalizedEntry = entryIdentifier ? String(entryIdentifier) : null;
     const normalizedDocument = documentIdentifier ? String(documentIdentifier) : null;
 
-    if (normalizedEntry) {
-      relationCache.set(normalizedEntry, normalizedEntry);
+    if (normalizedDocument) {
+      relationCache.set(normalizedDocument, normalizedDocument);
     }
 
-    if (normalizedDocument) {
-      relationCache.set(normalizedDocument, normalizedEntry ?? normalizedDocument);
+    if (normalizedEntry && normalizedDocument) {
+      relationCache.set(normalizedEntry, normalizedDocument);
     }
 
     if (typeof post?.slug === 'string') {
       const slug = post.slug.trim();
-      if (slug) {
-        relationCache.set(slug, normalizedEntry ?? normalizedDocument ?? slug);
+      if (slug && normalizedDocument) {
+        relationCache.set(slug, normalizedDocument);
       }
     }
   };
@@ -611,12 +611,12 @@ const resolveRelationId = async (identifier) => {
 
     cacheIdentifiersForPost(post, entryIdentifier, documentIdentifier);
 
-    if (entryIdentifier) {
-      return entryIdentifier;
-    }
-
     if (documentIdentifier) {
       return documentIdentifier;
+    }
+
+    if (entryIdentifier) {
+      return entryIdentifier;
     }
 
     return null;
@@ -645,7 +645,8 @@ const resolveRelationId = async (identifier) => {
   }
 
   if (!relationId) {
-    relationId = trimmedIdentifier;
+    relationCache.set(cacheKey, null);
+    return null;
   }
 
   relationCache.set(cacheKey, relationId);
@@ -664,6 +665,7 @@ const normalizeRelation = async (relation) => {
 
   const relationId = await resolveRelationId(identifier);
   if (!relationId) {
+    strapi.log.warn('[comments] failed to resolve relation identifier', { identifier });
     return relation;
   }
 
