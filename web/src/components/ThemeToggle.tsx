@@ -52,7 +52,8 @@ const ThemeToggle = () => {
     document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
   }, [theme, hydrated]);
 
-  const isDark = theme === 'dark';
+  const displayTheme = hydrated ? theme : 'light';
+  const isDark = displayTheme === 'dark';
 
   return (
     <button

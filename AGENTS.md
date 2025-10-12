@@ -668,3 +668,13 @@
   2. README / SETUP ガイドの Rich Text セクションを更新し、Markdown 再評価が「単純ラッパー除去 → `marked`」で固定されたこと、Strapi プレビューモードでも改行が維持されることを明記した。【F:README.md†L71-L74】【F:SETUP_BEGINNER_GUIDE.md†L220-L223】
 - **検証**: このサンドボックスには Astro 依存が導入されていないため自動テストは未実施。ローカルでは `cd web && npm install` の後に `npm run dev` と `npm run build` を実行し、Markdown 記法と画像を含む記事で SSR/CSR とプレビューモードの HTML が一致することを確認する。
 - **今後の指針**: Markdown 処理を変更する際は `stripSimpleHtmlWrappers()` と `marked` の実行順序を維持し、Strapi が新しいラッパータグを返す場合は同関数の除去リストを更新する。既存記事が再びプレーンテキスト化しないか常に目視確認すること。
+
+#### 2025-11-06 追記: Markdown トークン検出とテーマトグル初期表示の安定化
+
+- **背景**: 2025-11-05 時点の実装では常に `stripSimpleHtmlWrappers()` の結果へ `marked` を適用していたため、既に HTML に変換済みの本文でも再度パースが走り、SSR/CSR で生成されるタグ構造が微妙に変化してハイドレーション警告が再発するリスクが残っていた。Strapi プレビューでも同じ Markdown が複数回評価されると改行や画像タグの属性順が揺らぎ、再び `**Bold** _Italic_` が素のまま残る報告が挙がった。あわせて、テーマトグルはブラウザ側の保存テーマを即座に反映させる過程でサーバー描画との差分が生じ、`SunIcon/MoonIcon` の `path d` 警告が断続的に再発していた。
+- **対応**:
+  1. `web/src/lib/strapi.ts` に Markdown 記号検出用の正規表現と HTML 判定ロジックを追加し、`containsMarkdownTokens()` が真の場合のみ `marked` を実行するように変更。既に HTML らしいタグを含む本文はそのまま返すため、二度目以降の評価でもタグ順序や属性が変化せず、プレビューと本番で内容が一致する。【F:web/src/lib/strapi.ts†L78-L129】【F:web/src/lib/strapi.ts†L198-L216】
+  2. README / SETUP ガイドに今回の判定ロジックを追記し、Markdown 記号が含まれない本文は既存 HTML を尊重する旨と、プレビューでも改行・画像が安定することを周知した。【F:README.md†L71-L74】【F:SETUP_BEGINNER_GUIDE.md†L220-L223】
+  3. `ThemeToggle` でハイドレーション完了までは必ずライトテーマのアイコン/ラベルを表示し、ローカルストレージ等から取得したテーマは `hydrated` フラグが立ってから描画に反映するよう更新。これによりサーバー描画と初期クライアント描画の差がなくなり、`prop d did not match` 警告が解消される。【F:web/src/components/ThemeToggle.tsx†L1-L66】
+- **検証**: 依存パッケージ未導入のため自動テストは実施できていない。ローカルでは `cd web && npm install` → `npm run dev`/`npm run build` を通し、Markdown を含む記事で SSR/CSR/プレビューの HTML が一致すること、テーマ設定を切り替えてもブラウザコンソールにハイドレーション警告が出ないことを確認する。
+- **今後の指針**: Markdown 構文を追加する場合は `MARKDOWN_TOKEN_REGEX` と `looksLikeHtml()` の判定条件も更新し、HTML を二重変換しない方針を維持する。テーマトグルは今後も「サーバー初期描画と同じ出力でハイドレーションを開始する」原則を守り、追加の外観変更があれば `hydrated` フラグを活用して段階的に反映させる。

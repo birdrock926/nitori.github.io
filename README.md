@@ -68,7 +68,7 @@
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
 - RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。詳細な移行手順と検証ログは AGENTS.md にまとめています。
-- Rich Text ブロックの本文は CKEditor 由来の Markdown 互換テキストを `marked` ベースのレンダラーで HTML に変換します。太字/斜体/取り消し線/インライン・ブロックコード/引用/リンク/画像/リスト/改行をサポートし、Strapi からプレーンテキストが返ってきても公開ページでは装飾を保持します。描画時にも同じ正規化を再実行し、`<p>` や `<br>` だけでラップされた Markdown 断片は一度タグを剥がしてから再評価するため、`**bold** _italic_` などが素のまま表示されることはありません。2025-11-05 の追補で Markdown の再評価を**常に**単純ラッパー除去 → `marked` レンダリングの順に統一し、Strapi プレビュー/本番/SSR/CSR のすべてで同一 HTML が生成されるよう調整しました。これにより改行や装飾が欠落する不具合と、`Text content does not match server-rendered HTML` 警告が再発しないことを確認済みです。
+- Rich Text ブロックの本文は CKEditor 由来の Markdown 互換テキストを `marked` ベースのレンダラーで HTML に変換します。太字/斜体/取り消し線/インライン・ブロックコード/引用/リンク/画像/リスト/改行をサポートし、Strapi からプレーンテキストが返ってきても公開ページでは装飾を保持します。描画時にも同じ正規化を再実行し、`<p>` や `<br>` だけでラップされた Markdown 断片は一度タグを剥がしてから再評価するため、`**bold** _italic_` などが素のまま表示されることはありません。2025-11-06 の更新で Markdown 記号を含むかどうかを判定してから `marked` を実行し、既に HTML 化された本文はそのまま配信するため SSR/CSR の差異や Strapi プレビューでの装飾欠落を解消しました。これにより改行と画像/リンクの絶対 URL 化も安定し、`Text content does not match server-rendered HTML` 警告も再発しません。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) の Document ID（数値エントリー ID や slug からの自動フォールバック付き）と紐付け
 
 ## ワークフロー

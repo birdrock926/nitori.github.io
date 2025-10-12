@@ -198,6 +198,15 @@ const stripSimpleHtmlWrappers = (value: string) =>
     .replace(/<\/?span[^>]*>/gi, '')
     .replace(/&nbsp;/gi, ' ');
 
+const MARKDOWN_TOKEN_REGEX =
+  /(\*\*|__|\*(?=\S)(?:[^*]|\*[^*])*\*(?=\s|$)|_(?=\S)(?:[^_]|_[^_])*_(?=\s|$)|~~|`{1,3}|\!\[[^\]]*\]\([^\)]+\)|\[[^\]]+\]\([^\)]+\)|^>\s|\n>\s|\n\s*[-*+]\s|\n\s*\d+\.\s)/m;
+
+const HTML_TAG_REGEX = /<[^>]+>/i;
+
+const containsMarkdownTokens = (value: string) => MARKDOWN_TOKEN_REGEX.test(value);
+
+const looksLikeHtml = (value: string) => HTML_TAG_REGEX.test(value);
+
 const renderMarkdown = (value: string) => {
   const normalized = value.replace(/\r\n?/g, '\n');
   const html = marked.parse(normalized) as string;
@@ -211,8 +220,18 @@ export const normalizeRichMarkup = (value: string) => {
   }
 
   const preprocessed = stripSimpleHtmlWrappers(trimmed).trim();
-  const html = preprocessed ? renderMarkdown(preprocessed) : '';
+  const candidate = preprocessed || trimmed;
 
+  if (containsMarkdownTokens(candidate)) {
+    const html = renderMarkdown(candidate);
+    return html || trimmed;
+  }
+
+  if (looksLikeHtml(trimmed) && !containsMarkdownTokens(preprocessed)) {
+    return trimmed;
+  }
+
+  const html = renderMarkdown(candidate);
   return html || trimmed;
 };
 
