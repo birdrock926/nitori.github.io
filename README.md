@@ -40,6 +40,9 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
+  - RichText ブロックの本文倍率は 2025-10-27 時点でローカルカスタムフィールド群を撤去し、Strapi 標準の **Decimal** 入力へ戻しました。Windows 環境で `Unsupported field type: plugin::font-scale-range.scale` が継続したことが直接の原因で、現在は管理画面の数値入力に 0.7〜1.8 の範囲を設定して直接倍率を記入します。空欄の場合は記事全体の既定値 (1.0 倍) を自動継承します。履歴と検証手順は AGENTS.md を参照してください。
+  - RichText ブロックには **`alignment` 列挙型（left/center/right/justify）** を追加し、段落や画像の整列方法を記事ごとに指定できます。未設定時は `left` を適用し、Astro 側では `richtext-align-*` クラスで反映します。
+  - Markdown もしくは改行を含むテキストを保存すると、Strapi のライフサイクルが `marked` レンダラーで HTML に変換してから API 応答へ組み込みます。これにより Strapi 管理画面のプレビューや公開サイトの SSR/CSR で Markdown 記号がそのまま表示されることがなくなりました。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -47,7 +50,7 @@
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
 - **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Document ID や slug を指定した古い投稿は自動でエントリー ID へ補正し、必要に応じてフォールバックします）。
 - **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
-- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。
+- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。管理側でコメントを「ブロック/削除」した場合は返信のないツリーから自動的に除外し、返信が残っているときだけ「このコメントは管理者によって非表示になりました。」のプレースホルダーを表示します。
 
 ### SEO / 収益
 - `NewsArticle`/`Article` **JSON-LD**、OGP 自動生成、サイトマップ/RSS
@@ -57,16 +60,18 @@
 
 ### UI/UX（読者体験）
 - テーマ（ライト/ダーク）・読みやすいタイポ・スケルトン/LQIP・アクセシビリティ AA 準拠  
-- トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング  
+- トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング
+  - 記事カードは **4:3 のカバー画像**を自動表示し、最大幅 16rem 程度（約 256px）でフィードのトーンを揃えています。
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
-  - Rich Text ブロックごとに Strapi 管理画面の「文字サイズ倍率」スライダーで本文サイズを調整でき、未設定時は記事既定値を自動適用
+  - Rich Text コンテンツは **Markdown (太字/斜体/取り消し/コード/リスト/画像/引用)** を `marked` ベースのレンダラーで HTML に整形し、改行と相対パス画像も Strapi のメディア URL へ解決します。Strapi 側のライフサイクルでも同じレンダラーを用いて本文を HTML へ変換するため、プレビューと公開 API の両方で Markdown がそのまま露出することはありません。
+  - Rich Text ブロックの本文倍率は管理画面の `fontScale` 数値入力で調整でき、未設定時は記事既定値 (1.0 倍) を自動適用
 
 ## データモデル（抜粋）
 - **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-  - RichText ブロックはカスタムフィールド「文字サイズ倍率」で記事既定値（default/large/xlarge）に対する倍率を 0.7〜1.8 倍の範囲で設定できます
+- RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。詳細な移行手順と検証ログは AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー
@@ -103,6 +108,8 @@
 本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
 > **最終検証 (2025-10-02 JST)**: Node.js 20.19.4 + npm 10.8 系 (Debian/WSL 相当) で `/cms`・`/web` の `npm install` / `npm run build` を実行し、さらに `/cms` の `npm run develop` も起動確認しました。`scripts/run-strapi.mjs` により Node 20 + Windows/WSL 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` が発生せず、管理画面ビルドも完走することを再検証済みです。ログには `admin.auth.options.expiresIn` の非推奨警告が表示されますが動作に影響はありません。
+>
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール状態で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生することを確認。ドキュメント追従時点では CI 環境に依存が存在しないため、ローカル/本番で検証する際は事前に `npm install` を実行してください。
 
 ## 事前要件
 - Node.js 20 LTS
@@ -114,7 +121,7 @@
 ## ディレクトリ構成
 - `/cms` — Strapi v5 プロジェクト（記事・タグ・メディア管理）
 - `/web` — Astro SSG + React Islands
-- `/infrastructure` — Docker Compose, systemd, Caddy 設定など
+- `/infrastructure` — Docker Compose, systemd, Caddy 設定など。2025-10-26 に Compose/Caddy/systemd の設定を再点検し、OCI 常駐環境と Cloudflare Pages 連携で引き続き利用していることを確認したため、リポジトリから削除せず維持します。
 - `/public` — 共有公開アセット（ads.txt 雛形など）
 
 ---
@@ -209,8 +216,9 @@
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` / `Comments: Report abuse` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
 4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<entryId>` です。Astro 側は投稿のエントリー ID をスレッドキーとして利用し、Document ID や slug が渡された場合でもバックエンドが自動的に補正して処理します。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。ニックネーム欄は空欄でも投稿でき、その場合は記事に設定したデフォルト名（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値）が自動で表示に使われます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
-6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます（メール欄は任意入力で、未入力の場合は通知されません）。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
+6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。VirtusLab Comments 3.1.0 では投稿時にメールアドレスが必須のため、フロントエンド側で空欄／不正値を検知した場合は `@comments.local` ドメインのダミーアドレスを生成して API へ送信し、リクエスト段階で 400 を回避します。バックエンドも同じドメインを使って不足分を再検証し、ダミー宛には通知を送らないようスキップしています。実際に返信通知を受けたい場合は有効なメールアドレスを入力し、SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定してからテスト送信で動作確認してください。
 7. Post コンテンツタイプには「コメント用デフォルト名」と「本文フォントサイズ」フィールドを追加しています。前者は記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。後者は本文全体のフォント倍率（標準/やや大きい/大きい）を CMS から選択でき、視認性を記事単位で調整できます。
+8. Strapi 管理画面でコメント一覧を開いた際に `A valid integer must be provided to limit` が繰り返し表示される場合は、`cms/src/extensions/comments/strapi-server.js` に追加したリミット正規化ロジックが動作しているか確認してください。クエリ文字列の `limit` / `pagination[pageSize]` が数値以外になった場合でも自動的に 50 件（最大 200 件まで）へ丸め込み、Knex の警告でリロードループに陥らないようになりました。フロントエンド側も `web/src/lib/comments.ts` でページサイズを 1〜200 件にクランプするため、必要に応じて双方の上限を同時に調整してください。
 
 ##### トラブルシューティング
 

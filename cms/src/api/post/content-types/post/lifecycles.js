@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 const sanitizeSlug = (value = '') =>
   value
     .toString()
@@ -12,6 +14,160 @@ const DEFAULT_BODY_FONT_SCALE = 'default';
 const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 const RICH_TEXT_SCALE_MIN = 0.7;
 const RICH_TEXT_SCALE_MAX = 1.8;
+
+const escapeHtml = (value = '') =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const escapeAttribute = (value = '') => escapeHtml(value).replace(/`/g, '&#96;');
+
+const sanitizeHref = (href) => {
+  if (!href) return null;
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+  if (/^javascript:/i.test(trimmed)) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  return trimmed;
+};
+
+const markdownRenderer = new marked.Renderer();
+
+markdownRenderer.text = (text) => escapeHtml(text);
+markdownRenderer.paragraph = (text) => {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (/^<figure[\s>]/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `<p>${trimmed}</p>`;
+};
+markdownRenderer.br = () => '<br />';
+markdownRenderer.strong = (text) => `<strong>${text}</strong>`;
+markdownRenderer.em = (text) => `<em>${text}</em>`;
+markdownRenderer.del = (text) => `<del>${text}</del>`;
+markdownRenderer.codespan = (code) => `<code>${escapeHtml(code)}</code>`;
+markdownRenderer.blockquote = (quote) => `<blockquote>${quote}</blockquote>`;
+markdownRenderer.code = (code, infostring) => {
+  const language = typeof infostring === 'string' ? infostring.trim().split(/\s+/)[0] ?? '' : '';
+  const classAttr = language ? ` class="language-${escapeAttribute(language)}"` : '';
+  return `<pre><code${classAttr}>${escapeHtml(code)}</code></pre>`;
+};
+markdownRenderer.link = (href, title, text) => {
+  const safeHref = sanitizeHref(href);
+  if (!safeHref) {
+    return text;
+  }
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  const label = text || escapeHtml(safeHref);
+  return `<a href="${escapeAttribute(safeHref)}" rel="noopener" target="_blank"${titleAttr}>${label}</a>`;
+};
+markdownRenderer.image = (href, title, text) => {
+  const safeHref = sanitizeHref(href);
+  if (!safeHref) {
+    return text ? escapeHtml(text) : '';
+  }
+  const altAttr = escapeAttribute(text ?? '');
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  const caption = title?.trim() ? `<figcaption>${escapeHtml(title.trim())}</figcaption>` : '';
+  const img = `<img src="${escapeAttribute(safeHref)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
+  return `<figure class="richtext-figure">${img}${caption}</figure>`;
+};
+markdownRenderer.list = (body, ordered, start) => {
+  const tag = ordered ? 'ol' : 'ul';
+  const startAttr = ordered && typeof start === 'number' && start > 1 ? ` start="${start}"` : '';
+  return `<${tag}${startAttr}>${body}</${tag}>`;
+};
+markdownRenderer.listitem = (text) => `<li>${text}</li>`;
+markdownRenderer.heading = (text, level) => {
+  const safeLevel = Math.min(6, Math.max(1, level));
+  return `<h${safeLevel}>${text}</h${safeLevel}>`;
+};
+markdownRenderer.hr = () => '<hr />';
+markdownRenderer.table = (header, body) => {
+  const head = header ? `<thead>${header}</thead>` : '';
+  const bodyHtml = body ? `<tbody>${body}</tbody>` : '';
+  return `<table>${head}${bodyHtml}</table>`;
+};
+markdownRenderer.tablerow = (content) => `<tr>${content}</tr>`;
+markdownRenderer.tablecell = (content, { header, align }) => {
+  const tag = header ? 'th' : 'td';
+  const alignment = align && ['center', 'left', 'right'].includes(align) ? ` style="text-align:${align}"` : '';
+  return `<${tag}${alignment}>${content}</${tag}>`;
+};
+
+marked.setOptions({
+  renderer: markdownRenderer,
+  gfm: true,
+  breaks: true,
+  mangle: false,
+  headerIds: false,
+  smartLists: true,
+});
+
+const convertMarkdownToHtml = (value) => {
+  const output = marked.parse(value);
+  return typeof output === 'string' ? output.trim() : '';
+};
+
+const SIMPLE_WRAPPER_PATTERN = /^<(p|div)>([\s\S]*)<\/\1>$/i;
+const HTML_TAG_PATTERN = /<\/?[a-z][^>]*>/i;
+
+const stripSimpleWrappers = (value) => {
+  let current = value.trim();
+  let changed = false;
+
+  while (true) {
+    const match = current.match(SIMPLE_WRAPPER_PATTERN);
+    if (!match) {
+      break;
+    }
+    const inner = match[2].trim();
+    if (HTML_TAG_PATTERN.test(inner)) {
+      break;
+    }
+    current = inner;
+    changed = true;
+  }
+
+  return { text: current, changed };
+};
+
+const normalizeRichBodyValue = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const normalizedBreaks = trimmed.replace(/\r\n?/g, '\n').replace(/<br\s*\/?>(?=\s|$)/gi, '\n');
+  const unwrapped = stripSimpleWrappers(normalizedBreaks);
+  const candidate = unwrapped.text.replace(/&nbsp;/gi, ' ').trim();
+
+  if (!candidate) {
+    return '';
+  }
+
+  if (!HTML_TAG_PATTERN.test(candidate)) {
+    return convertMarkdownToHtml(candidate);
+  }
+
+  if (!unwrapped.changed && !/<(?!\/?(?:br)\b)[a-z][^>]*>/i.test(normalizedBreaks)) {
+    return convertMarkdownToHtml(normalizedBreaks.replace(/<br\s*\/?>(?=\s|$)/gi, '\n'));
+  }
+
+  return trimmed;
+};
 
 const parseScaleValue = (value) => {
   if (value === null || value === undefined) {
@@ -211,6 +367,91 @@ const applyBodyFontScale = (data, { requireExistingField = false } = {}) => {
   });
 };
 
+const normalizeBlockMarkdown = (block) => {
+  if (!block || typeof block !== 'object') {
+    return block;
+  }
+
+  const next = { ...block };
+
+  if (next.__component === 'content.rich-text') {
+    if (typeof next.body === 'string') {
+      next.body = normalizeRichBodyValue(next.body);
+    }
+    return next;
+  }
+
+  if (next.__component === 'layout.callout') {
+    if (typeof next.body === 'string') {
+      next.body = normalizeRichBodyValue(next.body);
+    }
+    return next;
+  }
+
+  if (next.__component === 'layout.columns' && Array.isArray(next.columns)) {
+    next.columns = next.columns.map((column) => {
+      if (!column || typeof column !== 'object') {
+        return column;
+      }
+      const columnCopy = { ...column };
+      if (typeof columnCopy.body === 'string') {
+        columnCopy.body = normalizeRichBodyValue(columnCopy.body);
+      }
+      return columnCopy;
+    });
+    return next;
+  }
+
+  return next;
+};
+
+const normalizeEntityBlocks = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return;
+  }
+
+  const target =
+    entity.attributes && typeof entity.attributes === 'object' ? entity.attributes : entity;
+
+  if (!Array.isArray(target.blocks)) {
+    return;
+  }
+
+  target.blocks = target.blocks.map((block) => normalizeBlockMarkdown(block));
+
+  if (entity.attributes && target === entity.attributes) {
+    entity.attributes = { ...target };
+    if (Array.isArray(entity.blocks)) {
+      entity.blocks = entity.attributes.blocks;
+    }
+  } else if (Array.isArray(entity.blocks)) {
+    entity.blocks = target.blocks;
+  }
+};
+
+const normalizeResultPayload = (payload) => {
+  if (!payload) {
+    return;
+  }
+
+  if (Array.isArray(payload)) {
+    payload.forEach((item) => normalizeResultPayload(item));
+    return;
+  }
+
+  if (Array.isArray(payload.results)) {
+    normalizeResultPayload(payload.results);
+  }
+
+  if (Array.isArray(payload.data)) {
+    normalizeResultPayload(payload.data);
+  } else if (payload.data && typeof payload.data === 'object') {
+    normalizeResultPayload(payload.data);
+  }
+
+  normalizeEntityBlocks(payload);
+};
+
 export default {
   async beforeCreate(event) {
     await ensureUniqueSlug(event);
@@ -223,5 +464,17 @@ export default {
     applyDefaultCommentAuthor(event?.params?.data, { requireExistingField: true });
     applyBodyFontScale(event?.params?.data, { requireExistingField: true });
     applyRichTextFontScale(event?.params?.data);
+  },
+  async afterCreate(event) {
+    normalizeResultPayload(event?.result);
+  },
+  async afterUpdate(event) {
+    normalizeResultPayload(event?.result);
+  },
+  async afterFind(event) {
+    normalizeResultPayload(event?.result);
+  },
+  async afterFindOne(event) {
+    normalizeResultPayload(event?.result);
   },
 };
