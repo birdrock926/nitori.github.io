@@ -26,21 +26,43 @@ const srcset = isGif
         .filter(Boolean)
         .join(', ');
 ---
-<figure style="margin: 2rem 0; text-align: center;">
+<figure class="content-figure">
   <img
     src={src}
     srcset={srcset}
-    sizes="(max-width: 768px) 100vw, 960px"
+    sizes="(max-width: 768px) 90vw, 720px"
     alt={computedAlt}
     loading="lazy"
     decoding="async"
     data-animated={isGif ? 'true' : 'false'}
-    style="max-width: 100%; border-radius: 1rem;"
+    class="content-figure__image"
   />
   {(caption || credit) && (
-    <figcaption class="muted" style="font-size: 0.85rem; margin-top: 0.5rem;">
+    <figcaption class="content-figure__caption muted">
       {caption}
       {credit && <span>（{credit}）</span>}
     </figcaption>
   )}
 </figure>
+
+<style>
+  :global(.content-figure) {
+    margin: 1.5rem auto;
+    text-align: center;
+    max-width: min(680px, 100%);
+    padding: 0 1rem;
+  }
+
+  :global(.content-figure__image) {
+    width: 100%;
+    height: auto;
+    border-radius: 0.75rem;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  :global(.content-figure__caption) {
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    line-height: 1.4;
+  }
+</style>

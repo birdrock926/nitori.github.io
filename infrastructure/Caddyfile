@@ -1,4 +1,5 @@
-cms.example.com {
+# 例: OCI 公開ホスト名をそのまま使う場合
+your-instance.compute.oraclecloud.com {
   encode gzip
   reverse_proxy strapi:1337
 }

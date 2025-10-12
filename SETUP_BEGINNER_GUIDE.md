@@ -6,6 +6,7 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
+- **カスタムフィールド**: 2025-10-27 に Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドへ戻しました。Windows で `Unsupported field type: plugin::font-scale-range.scale` が解消しきれなかったためです。現在は管理画面の数値入力で 0.7〜1.8 の範囲を直接編集し、空欄なら記事既定値 (1.0 倍) を適用します。値の丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js`（`clampScaleValue`）で制御しているので、必要に応じて調整してください。履歴と検証ログは AGENTS.md にまとまっています。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
@@ -45,7 +46,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
 
    | カテゴリ | 変数 | 内容 | 推奨値・例 |
    | --- | --- | --- | --- |
-   | 基本 | `PUBLIC_URL` | CMS を公開する URL | `https://cms.example.com` |
+   | 基本 | `PUBLIC_URL` | CMS を公開する URL（OCI の公開ホスト名や固定 IP を指定） | `https://your-instance.compute.oraclecloud.com` |
    | Webhook | `GITHUB_WORKFLOW_OWNER/REPO/ID/TOKEN/BRANCH` | Strapi Publish → Cloudflare Pages 用 GitHub Actions の連携設定 | `owner=your-org` など |
    | DB | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` など | `sqlite` |
    | アップロード | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は `OCI_*` を設定 | `oci` |
@@ -102,7 +103,7 @@ Strapi と Astro では `.env` に接続情報やシークレットを保存し�
 4. 設定後に `npm run dev` または `npm run build` を再実行すると、Prebid.js が読み込まれ、入札が成功した枠は Google Ad Manager の広告が表示されます。入札がゼロの場合は自動的に AdSense にフォールバックします。
 5. 動作確認はブラウザのデベロッパーツールで `pbjs.getBidResponses()` を実行し、`adserverTargeting` に値が入っているかをチェックすると確実です。
 
-> **ワンポイント**: `web/.env` で `STRAPI_API_URL` を空欄のままにするとローカル CMS (`http://localhost:1337`) へ自動接続します。`https://cms.example.com` のようなテンプレート値が残っている場合も同様にローカルへフォールバックするため、本番公開時は必ず実際の URL を設定してください。
+> **ワンポイント**: `web/.env` で `STRAPI_API_URL` を空欄のままにするとローカル CMS (`http://localhost:1337`) へ自動接続します。OCI 公開ホスト名（例: `https://your-instance.compute.oraclecloud.com`）を指定すると本番 CMS へ接続します。テンプレート値のままだとローカルへフォールバックするので注意してください。
 
 #### Inline Ad Slot ブロックで本文に広告を挿入する
 
@@ -159,6 +160,8 @@ cd ..
 
 `/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` も `scripts/run-strapi.mjs` により Node 20 / Windows / WSL で安定して動作するようになりました。極端にメモリが少ない環境 (2GB 未満) では Vite がクラッシュする可能性があるため、その場合は公式 `strapi/strapi:5`（Node 18 ベース）コンテナでビルドするか、ホストでビルド済みの管理画面をコピーする運用を検討してください。
 
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール環境で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生します。ドキュメント更新時点では CI 環境に依存がないため、ローカルで検証するときは先に `npm install` を実行してください。
+
 
 > ✅ **2025-10-02 JST 動作検証ログ**: Node.js 20.19.4 + npm 10.8 (Debian/WSL) で `npm install` → `npm run develop` → `npm run build`（/cms）と `npm install` → `npm run build`（/web）を順番に実行し、すべて成功することを確認しました。Strapi 起動時には `[github] Webhook dispatch skipped` のデバッグメッセージが表示され、GitHub 連携が未設定でも 401 が発生しないことを確認済みです。
 
@@ -171,6 +174,7 @@ npm run develop
 
 - ブラウザで `http://localhost:1337/admin` を開き、初回セットアップ (管理者ユーザー作成) を行います。
 - `http://localhost:1337/api/posts` にアクセスすると、公開記事が JSON で返ってきます。
+- 本番ドメインを `.env` の `PUBLIC_URL` や `ADMIN_URL` に設定したまま開発する場合、`npm run develop` を実行すると `scripts/run-strapi.mjs` が自動的に `--no-watch-admin` を付与し、必要に応じて `Strapi admin prebuild not found. Running "strapi build" ...` と表示して管理画面をビルドしてからサーバーを起動します。ログにビルド完了メッセージが出るまで待ってから管理画面を開くと、Marketplace ページでの `Failed to fetch dynamically imported module` エラーを防げます。ビルドが失敗した場合は表示されたエラーをもとに依存パッケージや権限設定を見直してください。
 
 ### 6-2. Astro Web サイト
 別のターミナルを開き、以下を実行します。
@@ -182,23 +186,26 @@ npm run dev
 - Strapi がまだ起動していなくてもコマンドが自動で待機し、CMS が利用可能になり次第サーバーが立ち上がります（既定ではタイムアウトなし。必要に応じて `STRAPI_WAIT_TIMEOUT_MS` で上限ミリ秒を指定できます）。
 - ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
-  - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
-  - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
-  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
+  - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に対象コレクションを記入したか。空文字列や `[]`/`null` を書いても自動で除外され、`api::post.post` が必ず残るようになっています。管理画面の **Settings → Comments** で Posts が Enabled Collections に入っているかも確認してください。
+    - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<documentId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。
+  - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `documentId`（必須）と `id`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。数値エントリー ID や slug のみが返るケースでもバックエンドが自動で Document ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
+  - 管理画面で **Comments → View** を開いた瞬間に `A valid integer must be provided to limit` が繰り返し表示される場合は、Strapi 拡張（`cms/src/extensions/comments/strapi-server.js`）が空クエリでも 50 件の既定値をセットし、`limit` / `_limit` / `pagination[pageSize]` などのエイリアスをすべて数値へ置き換えているか確認してください。Strapi を再起動したうえでブラウザのキャッシュを消し、管理画面をリロードすると警告が解消されます。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
+  - 管理画面でコメントを「ブロック」または「削除」すると、フロントエンドでは返信のないスレッドから自動的に除外され、返信が残っている場合のみ「このコメントは管理者によって非表示になりました。」のプレースホルダーが表示されます。ブロック済みコメントが一覧に残る場合は Strapi 側でコメント状態が更新されているか、キャッシュをクリアして再読込してください。
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
 ### 6-3. Comments プラグインを有効化してコメントを確認する
-1. Strapi 管理画面で **Settings → Comments** を開き、`Posts (api::post.post)` が **Enabled Collections** に追加されていることを確認します。承認制にしたい場合は **Approval Flow** にも `api::post.post` を登録し、`/web/.env` の `PUBLIC_COMMENTS_REQUIRE_APPROVAL` と一致させてください。
+1. Strapi 管理画面で **Settings → Comments** を開き、`Posts (api::post.post)` が **Enabled Collections** に追加されていることを確認します。`.env` で空文字列や `[]` を設定していても自動的に `api::post.post` が補完されますが、別コレクションを追加した場合はここにも表示されるか必ずチェックしてください。承認制にしたい場合は **Approval Flow** にも `api::post.post` を登録し、`/web/.env` の `PUBLIC_COMMENTS_REQUIRE_APPROVAL` と一致させます。
 2. 同じ設定画面で **Client → URL** にフロントエンド（例: `https://example.pages.dev`）を入力します。通知メールを使う場合は `COMMENTS_CONTACT_EMAIL` と SMTP を設定し、保存後に反映されるまで数秒待ちます。返信が付くと入力されたメールアドレス宛に通知が飛ぶため、送信テストで迷惑メール扱いにならないかも確認しましょう。
 3. Strapi 起動時の bootstrap が `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` を自動付与します。ロールを手動で編集した後は、必要に応じて再起動して権限が復元されたかをチェックしてください。
-4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
+4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。VirtusLab Comments は GraphQL プラグインを内部で利用するため、`cms/config/plugins.js` では GraphQL を常時有効化しています。GraphQL を無効化するとここが空白になるので注意してください。投稿が無い場合は空のリストが表示されます。
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
-7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
+7. コメントフォームのメール欄は任意入力ですが、VirtusLab Comments 3.1.0 がメールアドレスを必須項目として検証するため、空欄や不正な値で送信した場合はフロントエンド側で `@comments.local` ドメインのダミーアドレスを生成して API リクエストを行います（ダミー宛に通知は送信されません）。バックエンドも同じドメインで不足分を補完します。返信通知を受け取りたい場合は正しいメールアドレスを入力してください（API から外部公開はされません）。
 8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
+9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプされ、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
 
 
 ### 6-4. ブロックエディタで装飾する
@@ -209,8 +216,11 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
-- Rich Text ブロックにはカスタムフィールド「文字サイズ倍率」があり、スライダー（0.7〜1.8 倍）または数値入力で記事全体の既定値に対する倍率を調整できます。空欄のまま保存すると記事の `bodyFontScale` 設定を継承します。
+- Rich Text ブロックの `fontScale` は Strapi 標準の Decimal 入力で 0.7〜1.8 倍を直接入力でき、空欄にすると記事の `bodyFontScale` 設定を継承します（既定 1.0 倍）。
+- Rich Text ブロックには `alignment` 列挙（left/center/right/justify）が追加されており、ドロップダウンで選択した整列が API レスポンスにも含まれます。Astro 側の `RichText` コンポーネントが `align-center` などのクラスを付与して公開ページとプレビューの見た目を揃えます。
+- Rich Text ブロックの本文は CKEditor の Markdown 互換テキストを `marked` ベースのレンダラーで HTML に変換し、太字・斜体・取り消し線・コード（インライン/ブロック）・引用・リンク・画像・リスト・改行をそのまま再現します。Strapi 側で HTML が生成されなかった場合でも公開ページやプレビューモードで装飾が崩れません。フロントエンドの描画時にも同じ正規化を再実行し、`<p>` や `<br>` だけでラップされた Markdown 文字列はいったんタグを除去してから再評価するため、保存内容が `**bold** _italic_` のまま表示されることはありません。2025-11-06 のアップデートで Markdown 記号の有無を判定してから `marked` を実行し、既に HTML 化された本文はそのまま配信することで SSR/CSR・Strapi プレビュー間の差異と改行欠落、ハイドレーション警告を解消しました。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
+- Figure / Gallery ブロックや Rich Text 内のインライン画像は Astro 側で 680〜760px 幅にクランプされ、中央揃え + 角丸 + シャドウで統一表示されます。ギャラリーは 150px 以上のサムネイルに自動縮小されるため、原寸の大きい画像を貼ってもカードレイアウトが破綻しません。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。
 - Rich Text ブロックは改行や段落をそのまま HTML に変換し、Shift+Enter の改行も `<br>` として表示されます。プレビューで段落が期待通りに分かれているか確認しましょう。
@@ -290,12 +300,12 @@ docker compose logs -f strapi # 初回起動ログを監視
 
 ### 7-7. ドメインと HTTPS を整える
 1. 独自ドメインの DNS で A レコードを OCI インスタンスのパブリック IP に向けます。
-2. `infrastructure/Caddyfile` の `cms.example.com` を使用するドメインに置き換え、以下で適用します。
+2. 独自ドメインを使わず OCI の公開ホスト名をそのまま利用する場合は、`infrastructure/Caddyfile` の先頭ホスト名を `your-instance.compute.oraclecloud.com` のように置き換えてから以下で適用します（任意）。
    ```bash
    sudo cp Caddyfile /etc/caddy/Caddyfile
    sudo systemctl enable --now caddy
    ```
-3. 数分後に `https://cms.example.com/admin` が開ければ成功です。Caddy が自動で Let's Encrypt 証明書を取得します。
+3. 数分後に `https://your-instance.compute.oraclecloud.com/admin` などの公開ホスト名で Strapi 管理画面が開ければ成功です。Caddy が自動で Let's Encrypt 証明書を取得します。固定 IP で運用する場合は `:443` ホスト指定に変更してください。
 
 ### 7-8. セキュリティの最終確認
 - OCI のセキュリティリスト／NSG に 80/443/1337 の受信ルールがあるか確認

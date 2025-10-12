@@ -1,11 +1,14 @@
 import type { CSSProperties } from 'react';
 
+import { normalizeRichMarkup, type TextAlignment } from '@lib/strapi';
+
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 1.8;
 
 type Props = {
   body: string;
   fontScale?: number;
+  alignment?: TextAlignment;
 };
 
 type RichTextStyle = CSSProperties & {
@@ -23,12 +26,18 @@ const resolveScale = (scale?: number | null) => {
   return clampScale(scale).toString();
 };
 
-const RichTextContent = ({ body, fontScale }: Props) => {
+const RichTextContent = ({ body, fontScale, alignment }: Props) => {
   const normalizedScale = resolveScale(fontScale);
   const style: RichTextStyle | undefined =
     normalizedScale !== null ? { '--richtext-scale': normalizedScale } : undefined;
 
-  return <div className="richtext" style={style} dangerouslySetInnerHTML={{ __html: body }} />;
+  const html = typeof body === 'string' ? normalizeRichMarkup(body) : '';
+
+  const className = ['richtext', alignment ? `align-${alignment}` : null]
+    .filter(Boolean)
+    .join(' ');
+
+  return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
 export default RichTextContent;
