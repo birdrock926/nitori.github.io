@@ -158,7 +158,7 @@ const articleFontClass = `card article-body article-body--${post.bodyFontScale ?
     <div style="display: grid; gap: 2rem;">
       {post.blocks.map((block, index) => {
         if (block.__component === 'content.rich-text') {
-          return <RichText body={block.body} fontScale={block.fontScale} alignment={block.alignment} />;
+          return <RichText body={block.body} fontScale={block.fontScale} />;
         }
         if (block.__component === 'content.colored-text') {
           return (

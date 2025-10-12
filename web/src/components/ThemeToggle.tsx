@@ -21,39 +21,18 @@ const MoonIcon = () => (
 );
 
 const ThemeToggle = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [hydrated, setHydrated] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return (document.documentElement.dataset.theme as 'light' | 'dark') || 'light';
+  });
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const stored = localStorage.getItem('theme');
-    const preferred =
-      stored === 'dark' || stored === 'light'
-        ? stored
-        : window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-
-    document.documentElement.dataset.theme = preferred;
-    setTheme(preferred);
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated || typeof window === 'undefined') {
-      return;
-    }
-
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('theme', theme);
     document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
-  }, [theme, hydrated]);
+  }, [theme]);
 
-  const displayTheme = hydrated ? theme : 'light';
-  const isDark = displayTheme === 'dark';
+  const isDark = theme === 'dark';
 
   return (
     <button

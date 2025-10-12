@@ -1,5 +1,3 @@
-const EMPTY_TOKENS = new Set(['', '[]', 'null', 'undefined']);
-
 const parseCsv = (value, fallback = []) => {
   if (!value) {
     return [...fallback];
@@ -8,7 +6,7 @@ const parseCsv = (value, fallback = []) => {
   const items = value
     .split(',')
     .map((entry) => entry.trim())
-    .filter((entry) => !EMPTY_TOKENS.has(entry.toLowerCase()));
+    .filter((entry) => entry.length > 0);
 
   if (!items.length) {
     return [...fallback];
@@ -52,10 +50,6 @@ const buildCommentsConfig = (env) => {
     parseCsv(env('COMMENTS_ENABLED_COLLECTIONS'), [defaultCollection]),
     [defaultCollection]
   );
-
-  if (!enabledCollections.includes(defaultCollection)) {
-    enabledCollections.push(defaultCollection);
-  }
   const approvalFlow = withEnsuredCollection(
     parseCsv(env('COMMENTS_APPROVAL_FLOW'), [defaultCollection]),
     []
@@ -147,16 +141,6 @@ export default ({ env }) => {
   const config = {
     seo: {
       enabled: true,
-    },
-    graphql: {
-      enabled: true,
-      config: {
-        defaultLimit: 25,
-        maxLimit: 200,
-        apolloServer: {
-          introspection: true,
-        },
-      },
     },
     'users-permissions': {
       config: {

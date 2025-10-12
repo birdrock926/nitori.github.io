@@ -1,16 +1,12 @@
 const RELATION_PREFIX = 'api::post.post:';
 const POST_UID = 'api::post.post';
-const COMMENTS_UID = 'plugin::comments.comment';
 const NUMERIC_PATTERN = /^\d+$/;
-const RELATION_BOOTSTRAP_FLAG = Symbol.for('birdrock.comments.normalizeRelations');
-const DOCUMENT_MIDDLEWARE_FLAG = Symbol.for('birdrock.comments.documentsMiddleware');
 
 const relationCache = new Map();
 const FALLBACK_EMAIL_DOMAIN = 'comments.local';
 const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
 const DEFAULT_COMMENT_LIMIT = 50;
 const MAX_COMMENT_LIMIT = 200;
-const RELATION_BATCH_SIZE = 100;
 
 const coercePositiveInteger = (value) => {
   if (value === undefined || value === null) {
@@ -28,7 +24,7 @@ const coercePositiveInteger = (value) => {
 
 const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximum = MAX_COMMENT_LIMIT } = {}) => {
   if (!query || typeof query !== 'object') {
-    return { limit: null, pagination: null };
+    return null;
   }
 
   const pagination =
@@ -77,66 +73,49 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
     }
   });
 
-  const limitValue = Math.min(
-    Math.max(normalized !== null ? normalized : fallback, 1),
-    maximum,
-  );
-
-  const limitString = String(limitValue);
-
-  const nextPagination = { ...(pagination || {}) };
-  nextPagination.limit = limitValue;
-  nextPagination.pageSize = limitValue;
-
-  query.limit = limitValue;
-  query.pagination = nextPagination;
+  const limitValue =
+    normalized !== null
+      ? Math.min(Math.max(normalized, 1), maximum)
+      : sawCandidate
+      ? Math.min(Math.max(fallback, 1), maximum)
+      : null;
 
   aliasKeys.forEach((key) => {
-    if (key === 'limit') {
-      return;
-    }
-    query[key] = limitValue;
-  });
-
-  return { limit: limitValue, limitString, pagination: nextPagination };
-};
-
-const buildQueryString = (ctx, limitValue) => {
-  if (!ctx || !ctx.request) {
-    return;
-  }
-
-  const limitKeys = [
-    'limit',
-    '_limit',
-    'pageSize',
-    'page_size',
-    'pagination[limit]',
-    'pagination[pageSize]',
-    'pagination[page_size]',
-  ];
-
-  const params = new URLSearchParams(typeof ctx.request.querystring === 'string' ? ctx.request.querystring : '');
-  limitKeys.forEach((key) => {
-    if (params.has(key)) {
-      params.delete(key);
+    if (key !== 'limit' && Object.prototype.hasOwnProperty.call(query, key)) {
+      delete query[key];
     }
   });
 
-  if (limitValue !== null && limitValue !== undefined) {
-    const limitString = String(limitValue);
-    params.set('limit', limitString);
-    params.set('_limit', limitString);
-    params.set('pageSize', limitString);
-    params.set('page_size', limitString);
-    params.set('pagination[limit]', limitString);
-    params.set('pagination[pageSize]', limitString);
-    params.set('pagination[page_size]', limitString);
+  if (pagination) {
+    paginationAliasKeys.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(pagination, key)) {
+        delete pagination[key];
+      }
+    });
   }
 
-  const nextQueryString = params.toString();
-  ctx.request.querystring = nextQueryString;
-  ctx.querystring = nextQueryString;
+  if (limitValue !== null) {
+    query.limit = limitValue;
+    const nextPagination = { ...(pagination || {}) };
+    nextPagination.limit = limitValue;
+    nextPagination.pageSize = limitValue;
+    query.pagination = nextPagination;
+    return limitValue;
+  }
+
+  if (pagination) {
+    if (Object.keys(pagination).length > 0) {
+      query.pagination = pagination;
+    } else if (Object.prototype.hasOwnProperty.call(query, 'pagination')) {
+      delete query.pagination;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(query, 'limit')) {
+    delete query.limit;
+  }
+
+  return null;
 };
 
 const withSanitizedLimit = (controller) => {
@@ -150,38 +129,11 @@ const withSanitizedLimit = (controller) => {
         ctx.query = {};
       }
 
-      const sanitized = sanitizeCommentsLimit(ctx.query);
-      const limitValue = sanitized.limit ?? DEFAULT_COMMENT_LIMIT;
-      const limitString = sanitized.limitString ?? String(limitValue);
+      sanitizeCommentsLimit(ctx.query);
 
-      if (ctx.request) {
-        const nextQuery = { ...(ctx.request.query || {}), ...ctx.query };
-        nextQuery.limit = limitString;
-        nextQuery._limit = limitString;
-        nextQuery.pageSize = limitString;
-        nextQuery.page_size = limitString;
-        nextQuery.pagination = {
-          ...(ctx.query.pagination || {}),
-          ...(sanitized.pagination || {}),
-        };
-        ctx.request.query = nextQuery;
-        buildQueryString(ctx, limitString);
+      if (ctx.request && ctx.request.query && ctx.request.query !== ctx.query) {
+        ctx.request.query = { ...ctx.request.query, ...ctx.query };
       }
-
-      if (!ctx.state || typeof ctx.state !== 'object') {
-        ctx.state = {};
-      }
-
-      const nextStateQuery = { ...(ctx.state.query || {}), ...ctx.query };
-      nextStateQuery.limit = limitValue;
-      nextStateQuery._limit = limitValue;
-      nextStateQuery.pageSize = limitValue;
-      nextStateQuery.page_size = limitValue;
-      nextStateQuery.pagination = {
-        ...(nextStateQuery.pagination || {}),
-        ...(sanitized.pagination || {}),
-      };
-      ctx.state.query = nextStateQuery;
     }
 
     return controller.call(this, ctx, next);
@@ -242,39 +194,46 @@ const ensureAuthorEmail = (ctx) => {
   author.email = buildFallbackEmail(author, body.content);
 };
 
-const coerceDocumentId = (value) => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
+const coerceDocumentId = (post) => {
+  if (!post) {
+    return null;
+  }
+
+  if (typeof post.documentId === 'string' && post.documentId.trim().length > 0) {
+    return post.documentId.trim();
+  }
+
+  if (typeof post.document_id === 'string' && post.document_id.trim().length > 0) {
+    return post.document_id.trim();
   }
 
   return null;
 };
 
-const fetchPostByWhere = async (where, strapiInstance = strapi) => {
+const coerceRelationId = (post) => {
+  if (!post) {
+    return null;
+  }
+
+  const value = post.id ?? post.entryId ?? post.entry_id;
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.trunc(parsed);
+  }
+
+  return null;
+};
+
+const fetchPostByWhere = async (where) => {
   try {
-    return await strapiInstance.db
-      .query(POST_UID)
-      .findOne({ where, select: ['id', 'documentId', 'document_id', 'slug', 'locale'] });
+    return await strapi.db.query(POST_UID).findOne({ where, select: ['id', 'documentId', 'document_id', 'slug'] });
   } catch (error) {
-    strapiInstance.log.error('[comments] Failed to resolve post for comments relation normalization.', error);
+    strapi.log.error('[comments] Failed to resolve post for comments relation normalization.', error);
     return null;
   }
 };
 
-const cacheRelationIdentifier = (key, value) => {
-  if (!key) {
-    return;
-  }
-
-  relationCache.set(key, value ?? null);
-
-  if (value) {
-    relationCache.set(value, value);
-  }
-};
-
-const resolveRelationDocumentId = async (identifier, strapiInstance = strapi) => {
+const resolveRelationId = async (identifier) => {
   if (!identifier) {
     return null;
   }
@@ -283,37 +242,39 @@ const resolveRelationDocumentId = async (identifier, strapiInstance = strapi) =>
     return relationCache.get(identifier);
   }
 
-  let documentId = null;
+  let relationId = null;
 
   if (NUMERIC_PATTERN.test(identifier)) {
-    const numeric = Number.parseInt(identifier, 10);
-    if (Number.isFinite(numeric) && numeric > 0) {
-      const postById = await fetchPostByWhere({ id: numeric }, strapiInstance);
-      documentId = coerceDocumentId(postById?.documentId ?? postById?.document_id);
+    const post = await fetchPostByWhere({ id: Number(identifier) });
+    relationId = coerceRelationId(post);
+  }
+
+  if (!relationId) {
+    const direct = await fetchPostByWhere({
+      $or: [
+        { documentId: identifier },
+        { document_id: identifier },
+      ],
+    });
+
+    if (direct) {
+      relationId = coerceRelationId(direct);
+      if (!relationId) {
+        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
+        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
+          relationId = Math.trunc(Number(fallbackDocumentId));
+        }
+      }
     }
   }
 
-  if (!documentId) {
-    const byDocumentId = await fetchPostByWhere(
-      {
-        $or: [
-          { documentId: identifier },
-          { document_id: identifier },
-        ],
-      },
-      strapiInstance,
-    );
-
-    documentId = coerceDocumentId(byDocumentId?.documentId ?? byDocumentId?.document_id);
+  if (!relationId) {
+    const bySlug = await fetchPostByWhere({ slug: identifier });
+    relationId = coerceRelationId(bySlug);
   }
 
-  if (!documentId) {
-    const bySlug = await fetchPostByWhere({ slug: identifier }, strapiInstance);
-    documentId = coerceDocumentId(bySlug?.documentId ?? bySlug?.document_id);
-  }
-
-  cacheRelationIdentifier(identifier, documentId);
-  return documentId;
+  relationCache.set(identifier, relationId);
+  return relationId;
 };
 
 const normalizeRelation = async (relation) => {
@@ -326,12 +287,12 @@ const normalizeRelation = async (relation) => {
     return relation;
   }
 
-  const relationDocumentId = await resolveRelationDocumentId(identifier);
-  if (!relationDocumentId) {
+  const relationId = await resolveRelationId(identifier);
+  if (!relationId) {
     return relation;
   }
 
-  return `${RELATION_PREFIX}${relationDocumentId}`;
+  return `${RELATION_PREFIX}${relationId}`;
 };
 
 const mapReportReason = (value) => {
@@ -388,142 +349,6 @@ const annotateContent = (content, original) => {
   }
 
   return trimmedContent ? `${trimmedContent}\n\n${annotation}` : annotation;
-};
-
-const normalizeStoredCommentRelations = async (strapiInstance) => {
-  const engine = strapiInstance?.db?.query ? strapiInstance.db : null;
-  if (!engine) {
-    return;
-  }
-
-  if (globalThis[RELATION_BOOTSTRAP_FLAG]) {
-    return;
-  }
-
-  globalThis[RELATION_BOOTSTRAP_FLAG] = true;
-
-  let lastId = 0;
-  let updated = 0;
-  let inspected = 0;
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const comments = await engine.query(COMMENTS_UID).findMany({
-      where: {
-        id: { $gt: lastId },
-        related: { $startsWith: RELATION_PREFIX },
-      },
-      orderBy: { id: 'asc' },
-      limit: RELATION_BATCH_SIZE,
-      select: ['id', 'related'],
-    });
-
-    if (!comments || comments.length === 0) {
-      break;
-    }
-
-    for (const comment of comments) {
-      lastId = comment.id;
-
-      if (typeof comment.related !== 'string' || !comment.related.startsWith(RELATION_PREFIX)) {
-        continue;
-      }
-
-      inspected += 1;
-
-      const identifier = comment.related.slice(RELATION_PREFIX.length).trim();
-      if (!identifier) {
-        continue;
-      }
-
-      const normalized = await resolveRelationDocumentId(identifier, strapiInstance);
-      if (!normalized) {
-        continue;
-      }
-
-      try {
-        await engine.query(COMMENTS_UID).update({
-          where: { id: comment.id },
-          data: { related: `${RELATION_PREFIX}${normalized}` },
-        });
-        cacheRelationIdentifier(identifier, normalized);
-        updated += 1;
-      } catch (error) {
-        strapiInstance.log.error('[comments] Failed to normalize stored relation.', error);
-      }
-    }
-
-    if (comments.length < RELATION_BATCH_SIZE) {
-      break;
-    }
-  }
-
-  if (updated > 0) {
-    strapiInstance.log.info(
-      `[comments] Normalized ${updated} stored comment relations to document IDs (inspected ${inspected}).`,
-    );
-  }
-};
-
-const registerDocumentsMiddleware = (strapiInstance = strapi) => {
-  const documents = strapiInstance?.documents;
-  if (!documents || typeof documents.use !== 'function') {
-    return;
-  }
-
-  if (globalThis[DOCUMENT_MIDDLEWARE_FLAG]) {
-    return;
-  }
-
-  globalThis[DOCUMENT_MIDDLEWARE_FLAG] = true;
-
-  documents.use(async (context, next) => {
-    try {
-      if (context?.uid === POST_UID && context?.params) {
-        const { params } = context;
-
-        const extractCandidate = () => {
-          if (typeof params.documentId === 'string' && params.documentId) {
-            return params.documentId;
-          }
-
-          if (params.documentId && typeof params.documentId !== 'string') {
-            return String(params.documentId);
-          }
-
-          if (params.where && typeof params.where === 'object') {
-            const whereDocument = params.where.documentId ?? params.where.document_id;
-            if (typeof whereDocument === 'string' && whereDocument) {
-              return whereDocument;
-            }
-            if (whereDocument && typeof whereDocument !== 'string') {
-              return String(whereDocument);
-            }
-          }
-
-          return null;
-        };
-
-        const candidate = extractCandidate();
-
-        if (candidate && NUMERIC_PATTERN.test(candidate)) {
-          const resolved = await resolveRelationDocumentId(candidate, strapiInstance);
-          if (resolved && resolved !== candidate) {
-            params.documentId = resolved;
-            if (params.where && typeof params.where === 'object') {
-              const nextWhere = { ...params.where, documentId: resolved };
-              delete nextWhere.document_id;
-              params.where = nextWhere;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      strapiInstance.log.error('[comments] Failed to coerce documentId via documents middleware.', error);
-    }
-
-    return next();
-  });
 };
 
 export default (plugin) => {
@@ -668,19 +493,6 @@ Visit ${clientAppUrl} and continue the discussion.
       return null;
     };
   }
-
-  const baseBootstrap = plugin.bootstrap;
-
-  plugin.bootstrap = async (...args) => {
-    if (typeof baseBootstrap === 'function') {
-      await baseBootstrap(...args);
-    }
-
-    const [{ strapi: bootstrapStrapi } = {}] = args;
-    const activeStrapi = bootstrapStrapi || strapi;
-    await normalizeStoredCommentRelations(activeStrapi);
-    registerDocumentsMiddleware(activeStrapi);
-  };
 
   return plugin;
 };

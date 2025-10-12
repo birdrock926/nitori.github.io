@@ -5,8 +5,8 @@ const { items = [] } = Astro.props as {
 };
 ---
 {items.length > 0 && (
-  <section class="card gallery" style="gap: 0.75rem;">
-    <div class="grid gallery-grid">
+  <section class="card" style="gap: 0.75rem;">
+    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
       {items.map((item, index) => {
         const mode = item.displayMode ?? 'auto';
         const mime = item.image?.mime?.toLowerCase() ?? '';
@@ -29,7 +29,7 @@ const { items = [] } = Astro.props as {
             <img
               src={src}
               srcset={srcset}
-              sizes="(max-width: 600px) 65vw, (max-width: 1024px) 33vw, 220px"
+              sizes="(max-width: 600px) 50vw, 25vw"
               alt={alt}
               loading="lazy"
               decoding="async"
@@ -43,17 +43,6 @@ const { items = [] } = Astro.props as {
 )}
 
 <style>
-  :global(.gallery) {
-    max-width: min(760px, 100%);
-    margin: 1.5rem auto;
-    padding: 1.5rem 1rem;
-  }
-
-  :global(.gallery-grid) {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.75rem;
-  }
-
   :global(.gallery-item) {
     margin: 0;
     display: grid;

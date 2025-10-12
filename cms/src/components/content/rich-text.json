@@ -10,18 +10,14 @@
       "type": "richtext",
       "required": true
     },
-    "alignment": {
-      "type": "enumeration",
-      "enum": ["left", "center", "right", "justify"],
-      "default": "left"
-    },
     "fontScale": {
       "type": "decimal",
       "default": null,
+      "min": 0.7,
+      "max": 1.8,
       "options": {
-        "min": 0.7,
-        "max": 1.8,
-        "step": 0.05
+        "step": 0.05,
+        "defaultScale": 1
       }
     }
   }

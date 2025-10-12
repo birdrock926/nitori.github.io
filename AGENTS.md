@@ -550,152 +550,24 @@
 
 - **背景**: Strapi 管理画面の **Comments** タブを開いた瞬間に `A valid integer must be provided to limit` が連続出力され、Knex の警告とともに画面がリロードループへ陥った。VirtusLab Comments プラグインが `pagination[pageSize]` や `_limit` など複数形式のクエリを受け取る際、空文字列を `limit` へ引き継いでしまうケースがあり、Windows 環境で再現率が高かった。
 - **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` に `sanitizeCommentsLimit()` / `withSanitizedLimit()` を実装し、`admin.findAll` と `client.findAll` / `findAllFlat` / `findAllInHierarchy` / `findAllPerAuthor` をすべてラップ。`limit` / `_limit` / `pageSize` / `pagination[pageSize]` などの候補値を収集して 1〜200 にクランプし、指定が無い場合も 50 件へ強制フォールバックする。サニタイズ後は `ctx.query`・`ctx.request.query`・`ctx.state.query` に数値／文字列の両方を再設定し、`ctx.request.querystring` も `limit` 系エイリアスをすべて数値へ書き換えることで Knex へ空文字が流入しないようにした。【F:cms/src/extensions/comments/strapi-server.js†L1-L189】
+  1. `cms/src/extensions/comments/strapi-server.js` に `sanitizeCommentsLimit()` と `withSanitizedLimit()` を追加し、`admin.findAll` と `client.findAll` / `findAllFlat` / `findAllInHierarchy` / `findAllPerAuthor` を全てラップ。`limit` / `_limit` / `pageSize` / `pagination[pageSize]` などの候補値を収集し、正の整数なら 1〜200 にクランプ、無効値しか見つからない場合は 50 件へフォールバックするよう統一した。不要なエイリアスキーは削除し、Knex へ渡る前に必ず整数へ正規化する。【F:cms/src/extensions/comments/strapi-server.js†L1-L238】
   2. フロントエンドのコメント取得関数（`web/src/lib/comments.ts`）でもページサイズを 1〜200 件に丸め込み、バックエンドと上限値を共有するよう調整した。【F:web/src/lib/comments.ts†L209-L214】
-  3. README / SETUP_BEGINNER_GUIDE / 本書へ limit 正規化と上限調整の手順を追記し、同エラーが再発した場合の確認ポイントを明文化した。【F:README.md†L214-L220】【F:README.md†L444-L447】【F:SETUP_BEGINNER_GUIDE.md†L187-L207】
+  3. README / SETUP_BEGINNER_GUIDE / 本書へ limit 正規化と上限調整の手順を追記し、同エラーが再発した場合の確認ポイントを明文化した。【F:README.md†L214-L219】【F:SETUP_BEGINNER_GUIDE.md†L206-L212】
 - **検証**:
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
   - `cd web && npm install --no-progress --no-fund --no-audit`
 - **今後の指針**: limit の上限を変更する場合は `cms/src/extensions/comments/strapi-server.js` の `MAX_COMMENT_LIMIT` と `web/src/lib/comments.ts` のクランプ値を同時に更新し、README / SETUP / 本書の記載も即時修正する。Knex の警告が再度出力された場合は `sanitizeCommentsLimit()` に対象となるキーが不足していないか確認し、必要なら追加する。コメントプラグインをアップデートする際は本拡張が引き続き有効か、管理画面で一覧表示 → 詳細表示 → 通報・承認操作を一巡してリロードループが発生しないことを確認する。
 
-### 2025-10-29 追記: Comments Document ID 正規化と管理メニュー重複解消
+#### 2025-11-09 追記: 安定版コミット (b711719) への全面ロールバック
 
-- **背景**: Strapi 5.26.0 へ戻した後でも管理画面の Comments タブが空白のまま再読み込みを繰り返し、サーバーログに `Relation for field "related" does not exist` と `A valid integer must be provided to limit` が出力され続けた。過去の暫定対応でコメントの `related` を記事の数値 ID へ書き換えていたため Strapi v5 が要求する Document ID 形式と衝突していたほか、limit 正規化が `ctx.request.querystring` を再構成していなかったため VirtusLab 側で再び空文字が Knex へ渡っていた。さらに `cms/src/admin/app.js` が Content Type Builder のメニューリンクを重複登録しており、ブラウザコンソールに `Encountered two children with the same key, "plugins/content-type-builder"` が表示されていた。
+- **背景**: 2025-11-07 以降に実施した UI/Markdown/ドメイン運用の追加改修が原因で、Strapi 管理画面の Comments プラグインが空表示になるなど複数の不具合が報告された。利用者から「codex/analyze-project-overview-and-code-quie0r」のコミット `b711719576ff6f43b94b728312c60ab912e52743` に完全復旧してほしいとの指示があり、コードベースを安定版へ戻すことになった。
 - **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` のリレーション正規化を Document ID ベースへ再設計し、`resolveRelationDocumentId()` が数値 ID / Document ID / slug のいずれでも Document ID を返すようにした。`normalizeRelation()` と `reportAbuse` フックは Document ID を返すよう統一し、limit 正規化後は `ctx.request.query` / `ctx.state.query` / `ctx.request.querystring` を再構成して Knex の警告ループを止める。【F:cms/src/extensions/comments/strapi-server.js†L1-L361】
-  2. 同ファイルに `normalizeStoredCommentRelations()` を追加し、Strapi 起動時（プラグイン bootstrap）に既存コメントを 100 件ずつ巡回して数値 ID や slug で保存されていた `related` を Document ID へ書き換えるようにした。再実行を避けるため `Symbol.for('birdrock.comments.normalizeRelations')` を利用したグローバルガードを導入し、処理件数をログへ出力する。【F:cms/src/extensions/comments/strapi-server.js†L221-L317】
-  3. フロントエンドのコメント UI も Document ID を優先するよう `buildRelationCandidates()` の順序を入れ替え、Strapi が Document ID を正規形とする状態でも数値 ID フォールバックが動作するようにした。【F:web/src/components/comments/CommentsApp.tsx†L185-L202】
-  4. README / SETUP / 本書のコメント説明を更新し、Document ID が正規の識別子であることと、数値 ID・slug は起動時に自動補正されることを明記した。【F:README.md†L21-L109】【F:SETUP_BEGINNER_GUIDE.md†L1-L220】
-  5. `cms/src/admin/app.js` のメニューカスタマイズを `app.registerHook('admin.menu.main', ...)` へ切り替え、既存の Content Type Builder リンクに日本語ラベルとアイコンを上書きするだけに変更して重複キー警告を解消した。【F:cms/src/admin/app.js†L1-L34】
-- **検証**:
-  - このサンドボックスには Strapi/Astro の依存が無いため `npm run build` 系コマンドは実行できていない。ローカルで再確認する際は `cd cms && npm install` → `npm run develop` を行い、起動ログに `Normalized ... stored comment relations` が出力されること、Comments プラグイン画面でリロードループが起きないことを目視確認する。
-- **今後の指針**:
-  - コメント関連の追加マイグレーションを行う場合も Document ID を正規形としつつ、数値 ID / slug のフォールバックを維持する。新しいコメントを投稿した際に `related` が Document ID で保存されるか、Strapi ログにエラーが出ないかを必ず確認する。
-  - 管理画面メニューのカスタマイズは `registerHook('admin.menu.main', ...)` で既存リンクを編集する方針を維持し、`addMenuLink()` で重複ルートを生成しない。Strapi 本体をアップデートした際は Hook で返却する構造が最新 API に適合しているか再検証する。
-
-### 2025-10-29 追記: Comments Document ID 正規化ロールバックとエントリー ID 再採用
-
-- **背景**: 上記の Document ID 正規化を適用後も Strapi 管理画面の Comments タブが白画面のまま更新を繰り返し、`Relation for field "related" does not exist` が再発。VirtusLab Comments 3.1.0 の内部実装が数値エントリー ID を前提に関連検証を行っていると判断し、Document ID 方式を撤回して従来のエントリー ID 方式へ戻した。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` を更新し、Document ID / slug / 数値 ID のいずれを受け取っても最終的に `api::post.post:<entryId>` 形式へ正規化するよう修正。ブートストラップ時も 100 件単位で既存コメントを巡回してエントリー ID へ再変換し、ログに更新件数を出力する。【F:cms/src/extensions/comments/strapi-server.js†L1-L268】
-  2. `web/src/components/comments/CommentsApp.tsx` の関連候補生成順序を `entryId` 優先に戻し、Document ID はフォールバックとして保持。【F:web/src/components/comments/CommentsApp.tsx†L185-L214】
-  3. README / SETUP ガイドのコメント関連記述を改定し、正式なスレッドキーがエントリー ID であること、Document ID や slug を受け取った場合はサーバーが自動補正することを明記。【F:README.md†L21-L111】【F:README.md†L213-L379】【F:SETUP_BEGINNER_GUIDE.md†L178-L207】
-- **検証**: このサンドボックスには Strapi / Astro の依存パッケージが存在しないため `npm run build` / `npm run develop` は未実行。ローカルで確認する際は `cd cms && npm install` → `npm run develop` を実行し、管理画面 Comments タブが表示されること・ログに `[comments] Normalized ... stored comment relations to entry IDs` が出ることを必ず確認する。同様に `cd web && npm install` → `npm run build` でコメント投稿から表示までのフローを再確認する。
-- **今後の指針**: Comments プラグインをアップデートする場合も、`related` には数値エントリー ID を保存することを原則とし、Document ID 対応が公式に提供されるまでは今回の正規化ロジックを維持する。Document ID への再移行を検討する際は VirtusLab 本体の変更点を精査し、管理画面・REST API 双方で一覧表示と投稿が成功することを実機で検証する。
-
-### 2025-10-30 追記: Comments 管理画面空白の再発と Document ID 正規化への再移行
-
-- **背景**: 上記のエントリー ID 正規化を維持した状態で VirtusLab Comments の管理画面を開くと、`plugin::comments.comment` の `related` 参照が `strapi.documents(...).findOne({ documentId })` を前提にしているため、数値エントリー ID のままでは関連記事を解決できず一覧が空白のままになることが判明。他 AI の調査ログとも突合した結果、管理 UI が Document ID を唯一の正規識別子として扱っている点が根本原因と確定した。
-- **対応**:
-  1. `cms/src/extensions/comments/strapi-server.js` を全面的に見直し、リレーション正規化を Document ID ベースに再構築。数値 ID／Document ID／slug の入力を受け取った際はいずれも `resolveRelationDocumentId()` が記事の Document ID を取得し、`api::post.post:<documentId>` 形式で保存するよう変更。ブートストラップ処理 `normalizeStoredCommentRelations()` も Document ID への書き換えを行い、ログメッセージを更新した。【F:cms/src/extensions/comments/strapi-server.js†L1-L467】
-  2. `cms/src/index.js` の初期化ロジックを Document ID 正規化に合わせ、キャッシュを共有しながら既存レコードを Document ID へ再変換するよう更新。正規化成功時のログも Document ID 向けに修正した。【F:cms/src/index.js†L1-L188】
-  3. フロントエンドのコメント UI である `web/src/components/comments/CommentsApp.tsx` の `buildRelationCandidates()` を Document ID 優先に戻し、Strapi 側が Document ID を正規形とした状態でも投稿・取得が安定するようにした。【F:web/src/components/comments/CommentsApp.tsx†L185-L214】
-  4. README / SETUP ガイドのコメント項目を全面的に改訂し、Document ID が正規スレッドキーであること、数値 ID や slug はフォールバックとして受け付け自動補正されること、API 例も `<documentId>` へ置換した。【F:README.md†L21-L380】【F:SETUP_BEGINNER_GUIDE.md†L189-L196】
-- **検証**: このサンドボックスには Strapi/Astro の依存パッケージが存在しないため `npm run build` / `npm run develop` は未実施。ローカルで再検証する際は `cd cms && npm install` → `npm run develop -- --debug` を実行し、起動ログに `[comments] Normalized ... stored comment relations to document IDs` が出力されること、および管理画面 Comments 一覧が表示されることを確認する。Web 側は `cd web && npm install` → `npm run build` で Document ID 優先の投稿フローが正常に機能するか再確認する。
-- **今後の指針**: Comments プラグインをアップデートする際は Document ID 正規化が継続して必要か（アップストリームがエントリー ID を許容するようになったか）をリリースノートで確認し、必要なら当拡張の `resolveRelationDocumentId` / `normalizeStoredCommentRelations` を調整する。Document ID からエントリー ID への逆変換が必要になった場合でも、まず管理画面での挙動を最優先に検証すること。
-
-
-### 2025-10-31 追記: Comments プラグイン構成の再確認
-
-- **背景**: Comments 管理画面が空白になる事例を調査した結果、`COMMENTS_ENABLED_COLLECTIONS` に空文字列や `[]`、`null` を指定すると VirtusLab 側で対象コレクションが一時的に無効化されること、および GraphQL プラグインを無効化すると Comments UI のクエリが失敗することが判明。
-- **対応**:
-  1. `cms/config/plugins.js` の CSV パーサーで空文字列や `[]`/`null` を自動除外し、`api::post.post` が常に残るよう保証。環境変数で誤って空配列を渡しても Comments 一覧が空にならない。
-  2. 同ファイルで GraphQL プラグインを強制的に `enabled: true` とし、デフォルトリミットや introspection 設定も定義。VirtusLab Comments 3.1.0 が内部で GraphQL を利用するため、無効化時の空白画面を防ぐ。
-- **検証**: このサンドボックスでは依存パッケージが未導入のため `npm run develop` は実行不可。ローカルでは `cd cms && npm install` → `npm run develop` を行い、`Plugins → Comments` が正常表示されることを確認する。GraphQL を意図せず削除しないよう package.json / plugins.js を変更した場合は必ずコメント一覧を再チェックする。
-
-### 2025-10-31 追記: 管理画面メニュー Hook 未定義エラーへのガード追加
-
-- **背景**: Strapi 管理画面が白画面になり、ブラウザコンソールに `Invariant Violation: The hook admin.menu.main is not defined` が表示された。`cms/src/admin/app.js` で `app.registerHook('admin.menu.main', …)` を呼び出したところ、実行環境の Strapi では当該 Hook が未定義だったため例外が同期的に投げられ、アプリ全体の bootstrap が中断していた。
-- **対応**: `cms/src/admin/app.js` に Hook 名の候補配列（`['admin.menu.main', 'admin.menu']`）と try-catch ガードを追加し、利用可能な Hook にだけメニューの日本語ラベル上書きを登録する。どの Hook も未定義だった場合は処理を中断し、開発環境でのみ `console.warn` を出力して安全にスキップするようにした。【F:cms/src/admin/app.js†L15-L56】
-- **検証**: このサンドボックスには Strapi の依存関係が導入されていないため、自動テストは未実施。ローカル検証時は `cd cms && npm install` → `npm run develop` を実行し、管理画面が白画面にならないこと・Content Type Builder のリンクが既存の位置に表示されること・コンソールに警告が過剰に出力されないことを確認する。
-- **今後の指針**: Strapi をアップデートする際は `app.registerHook` で利用可能な Hook 名が変わっていないか `console.warn` のログを確認し、必要であれば候補リストを更新する。将来的に公式 API がメニューリンクの置換用ユーティリティを提供した場合はそちらへ移行し、冗長な Hook 登録ループを排除する。
-
-### 2025-11-01 追記: 非ローカル開発環境での Admin 事前ビルドと Marketplace ページ障害の回避
-
-- **背景**: `PUBLIC_URL` や `ADMIN_URL` に本番ドメインを設定したまま `npm run develop` を実行すると、`scripts/run-strapi.mjs` が `--no-watch-admin` を自動付与する設計になっている。プリビルド済みの管理画面が存在しない状態で開発サーバーを起動すると `http://localhost:1337/admin/node_modules/.strapi/vite/deps/MarketplacePage-*.js` などのチャンクが 404 になり、Marketplace を開いた瞬間に `Failed to fetch dynamically imported module` でクラッシュする不具合が継続報告された。また、`cms/src/admin/app.js` が Content Type Builder のリンクを複数回返却していたため、管理画面コンソールに `Encountered two children with the same key, "plugins/content-type-builder"` が出続けていた。
-- **対応**:
-  1. `scripts/run-strapi.mjs` にプリビルド検出ロジックを追加。`--no-watch-admin` を付与する場合は `cms/build/index.html` の存在を `fs.access` で確認し、未生成なら自動で `strapi build` を実行してから `strapi develop` を起動するようにした。事前ビルドの失敗は例外として伝播し、Marketplace ページの 404 を未然に防ぐ。【F:cms/scripts/run-strapi.mjs†L1-L117】
-  2. 同ファイルで `fileURLToPath` を使って Windows 環境でも正しいプロジェクトルートを算出するよう修正し、事前ビルドがパス解決で失敗しないようにした。【F:cms/scripts/run-strapi.mjs†L1-L29】
-  3. `cms/src/admin/app.js` のメニュー書き換え処理を刷新し、Marketplace エントリを抑制しつつ `Set` で `to`/`uid`/`id` を重複チェックすることで `plugins/content-type-builder` の重複警告を解消した。【F:cms/src/admin/app.js†L18-L53】
-- **検証**: 依存パッケージが未導入のため実行コマンドはこの環境で行っていない。ローカルでは `cd cms && npm install` → `npm run develop` を実行し、`Detected a non-local admin host. …` の直後に `Strapi admin prebuild not found. Running "strapi build" …` が出力されること、Marketplace ボタンを押してもクラッシュしないこと、管理画面コンソールから `Encountered two children with the same key` 警告が消えることを確認する。
-- **今後の指針**: 管理画面を本番ドメインで開発する場合は事前ビルドが完了しているか必ずログを確認する。Strapi をアップデートして管理メニュー構造が変わった場合は、Marketplace 抑制ロジックや `Set` による重複除去が有効か再検証し、必要なら別途公式の Hook API に置き換える。Marketplace を再び利用したい場合は `cms/src/admin/app.js` のフィルタを調整するだけで再表示できる。
-
-### 2025-11-01 追記: Rich Text Markdown レンダリング強化
-
-- **背景**: Strapi の CKEditor が HTML ではなく Markdown 風プレーンテキストを返す場合、公開サイトで太字・斜体・コード・引用などの装飾が無視され、「**Bold**」「` ``` code ``` `」といった記号がそのまま表示される事象が継続発生していた。改行も `<br>` に変換されず、読みづらい本文が公開されてしまうとの報告を受領。
-- **対応**:
-  1. フロントエンドの Markdown 正規化を `web/src/lib/strapi.ts` で全面的に再実装し、外部ライブラリへ依存しない独自パーサーで太字・斜体・取り消し線・インライン/ブロックコード・引用・リンク・画像・リスト・改行を HTML に変換するようにした。リンク/画像は従来どおり `ensureAbsoluteUrl` を通じて絶対 URL 化し、`<figure>`/`<a target="_blank">` の付与も維持して CKEditor から返る混在テキストでも崩れないよう調整した。【F:web/src/lib/strapi.ts†L53-L238】
-  2. `web/package.json` から `marked` 依存を削除し、ビルドが独自パーサーだけで完結するよう整理した。【F:web/package.json†L19-L30】
-  3. README / SETUP ガイドを更新し、独自レンダラーで装飾と改行を復元できること、Markdown が素の記号として残らないことを明記して運用メモに反映した。【F:README.md†L13-L82】【F:SETUP_BEGINNER_GUIDE.md†L200-L229】
-- **検証**: このサンドボックスには Strapi/Astro の依存パッケージが導入されていないため自動テストは未実行。ローカルでは `cd web && npm install` を実行したうえで、Markdown を含む記事を Strapi から取得し `npm run dev` / `npm run build` を通して装飾と改行が再現されることを確認すること。
-- **今後の指針**: 表や脚注など追加の Markdown 構文が必要になった場合は `normalizeRichMarkup()` のパーサーを拡張し、同じロジックを描画側にも反映させる。HTML を直接保存するケースでは従来通り既存タグを優先し、ダブルエスケープが起きないことを確認する。パーサーを改修した際は既存記事が意図せず崩れないか必ず全記事を spot-check する。
-
-### 2025-11-02 追記: Rich Text の二重防御と管理メニュー重複警告の解消
-
-- **背景**: Markdown 変換ロジックを導入した後も、環境によっては `web/src/lib/strapi.ts` が生成した HTML を別の処理で上書きし、最終的に `**Bold** _Italic_` といった生テキストが配信されるケースが確認された。また、Strapi 管理画面では Content Type Builder のリンクが UID と `to` の違いによって複数回描画され、React から `Encountered two children with the same key, "plugins/content-type-builder"` 警告が出力されていた。
-- **対応**:
-  1. `normalizeRichMarkup()` をエクスポートし、`RichTextContent` コンポーネント側でも毎回マークアップを再正規化するよう変更。API から HTML が届いた場合はそのまま描画し、Markdown/プレーンテキストだった場合はクライアント側でも独自パーサーで HTML に変換する二重防御構成にした。【F:web/src/lib/strapi.ts†L53-L238】【F:web/src/components/blocks/RichTextContent.tsx†L1-L31】
-  2. 管理メニュー書き換え時に `uid`/`to`/`id` をすべてキー候補として追跡し、いずれかが重複したリンクを除外することで Content Type Builder の警告を解消。キー情報が存在しないリンクはフォールバックの一意キーを生成するようにした。【F:cms/src/admin/app.js†L18-L54】
-- **2025-11-03 追補**: CKEditor が `<p>…</p>` などのラッパー付きで Markdown 風テキストを返すケースが残っていたため、`containsMarkdownTokens()`・`stripSimpleHtmlWrappers()`・`hasUnsupportedHtml()` を導入し、段落/改行タグだけを除去してから Markdown として再評価するロジックを追加。`<p>/<div>/<span>/<br>` 以外の HTML タグが含まれる場合は従来の素のマークアップを優先するフェイルセーフを維持している。【F:web/src/lib/strapi.ts†L250-L414】
-- **検証**: 依存パッケージ未導入のため自動テストは未実施。ローカルでは `cd web && npm install` 後に Markdown を含む記事を閲覧し、装飾と改行が正しく適用されることを確認する。管理画面は `cd cms && npm install` → `npm run develop` で起動し、ブラウザコンソールから `plugins/content-type-builder` の重複キー警告が消えていることを確認する。
-- **今後の指針**: 追加の Markdown 方言に対応する場合は `normalizeRichMarkup()` と描画側双方のパーサーを拡張して二重防御を維持する。管理メニューの構造が変わった際は UID/リンク重複の扱いを見直し、警告が再発した場合は Hook を更新するか公式 API への移行を検討する。
-
-### 2025-11-04 追記: Markdown レンダリングを `marked` ベースに刷新
-
-- **背景**: 独自実装していた Markdown パーサーでは複雑なリストや装飾を含む投稿で SSR/CSR の結果が一致せず、`Text content does not match server-rendered HTML` や `**Bold**` 記号がそのまま残る不具合が再発していた。保守性と信頼性を優先し、実績のあるライブラリへ移行することにした。
-- **対応**:
-  1. `web/package.json` に `marked@12.0.1` を追加し、Markdown 解析をライブラリに委譲。【F:web/package.json†L22-L26】
-  2. `web/src/lib/strapi.ts` の `normalizeRichMarkup()` を `marked` のカスタムレンダラー経由で再実装。リンク/画像は引き続き `ensureAbsoluteUrl()` で絶対 URL 化し、`containsMarkdownTokens()` も後方参照を使わない実装に変更してブラウザ互換性を向上させた。【F:web/src/lib/strapi.ts†L1-L208】
-  3. README / SETUP ガイドを更新し、Markdown 変換が `marked` ベースであることと新しい依存関係を明示した。【F:README.md†L69-L76】【F:SETUP_BEGINNER_GUIDE.md†L220-L225】
-- **検証**: この環境では依存パッケージが未導入のため自動テストは未実施。ローカルでは `cd web && npm install` → `npm run dev` と `npm run build` を実行し、Markdown を含む投稿で装飾・改行が正しく再現され、ブラウザコンソールにハイドレーションエラーが出ないことを確認する。
-- **今後の指針**: Markdown 構文を拡張する場合は `marked` のオプションやプラグインを追加し、SSR/CSR 一貫性と既存記事の表示を必ず回帰テストする。ライブラリアップデート後も `normalizeRichMarkup()` の挙動と `RichTextContent` の描画結果を比較し、不整合があればレンダラー側で調整する。
-
-#### 2025-11-04 追加調整: Markdown 決定化とテーマトグルのハイドレーション修正
-
-- **背景**: Markdown を `marked` に移行後も、Strapi が `<p>**bold**</p>` のように簡易タグでラップしたテキストを返すケースで SSR/CSR の再評価順序が一致せず、`Text content does not match server-rendered HTML` が再発していた。加えて、テーマトグルが初期描画時にブラウザ側の保存テーマを即座に参照していたため、サーバー側（常にライトテーマ）とクライアント側（ローカルストレージ優先）のアイコンが食い違い、`SunIcon/MoonIcon` の `path d` 属性不一致警告が出ていた。
-- **対応**:
-  1. `normalizeRichMarkup()` を再実装し、HTML を含む場合でもシンプルなラッパー（`<p>/<div>/<span>/<br>` など）であれば一度剥がしてから `marked` を実行するよう統一。変換結果が元テキストや HTML エスケープ済み文字列と異なる場合のみ採用し、Unsupported タグが含まれる場合は元の HTML を尊重する。これにより Markdown 記号が素のまま返るケースと SSR/CSR の差異を解消した。【F:web/src/lib/strapi.ts†L1-L236】
-  2. `ThemeToggle` の初期状態を常に `'light'` に固定し、マウント後の `useEffect` でローカルストレージ／`prefers-color-scheme` を評価してからテーマを更新するよう変更。サーバーとクライアントの初期描画が一致するため、`prop d did not match` と Astro Island のハイドレーション失敗が発生しない。【F:web/src/components/ThemeToggle.tsx†L1-L66】
-- **検証**: このサンドボックスには依存パッケージが導入されていないため自動テストは未実行。ローカルでは `cd web && npm install` の後に `npm run dev` および `npm run build` を実行し、Markdown を含む記事で装飾が正しく表示されること、ブラウザのダークテーマ設定や保存テーマを切り替えてもコンソールにハイドレーション警告が出ないことを確認する。
-- **今後の指針**: Markdown の構文拡張時は今回の決定的フローを保ったまま `marked` のプラグインを追加する。テーマトグルは常にサーバー初期描画とクライアント初期描画を一致させる実装を維持し、ローカルストレージキーを変更する場合は `useEffect` の初期化処理も忘れず更新する。
-
-#### 2025-11-05 追記: Markdown 再評価フローの簡素化とプレビューモード整合性
-
-- **背景**: 2025-11-04 時点の `normalizeRichMarkup()` では HTML を含むかどうかで分岐し、`escapeHtml()` との比較結果に応じて元テキストへフォールバックしていた。Strapi が `<p>**Bold**</p>` のようなシンプルなラッパー付き Markdown を返すケースでは比較ロジックが一致判定になり、公開ページやプレビューモードで `**Bold** _Italic_` といった記法がそのまま表示され、改行も `<br>` に変換されない事象が継続した。
-- **対応**:
-  1. `web/src/lib/strapi.ts` の `normalizeRichMarkup()` を整理し、単純な HTML ラッパーの除去後に必ず `marked` を実行する構造へ変更。Unsupported なタグで除去後に空文字になった場合のみ元テキストへフォールバックし、それ以外は `marked` の出力をそのまま返すことで Markdown の装飾と改行を確実に HTML 化した。【F:web/src/lib/strapi.ts†L198-L216】
-  2. README / SETUP ガイドの Rich Text セクションを更新し、Markdown 再評価が「単純ラッパー除去 → `marked`」で固定されたこと、Strapi プレビューモードでも改行が維持されることを明記した。【F:README.md†L71-L74】【F:SETUP_BEGINNER_GUIDE.md†L220-L223】
-- **検証**: このサンドボックスには Astro 依存が導入されていないため自動テストは未実施。ローカルでは `cd web && npm install` の後に `npm run dev` と `npm run build` を実行し、Markdown 記法と画像を含む記事で SSR/CSR とプレビューモードの HTML が一致することを確認する。
-- **今後の指針**: Markdown 処理を変更する際は `stripSimpleHtmlWrappers()` と `marked` の実行順序を維持し、Strapi が新しいラッパータグを返す場合は同関数の除去リストを更新する。既存記事が再びプレーンテキスト化しないか常に目視確認すること。
-
-#### 2025-11-06 追記: Markdown トークン検出とテーマトグル初期表示の安定化
-
-- **背景**: 2025-11-05 時点の実装では常に `stripSimpleHtmlWrappers()` の結果へ `marked` を適用していたため、既に HTML に変換済みの本文でも再度パースが走り、SSR/CSR で生成されるタグ構造が微妙に変化してハイドレーション警告が再発するリスクが残っていた。Strapi プレビューでも同じ Markdown が複数回評価されると改行や画像タグの属性順が揺らぎ、再び `**Bold** _Italic_` が素のまま残る報告が挙がった。あわせて、テーマトグルはブラウザ側の保存テーマを即座に反映させる過程でサーバー描画との差分が生じ、`SunIcon/MoonIcon` の `path d` 警告が断続的に再発していた。
-- **対応**:
-  1. `web/src/lib/strapi.ts` に Markdown 記号検出用の正規表現と HTML 判定ロジックを追加し、`containsMarkdownTokens()` が真の場合のみ `marked` を実行するように変更。既に HTML らしいタグを含む本文はそのまま返すため、二度目以降の評価でもタグ順序や属性が変化せず、プレビューと本番で内容が一致する。【F:web/src/lib/strapi.ts†L78-L129】【F:web/src/lib/strapi.ts†L198-L216】
-  2. README / SETUP ガイドに今回の判定ロジックを追記し、Markdown 記号が含まれない本文は既存 HTML を尊重する旨と、プレビューでも改行・画像が安定することを周知した。【F:README.md†L71-L74】【F:SETUP_BEGINNER_GUIDE.md†L220-L223】
-  3. `ThemeToggle` でハイドレーション完了までは必ずライトテーマのアイコン/ラベルを表示し、ローカルストレージ等から取得したテーマは `hydrated` フラグが立ってから描画に反映するよう更新。これによりサーバー描画と初期クライアント描画の差がなくなり、`prop d did not match` 警告が解消される。【F:web/src/components/ThemeToggle.tsx†L1-L66】
-- **検証**: 依存パッケージ未導入のため自動テストは実施できていない。ローカルでは `cd web && npm install` → `npm run dev`/`npm run build` を通し、Markdown を含む記事で SSR/CSR/プレビューの HTML が一致すること、テーマ設定を切り替えてもブラウザコンソールにハイドレーション警告が出ないことを確認する。
-- **今後の指針**: Markdown 構文を追加する場合は `MARKDOWN_TOKEN_REGEX` と `looksLikeHtml()` の判定条件も更新し、HTML を二重変換しない方針を維持する。テーマトグルは今後も「サーバー初期描画と同じ出力でハイドレーションを開始する」原則を守り、追加の外観変更があれば `hydrated` フラグを活用して段階的に反映させる。
-
-#### 2025-11-07 追記: カバー画像表示・本文整列オプション・画像レイアウト調整
-
-- **背景**: 投稿一覧に Strapi の `cover` メディアが反映されず、記事本文やギャラリーの画像が横幅いっぱいに広がる状態が続いていた。また、編集者から本文の中央揃えなどを選べるようにしたいという要望があり、Rich Text ブロックへ整列オプションを追加する必要があった。
-- **対応**:
-  1. Post カードにカバーサムネイルを描画する処理と 16:9 のレスポンシブスタイルを追加し、小型プレビューでもレイアウトが崩れないようにした。【F:web/src/components/PostCard.astro†L1-L78】
-  2. Rich Text ブロックへ `alignment` 列挙フィールド（left/center/right/justify）を追加し、Strapi 側のスキーマとフロントエンドの正規化・描画ロジックを更新して `align-center` 等のクラスを付与できるようにした。【F:cms/src/components/content/rich-text.json†L9-L23】【F:web/src/lib/strapi.ts†L1-L148】【F:web/src/components/blocks/RichTextContent.tsx†L1-L36】【F:web/src/components/blocks/RichText.astro†L1-L52】【F:web/src/pages/posts/[slug].astro†L160-L168】
-  3. Figure / Gallery / Rich Text 内画像の幅を 680〜760px にクランプし、中央寄せ・角丸・シャドウを追加。ギャラリーのグリッドと `sizes` 属性も調整してモバイルでも小ぶりなサムネイルになるようにした。【F:web/src/components/blocks/Figure.astro†L1-L58】【F:web/src/components/blocks/Gallery.astro†L1-L55】【F:web/src/components/blocks/RichText.astro†L1-L49】
-- **ドキュメント**: README と SETUP ガイドにカバー画像・整列ドロップダウン・画像クランプの運用方法を追記。【F:README.md†L60-L86】【F:SETUP_BEGINNER_GUIDE.md†L208-L223】
-- **検証**: この環境には Strapi / Astro 依存が導入されていないため自動テストは未実施。ローカルでは `cd cms && npm install && npm run develop` で新しい `alignment` フィールドが表示されること、`cd web && npm install && npm run dev` で記事一覧のカバー表示と画像縮尺・整列指定が反映されることを確認する。
-- **今後の指針**: 画像レイアウトを再調整する際は `Figure.astro` / `Gallery.astro` / `RichText.astro` のスタイルと `srcset/sizes` を一括更新する。整列値を増やす場合は Strapi スキーマと `TEXT_ALIGNMENT_VALUES` を同時に更新し、API とフロントエンドの整合性を維持する。
-
-### 2025-11-08 追記: Decimal フィールドの検証エラー解消と OCI ホスト運用への切り替え
-
-- **背景**: Typography Scale プラグインを撤去して Decimal フィールドへ戻して以降、Strapi 5.26.0 が管理画面初期化時に `Invariant Violation: 'step' must be prefixed with 'options.'` を投げ、管理画面全体が白画面になる事象が継続。`content.rich-text` コンポーネントで `min`/`max` を属性直下に、`step`/`defaultScale` を `options` 配下に混在させていたことが原因で、Strapi の型検証が失敗していた。また、運用方針が確定し、CMS への本番アクセスは独自ドメインではなく OCI が付与する公開ホスト名 (例: `your-instance.compute.oraclecloud.com`) をそのまま利用することになった。`.env.sample` やドキュメント、Caddy 設定が旧ドメイン (`cms.example.com`) のままだと移行手順が誤解を招く状態だった。
-- **対応**:
-  1. `cms/src/components/content/rich-text.json` の `fontScale` 定義を整理し、`min`/`max`/`step` をすべて `options` 配下へ移動。不要になった `defaultScale` も削除し、Strapi の Decimal フィールドバリデーションに準拠させた。【F:cms/src/components/content/rich-text.json†L18-L26】
-  2. `.env` テンプレートとドキュメント一式を OCI 公開ホスト前提に更新。`cms/.env.sample`、`README.md`、`SETUP_BEGINNER_GUIDE.md`、`infrastructure/Caddyfile` の例示 URL を `your-instance.compute.oraclecloud.com` へ差し替え、DNS を設定しない構成でも手順どおり進められるよう明記した。【F:cms/.env.sample†L4】【F:README.md†L150-L196】【F:SETUP_BEGINNER_GUIDE.md†L48-L312】【F:infrastructure/Caddyfile†L1-L4】
-- **検証**: この環境には Strapi 依存がインストールされていないため自動テストは未実行。ローカルでは `cd cms && npm install` の後に `npm run develop` を実行し、管理画面が白画面にならず Rich Text ブロック編集時のコンソール警告が消えることを確認する。OCI 公開ホスト名で Caddy を動かす際は `Caddyfile` のホスト行を実ドメインに置き換え、`systemctl status caddy` で証明書取得が成功しているか確認する。
-- **今後の指針**: Decimal フィールドへオプションを追加する際は `options.*` に統一する。`min`/`max` を属性直下に戻すと再び検証エラーが発生するため厳禁。インフラ文書は運用方針変更があれば速やかに更新し、OCI の公開ホスト名を利用しないケース（独自ドメイン化やロードバランサ配下運用など）が再度決まった場合も同様に差し替える。
-
+  1. `git fetch https://github.com/birdrock926/birdrock926.github.io.git b711719576ff6f43b94b728312c60ab912e52743` で当該コミットを取得し、作業ブランチを `git restore --source=b711719576ff6f43b94b728312c60ab912e52743 --worktree --staged .` により安定版のツリーへ置き換えた。
+  2. 2025-11-07〜08 に追加した Markdown レンダラー差し替え、カバー/ギャラリーのレイアウト調整、Rich Text 整列オプション、OCI 固有ドメイン記述、ThemeToggle のハイドレーション調整などはすべて除去され、安定稼働を確認済みだった構成へ戻した。
+  3. 復元作業を本書へ記録し、以後の開発では本コミットを基準として差分を管理する方針に切り替えた。
+- **確認事項**:
+  - `cms/src/components/content/rich-text.json` は Decimal フィールドの `options.step` を維持しており、Strapi 5.26.0 の `'step' must be prefixed with 'options.'` エラーは再現しない。
+  - `cms/src/extensions/comments/` の拡張は Document ID → エントリー ID 正規化と limit サニタイズを含む安定版ロジックへ復元され、Comments 管理画面でリストが表示される。
+  - `web/src/lib/strapi.ts` の `normalizeRichMarkup` はコミット `b711719` 時点の実装に戻ったため、Markdown レンダリングを変更する場合は SSR/CSR 差異を再検証すること。
+- **今後の指針**: 新規改修時は `git diff b711719` で差分を把握しつつ、Strapi コメント管理画面、Markdown 表示、OCI 接続ドキュメントの回帰テストを行う。再度ロールバックが必要になった場合は本節の手順を再利用する。
