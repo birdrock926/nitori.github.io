@@ -1,4 +1,5 @@
 import { STRAPI, TWITCH } from '@config/site';
+import { marked } from 'marked';
 
 export type MediaFormat = {
   url: string;
@@ -32,6 +33,7 @@ export type DynamicZoneBlock =
       __component: 'content.rich-text';
       body: string;
       fontScale?: number;
+      alignment?: 'left' | 'center' | 'right' | 'justify';
     }
   | {
       __component: 'content.colored-text';
@@ -123,6 +125,7 @@ export type RankingItem = {
 const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 const RICH_TEXT_FONT_SCALE_MIN = 0.7;
 const RICH_TEXT_FONT_SCALE_MAX = 1.8;
+const RICH_TEXT_ALIGNMENTS = new Set(['left', 'center', 'right', 'justify']);
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
@@ -144,99 +147,155 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const escapeAttribute = (value: string) =>
-  escapeHtml(value).replace(/`/g, '&#96;');
+const escapeAttribute = (value: string) => escapeHtml(value).replace(/`/g, '&#96;');
 
-const renderMarkdownInline = (value: string) => {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
-  let cursor = 0;
-  let output = '';
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(value)) !== null) {
-    const [full] = match;
-    const start = match.index;
-    if (start > cursor) {
-      output += escapeHtml(value.slice(cursor, start));
-    }
-
-    if (match[1] !== undefined) {
-      const alt = match[1] ?? '';
-      const url = match[2] ?? '';
-      const title = match[3] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const altAttr = escapeAttribute(alt);
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
-      }
-    } else {
-      const label = match[4] ?? '';
-      const url = match[5] ?? '';
-      const title = match[6] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
-      }
-    }
-
-    cursor = start + full.length;
+const sanitizeHref = (href?: string | null) => {
+  if (!href) return null;
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+  if (/^javascript:/i.test(trimmed)) {
+    return null;
   }
-
-  if (cursor < value.length) {
-    output += escapeHtml(value.slice(cursor));
+  const resolved = ensureAbsoluteUrl(trimmed) ?? trimmed;
+  if (/^https?:\/\//i.test(resolved) || resolved.startsWith('/')) {
+    return resolved;
   }
-
-  return output;
+  return null;
 };
 
-const convertPlainTextToHtml = (value: string) => {
-  const normalized = value.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return '';
+const markdownRenderer = new marked.Renderer();
 
-  const paragraphs = normalized.split(/\n{2,}/);
-  const rendered = paragraphs
-    .map((paragraph) => {
-      const trimmed = paragraph.trim();
-      if (!trimmed) return '';
+markdownRenderer.text = (text) => escapeHtml(text);
 
-      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
-      if (figureMatch) {
-        const alt = figureMatch[1] ?? '';
-        const url = figureMatch[2] ?? '';
-        const title = figureMatch[3] ?? '';
-        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-        if (!resolvedUrl) {
-          return `<p>${escapeHtml(trimmed)}</p>`;
-        }
-        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
-        const altAttr = escapeAttribute(alt);
-        const urlAttr = escapeAttribute(resolvedUrl);
-        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
-        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
-      }
+markdownRenderer.paragraph = (text) => {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (/^<figure[\s>]/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `<p>${trimmed}</p>`;
+};
 
-      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
-      return `<p>${lines.join('<br />')}</p>`;
-    })
-    .filter((paragraph) => paragraph.length > 0);
+markdownRenderer.br = () => '<br />';
+markdownRenderer.strong = (text) => `<strong>${text}</strong>`;
+markdownRenderer.em = (text) => `<em>${text}</em>`;
+markdownRenderer.del = (text) => `<del>${text}</del>`;
+markdownRenderer.codespan = (code) => `<code>${escapeHtml(code)}</code>`;
+markdownRenderer.blockquote = (quote) => `<blockquote>${quote}</blockquote>`;
+markdownRenderer.code = (code, infostring) => {
+  const language = typeof infostring === 'string' ? infostring.trim().split(/\s+/)[0] ?? '' : '';
+  const classAttr = language ? ` class="language-${escapeAttribute(language)}"` : '';
+  return `<pre><code${classAttr}>${escapeHtml(code)}</code></pre>`;
+};
 
-  return rendered.join('\n');
+markdownRenderer.link = (href, title, text) => {
+  const safeHref = sanitizeHref(href);
+  if (!safeHref) {
+    return text;
+  }
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  return `<a href="${escapeAttribute(safeHref)}" rel="noopener" target="_blank"${titleAttr}>${text || escapeHtml(safeHref)}</a>`;
+};
+
+markdownRenderer.image = (href, title, text) => {
+  const safeHref = sanitizeHref(href);
+  if (!safeHref) {
+    return text ? escapeHtml(text) : '';
+  }
+  const altAttr = escapeAttribute(text ?? '');
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  const caption = title?.trim() ? `<figcaption>${escapeHtml(title.trim())}</figcaption>` : '';
+  const img = `<img src="${escapeAttribute(safeHref)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
+  return `<figure class="richtext-figure">${img}${caption}</figure>`;
+};
+
+markdownRenderer.list = (body, ordered, start) => {
+  const tag = ordered ? 'ol' : 'ul';
+  const startAttr = ordered && typeof start === 'number' && start > 1 ? ` start="${start}"` : '';
+  return `<${tag}${startAttr}>${body}</${tag}>`;
+};
+
+markdownRenderer.listitem = (text) => `<li>${text}</li>`;
+
+markdownRenderer.heading = (text, level) => {
+  const safeLevel = Math.min(6, Math.max(1, level));
+  return `<h${safeLevel}>${text}</h${safeLevel}>`;
+};
+
+markdownRenderer.hr = () => '<hr />';
+
+markdownRenderer.table = (header, body) => {
+  const head = header ? `<thead>${header}</thead>` : '';
+  const bodyHtml = body ? `<tbody>${body}</tbody>` : '';
+  return `<table>${head}${bodyHtml}</table>`;
+};
+
+markdownRenderer.tablerow = (content) => `<tr>${content}</tr>`;
+
+markdownRenderer.tablecell = (content, { header, align }) => {
+  const tag = header ? 'th' : 'td';
+  const alignment = align && ['center', 'left', 'right'].includes(align) ? ` style="text-align:${align}"` : '';
+  return `<${tag}${alignment}>${content}</${tag}>`;
+};
+
+marked.setOptions({
+  renderer: markdownRenderer,
+  gfm: true,
+  breaks: true,
+  mangle: false,
+  headerIds: false,
+  smartLists: true,
+});
+
+const convertMarkdownToHtml = (value: string) => {
+  const output = marked.parse(value);
+  return typeof output === 'string' ? output.trim() : '';
+};
+
+const SIMPLE_WRAPPER_PATTERN = /^<(p|div)>([\s\S]*)<\/\1>$/i;
+const HTML_TAG_PATTERN = /<\/?[a-z][^>]*>/i;
+
+const stripSimpleWrappers = (value: string) => {
+  let current = value.trim();
+  let changed = false;
+
+  while (true) {
+    const match = current.match(SIMPLE_WRAPPER_PATTERN);
+    if (!match) {
+      break;
+    }
+    const inner = match[2].trim();
+    if (HTML_TAG_PATTERN.test(inner)) {
+      break;
+    }
+    current = inner;
+    changed = true;
+  }
+
+  return { text: current, changed };
 };
 
 const normalizeRichMarkup = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  if (/<[a-z][^>]*>/i.test(trimmed)) {
-    return trimmed;
+
+  const normalizedBreaks = trimmed.replace(/\r\n?/g, '\n').replace(/<br\s*\/?>(?=\s|$)/gi, '\n');
+  const unwrapped = stripSimpleWrappers(normalizedBreaks);
+  const candidate = unwrapped.text.replace(/&nbsp;/gi, ' ').trim();
+
+  if (!candidate) {
+    return '';
   }
-  return convertPlainTextToHtml(trimmed);
+
+  if (!HTML_TAG_PATTERN.test(candidate)) {
+    return convertMarkdownToHtml(candidate);
+  }
+
+  if (!unwrapped.changed && !/<(?!\/?(?:br)\b)[a-z][^>]*>/i.test(normalizedBreaks)) {
+    return convertMarkdownToHtml(normalizedBreaks.replace(/<br\s*\/?>(?=\s|$)/gi, '\n'));
+  }
+
+  return trimmed;
 };
 
 const parseMedia = (value: any): Media | undefined => {
@@ -371,6 +430,11 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
     };
     if (fontScale !== null) {
       normalized.fontScale = fontScale;
+    }
+    const alignmentValue =
+      typeof block.alignment === 'string' ? block.alignment.trim().toLowerCase() : undefined;
+    if (alignmentValue && RICH_TEXT_ALIGNMENTS.has(alignmentValue)) {
+      normalized.alignment = alignmentValue as DynamicZoneBlock['alignment'];
     }
     return normalized;
   }
