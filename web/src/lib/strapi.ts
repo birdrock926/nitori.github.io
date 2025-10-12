@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+
 import { STRAPI, TWITCH } from '@config/site';
 
 export type MediaFormat = {
@@ -144,99 +146,89 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const escapeAttribute = (value: string) =>
-  escapeHtml(value).replace(/`/g, '&#96;');
+const escapeAttribute = (value: string) => escapeHtml(value).replace(/`/g, '&#96;');
 
-const renderMarkdownInline = (value: string) => {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
-  let cursor = 0;
-  let output = '';
-  let match: RegExpExecArray | null;
+const markdownRenderer = new marked.Renderer();
 
-  while ((match = pattern.exec(value)) !== null) {
-    const [full] = match;
-    const start = match.index;
-    if (start > cursor) {
-      output += escapeHtml(value.slice(cursor, start));
-    }
-
-    if (match[1] !== undefined) {
-      const alt = match[1] ?? '';
-      const url = match[2] ?? '';
-      const title = match[3] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const altAttr = escapeAttribute(alt);
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
-      }
-    } else {
-      const label = match[4] ?? '';
-      const url = match[5] ?? '';
-      const title = match[6] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
-      }
-    }
-
-    cursor = start + full.length;
+markdownRenderer.link = (href, title, text) => {
+  const target = typeof href === 'string' ? href.trim() : '';
+  const resolved = ensureAbsoluteUrl(target) ?? target;
+  if (!resolved) {
+    return text;
   }
 
-  if (cursor < value.length) {
-    output += escapeHtml(value.slice(cursor));
+  const isAnchor = resolved.startsWith('#');
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  const relAttr = isAnchor ? '' : ' rel="noopener"';
+  const targetAttr = isAnchor ? '' : ' target="_blank"';
+
+  return `<a href="${escapeAttribute(resolved)}"${titleAttr}${relAttr}${targetAttr}>${text}</a>`;
+};
+
+markdownRenderer.image = (href, title, text) => {
+  const target = typeof href === 'string' ? href.trim() : '';
+  const resolved = ensureAbsoluteUrl(target) ?? target;
+  if (!resolved) {
+    return text ?? '';
   }
 
-  return output;
+  const altAttr = text ? ` alt="${escapeAttribute(text)}"` : ' alt=""';
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+
+  return `<img src="${escapeAttribute(resolved)}"${altAttr} loading="lazy" decoding="async"${titleAttr} />`;
 };
 
-const convertPlainTextToHtml = (value: string) => {
-  const normalized = value.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return '';
+marked.use({
+  gfm: true,
+  breaks: true,
+  smartLists: true,
+  headerIds: false,
+  mangle: false,
+  async: false,
+  renderer: markdownRenderer,
+});
 
-  const paragraphs = normalized.split(/\n{2,}/);
-  const rendered = paragraphs
-    .map((paragraph) => {
-      const trimmed = paragraph.trim();
-      if (!trimmed) return '';
-
-      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
-      if (figureMatch) {
-        const alt = figureMatch[1] ?? '';
-        const url = figureMatch[2] ?? '';
-        const title = figureMatch[3] ?? '';
-        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-        if (!resolvedUrl) {
-          return `<p>${escapeHtml(trimmed)}</p>`;
-        }
-        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
-        const altAttr = escapeAttribute(alt);
-        const urlAttr = escapeAttribute(resolvedUrl);
-        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
-        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
-      }
-
-      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
-      return `<p>${lines.join('<br />')}</p>`;
-    })
-    .filter((paragraph) => paragraph.length > 0);
-
-  return rendered.join('\n');
+const containsMarkdownTokens = (value: string) => {
+  const unescaped = value.replace(/\\([\\`*_~\[\]()>#+\-.!])/g, '');
+  return /(\*\*|__|\*|_|~~|`|!\[|\[[^\]]+\]\(|^>\s|^\s*[-+*]\s|^\s*\d+\.\s)/m.test(unescaped);
 };
 
-const normalizeRichMarkup = (value: string) => {
+const stripSimpleHtmlWrappers = (value: string) =>
+  value
+    .replace(/\r\n?/g, '\n')
+    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+    .replace(/<\/?p[^>]*>/gi, '\n')
+    .replace(/<\/?div[^>]*>/gi, '\n')
+    .replace(/<\/?span[^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ');
+
+const hasUnsupportedHtml = (value: string) => /<\/?(?!p\b|br\b|div\b|span\b)([a-z][^>]*?)>/i.test(value);
+
+const renderMarkdown = (value: string) => {
+  const normalized = value.replace(/\r\n?/g, '\n');
+  const html = marked.parse(normalized) as string;
+  return html.trim();
+};
+
+export const normalizeRichMarkup = (value: string) => {
   const trimmed = value.trim();
-  if (!trimmed) return '';
+  if (!trimmed) {
+    return '';
+  }
+
   if (/<[a-z][^>]*>/i.test(trimmed)) {
+    if (!hasUnsupportedHtml(trimmed)) {
+      const unwrapped = stripSimpleHtmlWrappers(trimmed).trim();
+      if (unwrapped && containsMarkdownTokens(unwrapped)) {
+        return renderMarkdown(unwrapped);
+      }
+    }
+
     return trimmed;
   }
-  return convertPlainTextToHtml(trimmed);
+
+  return renderMarkdown(trimmed);
 };
 
 const parseMedia = (value: any): Media | undefined => {
