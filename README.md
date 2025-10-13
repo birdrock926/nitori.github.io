@@ -18,8 +18,8 @@
 - 運営側（あなた）：**GUI で書く→プレビュー→公開**までの摩擦を最小化したい
 
 ## アーキテクチャ（High Level）
-- **フロント（/web）**：Astro SSG
-  - 記事は**Strapi の published のみ**をビルド時取得
+- **フロント（/web）**：Astro Hybrid（本番は静的書き出し、開発時は SSR フォールバック）
+  - 本番ビルドでは **Strapi の published のみ**を取得して静的化。開発サーバでは SSR がオンデマンドで新規スラッグを解決するため、CMS で記事を公開しても `npm run dev` を再起動する必要がありません。
   - **Dynamic Zone**を React コンポーネントにマップ（RichText / ColoredText / Figure / Gallery / Columns / Callout / Separator / Twitch / YouTube / Inline Ad Slot）
 - **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事のエントリー ID をスレッドキーとして利用（Document ID や slug で保存されていた既存レコードも起動時にエントリー ID へ自動補正）。React 島がフォームとツリー UI を提供。
 - **CMS（/cms）**：Strapi v5
@@ -28,6 +28,7 @@
 - **コメント基盤（Strapi Comments）**
   - Strapi プラグインとして提供され、記事単位のツリー表示・通報・承認フローを Strapi 管理画面内で操作可能。
   - 公開 REST API 経由で匿名ユーザー投稿（任意の表示名・メール）とネストした返信を受け付け、通知メールや不適切ワードフィルタリングに対応。
+  - 管理者ユーザーの姓が空欄でもコメント一覧が読み込めるよう、`authorUser` 情報をサーバー側で補完（名・ユーザー名・メールから自動生成）しています。
 - **インフラ**  
   - **OCI Always Free**：Strapi 常駐（Docker Compose）  
   - **Cloudflare Pages**：本番ホスティング（GitHub Actions でビルド＆デプロイ）
@@ -40,6 +41,9 @@
 - 画像は**ドラッグ＆ドロップ**、自動リサイズ/WebP/AVIF/LQIP
 - **Twitch/YouTube** は ID/URL 入力だけで埋め込み（16:9・lazyload・アクセシブル）
 - **Draft/Publish**、公開予約（publishedAt）、タグ分類、関連記事自動
+  - RichText ブロックの本文倍率は Strapi 標準の **Decimal** 入力で管理します。`options.min/max/step` に 0.7/1.8/0.05 を設定済みで、空欄時は記事既定値 (1.0 倍) を自動継承します。旧カスタムフィールドで発生していた Windows 環境固有のプラグイン読み込みエラーはこの戻し対応で解消済みです（詳細は AGENTS.md を参照）。
+  - RichText ブロックには **`alignment` 列挙型（left/center/right/justify）** を追加しており、段落や画像の整列方法を記事ごとに指定できます。未設定時は `left` を適用し、Astro 側では `richtext-align-*` クラスで反映します。
+  - RichText の保存内容は HTML/Markdown を自動判定し、Strapi のライフサイクルとフロントエンド双方で `marked` レンダラー + HTML 正規化ロジックを共有しています。これにより改行・太字・画像・引用を含む CKEditor 由来の HTML と Markdown 記法の双方が崩れず、SSR/CSR の差分によるハイドレーション警告や Markdown 記号の露出を抑止できます。相対パスの画像やリンクは Strapi のメディア URL へ自動補正します。
 
 ### 匿名コメント（Strapi Comments）
 - **任意の表示名 + メール（任意・通知専用）**で匿名投稿を受け付け、ツリー構造の返信を自動整形。メールアドレスは返信通知にのみ利用され、API レスポンスには含めません。
@@ -47,7 +51,7 @@
 - **通知・モデレーション機能**：NG ワードフィルタ、承認フロー、通報メール（`COMMENTS_CONTACT_EMAIL`）を設定可能。
 - **REST API**：`/api/comments/api::post.post:<entryId>` を Astro 側が呼び出し、React 島が UI と投稿フォームを提供（Document ID や slug を指定した古い投稿は自動でエントリー ID へ補正し、必要に応じてフォールバックします）。
 - **通報フォーム**：フロントエンドの各コメントに「通報する」ボタンを配置し、読者が理由と詳細を添えてモデレーターへ報告できるようにしました。
-- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。
+- **本文レンダリング**：Markdown の `![]()` や画像 URL を貼ると自動でサムネイル表示しつつ、長文は「…続きを読む」で折りたためます。管理側でコメントを「ブロック/削除」した場合は返信のないツリーから自動的に除外し、返信が残っているときだけ「このコメントは管理者によって非表示になりました。」のプレースホルダーを表示します。
 
 ### SEO / 収益
 - `NewsArticle`/`Article` **JSON-LD**、OGP 自動生成、サイトマップ/RSS
@@ -57,16 +61,19 @@
 
 ### UI/UX（読者体験）
 - テーマ（ライト/ダーク）・読みやすいタイポ・スケルトン/LQIP・アクセシビリティ AA 準拠  
-- トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング  
+- トップ：ヒーロー＋最新カード＋ライブ配信セクション＋ランキング
+  - 記事カードは **4:3 のカバー画像**を自動表示し、最大幅 14rem（約 224px）に絞ってフィード全体のトーンを整えています。
 - 記事：目次自動 / 削除依頼ボタン＆シェアメニュー / 関連記事（広告 3:1 混在） / コメント島（控えめ UI）
-  - Rich Text ブロックごとに Strapi 管理画面の「文字サイズ倍率」スライダーで本文サイズを調整でき、未設定時は記事既定値を自動適用
+  - Rich Text コンテンツは CKEditor が出力する HTML と Markdown の両方をサポートし、`marked` ベースのレンダラー + HTML 正規化ロジックで改行・装飾・相対パス画像を Strapi メディア URL へ統一的に解決します。Strapi のライフサイクルとフロントエンド（`web/src/lib/richtext.ts`）で同じロジックを共有しているため、SSR/CSR の内容差によるハイドレーション警告や Markdown 記号の露出を抑止できます。
+  - Rich Text 内の画像は単体・ギャラリーともに最大幅 24rem/20rem 相当へリサイズし、読みやすさを優先した縮尺で表示します。
+  - Rich Text ブロックの本文倍率は管理画面の `fontScale` 数値入力で調整でき、未設定時は記事既定値 (1.0 倍) を自動適用
 
 ## データモデル（抜粋）
 - **Post**：`title, slug, summary, cover, tags[], blocks(DZ), author, publishedAt, commentDefaultAuthor, bodyFontScale`
 - **Tag**：`name, slug`（記事との多対多）
 - **Embed / Media Components**：`RichText, ColoredText, Figure, Gallery, Columns, Callout, Separator, TwitchLive, TwitchVod, YouTube`
   - Figure/Gallery には `表示モード`（Auto/Image/GIF）を追加し、GIF アニメを劣化なく再生・配信できます
-  - RichText ブロックはカスタムフィールド「文字サイズ倍率」で記事既定値（default/large/xlarge）に対する倍率を 0.7〜1.8 倍の範囲で設定できます
+- RichText ブロックの `fontScale` は Strapi 標準の Decimal フィールドです。0.7〜1.8 の範囲で倍率を入力でき、空欄（NULL）のままにすると記事既定値 (1.0 倍) を自動的に適用します。Strapi 5.26 以降は `min/max/step` を `options.*` に定義しないと管理画面初期化時に「'step' must be prefixed with 'options.'」で停止するため、`cms/src/components/content/rich-text.json` の設定を編集する際は必ず `options` 内にまとめてください。カスタムフィールド版で発生していた Windows 向けの「プラグイン未インストール」「Unsupported field type」エラーは、この戻し対応で解消されました。詳細な移行手順と検証ログは AGENTS.md にまとめています。
 - **コメント**：Strapi プラグイン（strapi-plugin-comments）が `plugin::comments.comment` として保存し、記事 (`api::post.post`) のエントリー ID（自動フォールバック付き）と紐付け
 
 ## ワークフロー
@@ -103,6 +110,8 @@
 本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
 
 > **最終検証 (2025-10-02 JST)**: Node.js 20.19.4 + npm 10.8 系 (Debian/WSL 相当) で `/cms`・`/web` の `npm install` / `npm run build` を実行し、さらに `/cms` の `npm run develop` も起動確認しました。`scripts/run-strapi.mjs` により Node 20 + Windows/WSL 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` が発生せず、管理画面ビルドも完走することを再検証済みです。ログには `admin.auth.options.expiresIn` の非推奨警告が表示されますが動作に影響はありません。
+>
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール状態で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生することを確認。ドキュメント追従時点では CI 環境に依存が存在しないため、ローカル/本番で検証する際は事前に `npm install` を実行してください。
 
 ## 事前要件
 - Node.js 20 LTS
@@ -114,7 +123,7 @@
 ## ディレクトリ構成
 - `/cms` — Strapi v5 プロジェクト（記事・タグ・メディア管理）
 - `/web` — Astro SSG + React Islands
-- `/infrastructure` — Docker Compose, systemd, Caddy 設定など
+- `/infrastructure` — Docker Compose, systemd, Caddy 設定など。2025-10-26 に Compose/Caddy/systemd の設定を再点検し、OCI 常駐環境と Cloudflare Pages 連携で引き続き利用していることを確認したため、リポジトリから削除せず維持します。
 - `/public` — 共有公開アセット（ads.txt 雛形など）
 
 ---
@@ -139,7 +148,7 @@
 
    | 変数名 | 説明 | 例 |
    | --- | --- | --- |
-   | `PUBLIC_URL` | CMS を公開する URL。HTTPS で運用します。 | `https://cms.example.com` |
+   | `PUBLIC_URL` | CMS を公開する URL。OCI 上の Strapi では Cloudflare などの独自ドメインを挟まず、OCI が払い出すホスト名（例: `https://<instance>.oraclecloudapps.com`）をそのまま利用してください。 | `https://<instance>.oraclecloudapps.com` |
    | `GITHUB_WORKFLOW_*` | Cloudflare Pages への再デプロイを呼び出す GitHub Actions 情報。 | `OWNER=your-account` 等 |
    | `DATABASE_CLIENT` | `sqlite`（デフォルト）または `postgres` 等。 | `sqlite` |
    | `UPLOAD_PROVIDER` | `local` or `oci`。OCI Object Storage を使う場合は以下の OCI_* を設定。 | `oci` |
@@ -184,7 +193,7 @@
    | `STRAPI_API_TOKEN` | Strapi で発行した API Token（Public 読み取り用）。 | `strapi_pat_xxx` |
    | `STRAPI_MEDIA_URL` | 画像配信用のベース URL。空欄の場合は `STRAPI_API_URL` と同じ値を利用します。 | `https://objectstorage.ap-tokyo-1.oraclecloud.com/n/your-namespace/b/your-bucket/o` |
    | `SITE_URL` | Cloudflare Pages や独自ドメインの公開 URL。 | `https://example.pages.dev` |
-   | `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://docs.google.com/forms/d/.../viewform` |
+| `DELETE_REQUEST_FORM_URL` | 記事削除依頼フォーム（Google フォーム等）の URL。 | `https://forms.gle/ooWTJMdJAPiaBDNe6` |
    | `PUBLIC_TWITCH_PARENT_HOSTS` | Twitch 埋め込みで `parent` に指定するホスト名。カンマ区切りで公開サイトのドメインを列挙。未設定時は `localhost` を自動追加します。 | `example.pages.dev,www.example.com` |
 | `PUBLIC_COMMENTS_ENABLED` | コメント UI の表示フラグ。`false` にするとコメント欄を非表示にできます。 | `true` |
 | `PUBLIC_COMMENTS_PAGE_SIZE` / `PUBLIC_COMMENTS_MAX_LENGTH` | コメント取得件数（1 ページに表示するスレッド数）/ 投稿の最大文字数 | `50` / `1200` |
@@ -209,8 +218,9 @@
 3. `Settings → Users & Permissions → Roles → Public` で `Comments: Read` / `Comments: Create` / `Comments: Report abuse` 権限が有効になっていることを確認します（`cms/src/index.js` の bootstrap が `Public` / `Authenticated` 役割に自動付与しますが、権限を手動で編集した場合は再設定してください）。
 4. コメント API のベース URL は `https://<CMS>/api/comments/api::post.post:<entryId>` です。Astro 側は投稿のエントリー ID をスレッドキーとして利用し、Document ID や slug が渡された場合でもバックエンドが自動的に補正して処理します。
 5. フロントエンドのコメント UI は Strapi から取得したスレッドを `PUBLIC_COMMENTS_PAGE_SIZE` 件ずつページングし、長い議論でも UI がだらだら伸びないようにページナビゲーションを自動で差し込みます。ニックネーム欄は空欄でも投稿でき、その場合は記事に設定したデフォルト名（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値）が自動で表示に使われます。投稿者情報はブラウザのローカルストレージに暗号化せず保存するため、共有端末では送信後に「ニックネーム」「メールアドレス」を手動でクリアしてください。
-6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます（メール欄は任意入力で、未入力の場合は通知されません）。SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定し、テスト送信で動作確認してください。
+6. 返信コメントが付くと、元コメントの著者メールアドレス宛に Strapi のメールプラグインから通知が送信されます。VirtusLab Comments 3.1.0 では投稿時にメールアドレスが必須のため、フロントエンド側で空欄／不正値を検知した場合は `@comments.local` ドメインのダミーアドレスを生成して API へ送信し、リクエスト段階で 400 を回避します。バックエンドも同じドメインを使って不足分を再検証し、ダミー宛には通知を送らないようスキップしています。実際に返信通知を受けたい場合は有効なメールアドレスを入力し、SMTP（`SMTP_*`）と `COMMENTS_CONTACT_EMAIL` を設定してからテスト送信で動作確認してください。
 7. Post コンテンツタイプには「コメント用デフォルト名」と「本文フォントサイズ」フィールドを追加しています。前者は記事ごとに匿名投稿者へ表示したい名前を設定でき、未入力時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` が利用されます。後者は本文全体のフォント倍率（標準/やや大きい/大きい）を CMS から選択でき、視認性を記事単位で調整できます。
+8. Strapi 管理画面でコメント一覧を開いた際に `A valid integer must be provided to limit` が繰り返し表示される場合は、`cms/src/extensions/comments/strapi-server.js` に追加したリミット正規化ロジックが動作しているか確認してください。クエリ文字列の `limit` / `pagination[pageSize]` が数値以外になった場合でも自動的に 50 件（最大 200 件まで）へ丸め込み、Knex の警告でリロードループに陥らないようになりました。フロントエンド側も `web/src/lib/comments.ts` でページサイズを 1〜200 件にクランプするため、必要に応じて双方の上限を同時に調整してください。
 
 ##### トラブルシューティング
 
@@ -375,6 +385,13 @@ npm run preview
 - フロントエンドの「通報する」フォームから送られた内容は `Reported` タブに即時反映され、`reason` と `content` が管理画面に届きます。`スパム` など独自の理由はバックエンドで `OTHER / BAD_LANGUAGE / DISCRIMINATION` のいずれかに正規化され、元の入力内容はメモとして追記されるため、管理画面で迷子になりません。必要に応じてコメント詳細の `Block user` / `Block thread` / `Delete` アクションを組み合わせて対処してください。
 - SMTP を設定しておくと、新着コメントや通報をメールで即時受け取れます。SPF/DKIM を整備し、迷惑メール判定されないようにしてください。
 - コメントデータのバックアップは **Content Manager → plugin::comments.comment → Export** で CSV/JSON を取得できます。月次のエクスポートと DB スナップショットを併用すると、誤削除時のリカバリが容易になります。
+
+## 記事スラッグ運用の注意点
+
+- Strapi の Post コンテンツタイプは `beforeCreate` / `beforeUpdate` で slug を自動正規化します。既存記事と同じ slug を保存しようとすると末尾に `-2` などが付与されますが、同じ記事を再編集しただけの場合は付与されません。
+- 仕組みとしては Document モードの `documentId` と数値 ID を同時に参照し、同一記事を `$ne` 条件から除外してから重複チェックを行います。Strapi の Document API が利用できない環境でも Entity Service の `slug[$eqi]` で二重に確認するため、ケース違いでも衝突を確実に検知します。【F:cms/src/api/post/content-types/post/lifecycles.js†L248-L328】
+- 手動で slug を指定する際は、記事を Publish する前に一覧画面で重複がないか確認してください。実際に衝突している場合のみ `-2` 以降が付与されるため、意図せずリダイレクトが発生したり、Astro の静的ページ生成で 404 が出るといった問題が解消されます。
+- フロントエンドは Strapi の `/api/posts/slugs` エンドポイントを基に静的パスを生成します。本番ビルドでは再ビルドが必要ですが、開発モード（`npm run dev`）では SSR で毎回最新の slug を取得するため、Strapi 側で記事を追加・更新してもサーバーを再起動せずに `/posts/<slug>/` を確認できます。
 
 ## セキュリティ
 - 管理画面は OAuth / SSO 連携や IP 制限の併用を推奨
