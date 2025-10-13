@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
+import { renderRichText } from '@lib/richtext';
 
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 1.8;
@@ -6,6 +7,7 @@ const MAX_SCALE = 1.8;
 type Props = {
   body: string;
   fontScale?: number;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
 };
 
 type RichTextStyle = CSSProperties & {
@@ -23,12 +25,22 @@ const resolveScale = (scale?: number | null) => {
   return clampScale(scale).toString();
 };
 
-const RichTextContent = ({ body, fontScale }: Props) => {
+const ALLOWED_ALIGNMENTS: Record<'left' | 'center' | 'right' | 'justify', string> = {
+  left: 'richtext-align-left',
+  center: 'richtext-align-center',
+  right: 'richtext-align-right',
+  justify: 'richtext-align-justify',
+};
+
+const RichTextContent = ({ body, fontScale, alignment }: Props) => {
   const normalizedScale = resolveScale(fontScale);
   const style: RichTextStyle | undefined =
     normalizedScale !== null ? { '--richtext-scale': normalizedScale } : undefined;
+  const alignmentClass = alignment ? ALLOWED_ALIGNMENTS[alignment] : undefined;
+  const className = alignmentClass ? `richtext ${alignmentClass}` : 'richtext';
+  const html = useMemo(() => renderRichText(body), [body]);
 
-  return <div className="richtext" style={style} dangerouslySetInnerHTML={{ __html: body }} />;
+  return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
 export default RichTextContent;
