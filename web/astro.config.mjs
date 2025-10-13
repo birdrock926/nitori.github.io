@@ -7,7 +7,7 @@ const site = process.env.SITE_URL || 'https://example.github.io';
 export default defineConfig({
   site,
   integrations: [react(), sitemap()],
-  output: 'static',
+  output: 'hybrid',
   vite: {
     ssr: {
       external: ['lunr'],
