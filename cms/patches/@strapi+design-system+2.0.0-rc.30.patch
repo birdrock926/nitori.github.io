@@ -1,0 +1,38 @@
+--- a/node_modules/@strapi/design-system/dist/index.js
++++ b/node_modules/@strapi/design-system/dist/index.js
+@@ -2709,6 +2709,7 @@
+       ariaDescription = `${id}-hint`;
+     }
+     const hasError = Boolean(error);
++    const { unique, ...cleanProps } = props;
+     const endActionRef = React__namespace.useRef(null);
+     const inputElementRef = React__namespace.useRef(null);
+     const inputRef = useComposedRefs(inputElementRef, ref);
+@@ -2756,7 +2757,7 @@
+               "aria-required": required || requiredProp,
+               $hasLeftAction: Boolean(startAction),
+               $hasRightAction: Boolean(endAction),
+-              ...props
++              ...cleanProps
+             }
+           ),
+           endAction && /* @__PURE__ */ jsxRuntime.jsx(EndAction, { ref: endActionRef, children: endAction })
+--- a/node_modules/@strapi/design-system/dist/index.mjs
++++ b/node_modules/@strapi/design-system/dist/index.mjs
+@@ -2548,6 +2548,7 @@ const TextInput = forwardRef(
+       ariaDescription = `${id}-hint`;
+     }
+     const hasError = Boolean(error);
++    const { unique, ...cleanProps } = props;
+     const endActionRef = import_react9.useRef(null);
+     const inputElementRef = import_react9.useRef(null);
+     const inputRef = useComposedRefs(inputElementRef, ref);
+@@ -2595,7 +2596,7 @@ const TextInput = forwardRef(
+               "aria-required": required || requiredProp,
+               $hasLeftAction: Boolean(startAction),
+               $hasRightAction: Boolean(endAction),
+-              ...props
++              ...cleanProps
+             }
+           ),
+           endAction && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(EndAction, { ref: endActionRef, children: endAction })

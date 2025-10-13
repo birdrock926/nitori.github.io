@@ -19,9 +19,12 @@ import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
 import { ADSENSE, DELETE_REQUEST } from '@config/site';
 
-export const prerender = true;
+export const prerender = import.meta.env.PROD;
 
 export async function getStaticPaths() {
+  if (!import.meta.env.PROD) {
+    return [];
+  }
   const slugs = await getPostSlugs();
 
   if (!slugs.length) {
@@ -158,7 +161,7 @@ const articleFontClass = `card article-body article-body--${post.bodyFontScale ?
     <div style="display: grid; gap: 2rem;">
       {post.blocks.map((block, index) => {
         if (block.__component === 'content.rich-text') {
-          return <RichText body={block.body} fontScale={block.fontScale} />;
+          return <RichText body={block.body} fontScale={block.fontScale} alignment={block.alignment} />;
         }
         if (block.__component === 'content.colored-text') {
           return (
