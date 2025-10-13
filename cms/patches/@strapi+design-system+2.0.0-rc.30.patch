@@ -1,0 +1,38 @@
+--- a/node_modules/@strapi/design-system/dist/index.js	2025-10-13 11:24:49.766663807 +0000
++++ b/node_modules/@strapi/design-system/dist/index.js	2025-10-13 11:24:56.434646530 +0000
+@@ -2709,6 +2709,7 @@
+       ariaDescription = `${id}-hint`;
+     }
+     const hasError = Boolean(error);
++    const { unique, ...cleanProps } = props;
+     const endActionRef = React__namespace.useRef(null);
+     const inputElementRef = React__namespace.useRef(null);
+     const inputRef = useComposedRefs(inputElementRef, ref);
+@@ -2756,7 +2757,7 @@
+               "aria-required": required || requiredProp,
+               $hasLeftAction: Boolean(startAction),
+               $hasRightAction: Boolean(endAction),
+-              ...props
++              ...cleanProps
+             }
+           ),
+           endAction && /* @__PURE__ */ jsxRuntime.jsx(EndAction, { ref: endActionRef, children: endAction })
+--- a/node_modules/@strapi/design-system/dist/index.mjs	2025-10-13 11:24:49.814663677 +0000
++++ b/node_modules/@strapi/design-system/dist/index.mjs	2025-10-13 11:24:56.442646510 +0000
+@@ -2675,6 +2675,7 @@
+       ariaDescription = `${id}-hint`;
+     }
+     const hasError = Boolean(error);
++    const { unique, ...cleanProps } = props;
+     const endActionRef = React.useRef(null);
+     const inputElementRef = React.useRef(null);
+     const inputRef = useComposedRefs(inputElementRef, ref);
+@@ -2722,7 +2723,7 @@
+               "aria-required": required || requiredProp,
+               $hasLeftAction: Boolean(startAction),
+               $hasRightAction: Boolean(endAction),
+-              ...props
++              ...cleanProps
+             }
+           ),
+           endAction && /* @__PURE__ */ jsx(EndAction, { ref: endActionRef, children: endAction })
