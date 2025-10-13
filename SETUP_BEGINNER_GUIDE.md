@@ -6,6 +6,9 @@
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
 - **Web (/web)**: Astro + React Islands で構成された静的サイト。Strapi から公開記事を取得してビルドし、Cloudflare Pages に配置します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
+- **カスタムフィールド**: 2025-10-27 に Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドへ戻しました。Windows で `Unsupported field type: plugin::font-scale-range.scale` が解消しきれなかったためです。現在は管理画面の数値入力で 0.7〜1.8 の範囲を直接編集し、空欄なら記事既定値 (1.0 倍) を適用します。加えて `alignment` 列挙（left/center/right/justify）で段落の整列方向を指定できるようにしました。値の丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js`（`clampScaleValue`）で制御しているので、必要に応じて調整してください。履歴と検証ログは AGENTS.md にまとまっています。
+- Rich Text の本文は Markdown 記法や単純な改行を入力しても、Strapi のライフサイクルが `marked` レンダラーで自動的に HTML へ変換してから API へ返します。同じ設定を Astro 側でも `web/src/lib/richtext.ts` が利用しているため、SSR/CSR の差異によるハイドレーション警告や Markdown 記号の露出が抑制されます。
+- Strapi 管理画面のテキスト入力では `cms/patches/@strapi+design-system+2.0.0-rc.30.patch` を適用し、`unique` 属性が DOM に出力されて React が警告を出す現象を防いでいます。パッチを削除した場合は管理画面を再ビルドすると警告が再発するため注意してください。
 
 実際の作業は、ローカル PC 上でリポジトリを用意 → 依存パッケージをインストール → 動作確認 → 必要に応じてクラウドへデプロイ、という順番です。
 
@@ -159,6 +162,8 @@ cd ..
 
 `/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` も `scripts/run-strapi.mjs` により Node 20 / Windows / WSL で安定して動作するようになりました。極端にメモリが少ない環境 (2GB 未満) では Vite がクラッシュする可能性があるため、その場合は公式 `strapi/strapi:5`（Node 18 ベース）コンテナでビルドするか、ホストでビルド済みの管理画面をコピーする運用を検討してください。
 
+> **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール環境で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生します。ドキュメント更新時点では CI 環境に依存がないため、ローカルで検証するときは先に `npm install` を実行してください。
+
 
 > ✅ **2025-10-02 JST 動作検証ログ**: Node.js 20.19.4 + npm 10.8 (Debian/WSL) で `npm install` → `npm run develop` → `npm run build`（/cms）と `npm install` → `npm run build`（/web）を順番に実行し、すべて成功することを確認しました。Strapi 起動時には `[github] Webhook dispatch skipped` のデバッグメッセージが表示され、GitHub 連携が未設定でも 401 が発生しないことを確認済みです。
 
@@ -187,6 +192,7 @@ npm run dev
   - ページ下部に「コメント識別子を取得できません」と表示される場合は、記事 API のレスポンスに `id`（必須）と `documentId`（フォールバック）が含まれているか（Strapi 側のカスタムコントローラが有効か）をチェックします。Document ID のみが返るケースでもバックエンドが自動でエントリー ID へ補正しますが、一度 CMS を再起動してログに正規化メッセージが出力されるか確認してください。
   - 400/401/403 が返るときは `COMMENTS_APPROVAL_FLOW` や `COMMENTS_BAD_WORDS` の設定で投稿が保留扱いになっていないか、API トークンの権限が不足していないかを確認してください。`Forbidden` と表示される場合は Strapi を再起動して `Public` / `Authenticated` 役割へ `Comments: Read` / `Comments: Create` が自動付与されているかチェックします。
   - コメントが `PUBLIC_COMMENTS_PAGE_SIZE` を超えて増えたら、ページネーションが表示されトップレベルスレッドごとに切り替えられることを確認してください。大量の議論でもページ送りで追いやすくなります。
+  - 管理画面でコメントを「ブロック」または「削除」すると、フロントエンドでは返信のないスレッドから自動的に除外され、返信が残っている場合のみ「このコメントは管理者によって非表示になりました。」のプレースホルダーが表示されます。ブロック済みコメントが一覧に残る場合は Strapi 側でコメント状態が更新されているか、キャッシュをクリアして再読込してください。
 
 サーバーを停止する場合は、ターミナルで `Ctrl + C` を押します。
 
@@ -197,8 +203,9 @@ npm run dev
 4. 管理画面左側の **Comments** メニューを開き、フィルターの「Collection」で `Posts` を選択できるか確認します。投稿が無い場合は空のリストが表示されます。
 5. Astro の記事ページを再読み込みし、コメントフォームが表示されることを確認します。匿名コメントを 1 件投稿し、管理画面の **Comments → Pending** に反映されるか／フロント側で承認待ちのメッセージが表示されるかをチェックしてください。
 6. 送信したコメントが表示されない場合は Strapi のログにエラーがないか確認し、`COMMENTS_BAD_WORDS` や `COMMENTS_VALIDATION_ENABLED` の設定で弾かれていないか、あるいは `COMMENTS_BLOCKED_AUTHOR_PROPS` で必要なフィールドを削っていないかを見直します。
-7. コメントフォームのメール欄は任意入力です。未入力でも投稿できますが、返信通知メールを受け取りたい場合は正しいアドレスを入力してください（API からは公開されません）。
+7. コメントフォームのメール欄は任意入力ですが、VirtusLab Comments 3.1.0 がメールアドレスを必須項目として検証するため、空欄や不正な値で送信した場合はフロントエンド側で `@comments.local` ドメインのダミーアドレスを生成して API リクエストを行います（ダミー宛に通知は送信されません）。バックエンドも同じドメインで不足分を補完します。返信通知を受け取りたい場合は正しいメールアドレスを入力してください（API から外部公開はされません）。
 8. ニックネーム欄を空のまま投稿すると、記事の「コメント用デフォルト名」フィールドに設定した名前が自動で使われます（未設定時は `PUBLIC_COMMENTS_DEFAULT_AUTHOR` の値が適用されます）。記事ごとに匿名表示名や本文フォントサイズを変えたい場合は Post エディタで該当フィールドを更新してください。
+9. コメントタブを開いた瞬間に `A valid integer must be provided to limit` が延々と表示される場合は、Strapi 側の拡張（`cms/src/extensions/comments/strapi-server.js`）でクエリの `limit` / `pagination[pageSize]` が正規化されているか確認してください。数値以外が送られても 50 件（最大 200 件）にクランプされ、Knex の警告が原因のリロードループを防げます。フロントエンドのフェッチロジック（`web/src/lib/comments.ts`）も 1〜200 件の範囲へ丸めるため、値を変えたい場合は両方を同じ上限に合わせてください。
 
 
 ### 6-4. ブロックエディタで装飾する
@@ -209,11 +216,13 @@ npm run dev
   - **Columns**：2〜3 カラムのレイアウトを組めるブロックです。各カラムに見出し＋本文（Rich Text コンポーネント）を配置できます。
   - **Separator**：セクションの区切り線や「続きはこちら」といったラベルを表示します。
   - **Inline Ad Slot**：記事本文内に広告枠を差し込むブロック。`slot` に AdSense のユニット ID、`placement` に Prebid.js / GAM のコードを入力すると、Web 側で `InlineAdBlock` が描画されます。`label` で表示名、`note` で運用メモを残せます。
-- Rich Text ブロックにはカスタムフィールド「文字サイズ倍率」があり、スライダー（0.7〜1.8 倍）または数値入力で記事全体の既定値に対する倍率を調整できます。空欄のまま保存すると記事の `bodyFontScale` 設定を継承します。
+- Rich Text ブロックの `fontScale` は Strapi 標準の Decimal 入力で 0.7〜1.8 の範囲を直接入力できます。空欄にすると記事の `bodyFontScale` 設定を継承します（既定 1.0 倍）。
+- `alignment` フィールドは `left` / `center` / `right` / `justify` のいずれかを選択でき、段落や画像の整列方法を制御します。未設定時は `left` を使用します。
 - 画像やギャラリー、YouTube / Twitch 埋め込みブロックもこれまで通り利用できます。プレビューで並び順・余白が崩れていないか確認しましょう。
 - Figure / Gallery ブロックには「表示モード」が追加されており、`GIF` を選ぶとアニメーション GIF が劣化なく再生されます。通常は `Auto` のままで MIME を自動判定します。
 - 記事の **Slug（URL）** フィールドは日本語やハイフン入りの任意文字列をそのまま利用できます。重複する場合は自動的に `-2` などの連番が付きます。
-- Rich Text ブロックは改行や段落をそのまま HTML に変換し、Shift+Enter の改行も `<br>` として表示されます。プレビューで段落が期待通りに分かれているか確認しましょう。
+- Rich Text ブロックは Markdown の太字（`**bold**`）、斜体（`_italic_`）、取り消し（`~~strike~~`）、インラインコード（`` `code` ``）、リスト、引用、画像、リンクを `marked` ベースのレンダラーで HTML に整形し、Shift+Enter の改行も `<br>` として表示します。プレビューで段落や装飾が期待通りに反映されているか確認してください。
+- 記事一覧のカードには 4:3 のカバー画像が自動表示され、最大幅は 16rem（約 256px）に抑えています。ギャラリーブロックも 140px 以上のサムネイルで整列するため、長辺 1,280px 程度までにリサイズした画像をアップロードするとフィード全体のバランスが整います。
 - 文字色や背景色は 16 進カラーコードで保存されるため、Web 側でも同じ色で再現されます。実際の公開ページで読みづらくならないよう、彩度の高い色は Callout や Columns で背景を調整するのがおすすめです。
 - 関連記事ウィジェットは「記事 3 件：広告 1 枠」の配列になるよう自動整列します。AdSense の関連コンテンツ枠 ID を `.env` の `ADSENSE_SLOT_RELATED` に設定したうえで、Strapi 側で関連記事を 3 件以上紐付けると自然なカード列になります。
 - 記事詳細の右上には「削除依頼」「共有」メニューが表示されます。フォーム URL は `DELETE_REQUEST_FORM_URL` を変更、SNS 共有テキストは記事タイトルとサイト名を自動結合します。公開前にフォームの公開範囲と URL を確認してください。
