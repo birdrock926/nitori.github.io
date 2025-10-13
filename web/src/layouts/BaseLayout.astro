@@ -1,0 +1,139 @@
+---
+import '../styles/global.css';
+import GlobalHeader from '@components/GlobalHeader.astro';
+import GlobalFooter from '@components/GlobalFooter.astro';
+import ConsentManager from '@components/consent/ConsentManager.astro';
+import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI } from '@config/site';
+
+const { title = SITE_TITLE, description = SITE_DESCRIPTION, image, canonical, region = 'JP' } = Astro.props;
+const pageTitle = title === SITE_TITLE ? title : `${title} | ${SITE_TITLE}`;
+
+const parseOrigin = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    return new URL(value).origin;
+  } catch (error) {
+    return undefined;
+  }
+};
+
+const apiOrigin = parseOrigin(STRAPI.url);
+const mediaOrigin = parseOrigin(STRAPI.mediaUrl);
+
+const connectSrc = [
+  "'self'",
+  apiOrigin,
+  mediaOrigin,
+  'https://www.google-analytics.com',
+  'https://pagead2.googlesyndication.com',
+]
+  .filter(Boolean)
+  .join(' ');
+
+const imgSrc = [
+  "'self'",
+  'data:',
+  'https://www.google-analytics.com',
+  'https://pagead2.googlesyndication.com',
+  'https://i.ytimg.com',
+  'https://static-cdn.jtvnw.net',
+  apiOrigin,
+  mediaOrigin,
+]
+  .filter(Boolean)
+  .join(' ');
+
+const scriptSrc = [
+  "'self'",
+  "'unsafe-inline'",
+  'https://www.googletagmanager.com',
+  'https://pagead2.googlesyndication.com',
+]
+  .filter(Boolean)
+  .join(' ');
+
+const frameSrc = [
+  'https://www.youtube.com',
+  'https://player.twitch.tv',
+  'https://www.google.com',
+  'https://ads.google.com',
+  'https://googleads.g.doubleclick.net',
+]
+  .filter(Boolean)
+  .join(' ');
+
+const csp = `default-src 'self'; img-src ${imgSrc}; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src ${frameSrc}; connect-src ${connectSrc};`;
+const regionJSON = JSON.stringify(region);
+const measurementId = GA.measurementId;
+const measurementJSON = JSON.stringify(measurementId);
+---
+<html lang="ja" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{pageTitle}</title>
+    <link rel="canonical" href={canonical ?? Astro.url.href} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&family=Inter:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical ?? Astro.url.href} />
+    <meta property="og:site_name" content={SITE_TITLE} />
+    {image ? <meta property="og:image" content={image} /> : null}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    {image ? <meta name="twitter:image" content={image} /> : null}
+    <meta http-equiv="Content-Security-Policy" content={csp} />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <script is:inline>
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme) {
+        document.documentElement.dataset.theme = savedTheme;
+      }
+    </script>
+    {measurementId && (
+      <>
+        <script async src={`https://www.googletagmanager.com/gtag/js?id=${measurementId}`}></script>
+        <script is:inline>
+          const consentRegion = JSON.parse('{regionJSON}');
+          const measurement = JSON.parse('{measurementJSON}');
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('consent', 'default', {
+            ad_storage: 'denied',
+            analytics_storage: 'denied',
+            functionality_storage: 'granted',
+            region: [consentRegion],
+            wait_for_update: 2000,
+          });
+          gtag('js', new Date());
+          gtag('config', measurement, { anonymize_ip: true });
+        </script>
+      </>
+    )}
+    {ADSENSE.clientId && (
+      <script
+        async
+        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE.clientId}`}
+        crossOrigin="anonymous"
+      ></script>
+    )}
+  </head>
+  <body class="app-shell">
+    <a class="skip-link" href="#main">本文へスキップ</a>
+    <ConsentManager />
+    <GlobalHeader />
+    <main id="main" class="page-content">
+      <slot />
+    </main>
+    <GlobalFooter />
+  </body>
+</html>

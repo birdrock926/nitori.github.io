@@ -1,0 +1,4 @@
+cms.example.com {
+  encode gzip
+  reverse_proxy strapi:1337
+}

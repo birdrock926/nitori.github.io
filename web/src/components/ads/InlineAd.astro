@@ -1,0 +1,38 @@
+---
+import { ADSENSE, HEADER_BIDDING } from '@config/site';
+import HeaderBidding from './HeaderBidding.astro';
+
+const { slot, placement, instanceId } = Astro.props as {
+  slot: string;
+  placement?: string;
+  instanceId?: string;
+};
+const clientId = ADSENSE.clientId;
+const adPlacement = placement ?? slot;
+const uniqueInstance =
+  instanceId ?? `ad-${adPlacement.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+const headerBiddingCapable =
+  HEADER_BIDDING.enabled &&
+  !!adPlacement &&
+  HEADER_BIDDING.adUnits.some((unit) => unit.code === adPlacement) &&
+  Boolean(HEADER_BIDDING.gpt.networkCode);
+---
+{headerBiddingCapable ? (
+  <HeaderBidding placement={adPlacement} instanceId={uniqueInstance} />
+) : clientId && slot ? (
+  <aside class="ad-panel card" role="complementary" aria-label="広告">
+    <ins
+      class="adsbygoogle"
+      style="display:block"
+      data-ad-client={clientId}
+      data-ad-slot={slot}
+      data-ad-format="auto"
+      data-full-width-responsive="true"
+    ></ins>
+    <script is:inline>
+      (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
+  </aside>
+) : null}
