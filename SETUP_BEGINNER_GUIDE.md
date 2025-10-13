@@ -4,11 +4,11 @@
 
 ## 0. 全体像をつかむ
 - **CMS (/cms)**: Strapi v5 で記事・タグ・メディアを管理する管理画面と API。
-- **Web (/web)**: Astro + React Islands で構成された静的サイト。Cloudflare Pages へ静的出力しつつ、開発サーバでは `prerender` を切り替えることで SSR フォールバックで最新スラッグをその場で取得できます。
+- **Web (/web)**: Astro + React Islands で構成されたハイブリッド SSR サイト。`@astrojs/node` アダプターを利用し、開発/本番ともに Node スタンドアロン実行で Strapi の最新スラッグをオンデマンド取得します。
 - **Infrastructure (/infrastructure)**: OCI Always Free 上で CMS を常駐させる Docker Compose と Caddy の設定例。
 - **RichText 設定**: Font Scale 系プラグインを撤去し、Rich Text ブロックの `fontScale` は Strapi 標準の Decimal フィールドで管理します。`options.min/max/step` は 0.7/1.8/0.05 に設定済みで、空欄なら記事既定値 (1.0 倍) を適用します。`alignment` 列挙（left/center/right/justify）も追加しており、段落の整列方向を記事単位で指定できます。丸めや上下限は `cms/src/api/post/content-types/post/lifecycles.js` 内の `clampScaleValue` で制御しています。履歴と検証ログは AGENTS.md にまとまっています。
 - **スラッグ正規化**: Post タイプの `beforeCreate` / `beforeUpdate` で slug を自動整形し、Document ID と数値 ID を基に同一記事を除外したうえで重複チェックを行います。別記事と衝突した場合のみ `-2` などの連番が付与されるため、既存記事を再編集しただけで URL が変わる心配はありません。意図的に slug を変更したときは、公開前に記事一覧で重複がないか確認してください。処理は `cms/src/api/post/content-types/post/lifecycles.js` に実装されています。
-- **開発中の slug 反映**: Astro 側の `/posts/[slug].astro` は本番ビルド時のみ静的ページを生成し、`npm run dev` 実行中は SSR で毎回最新の slug を取得します。Strapi 管理画面で記事を追加・更新した直後でも、開発サーバーを再起動せずに `/posts/<slug>/` を開いて動作確認できます。
+- **開発中の slug 反映**: Astro 側の `/posts/[slug].astro` は常に SSR を利用して Strapi に問い合わせるため、記事を公開した直後でも `/posts/<slug>/` を開くだけで内容を確認できます。静的プリレンダー待ちやサーバー再起動は不要です。
 - Rich Text の本文は CKEditor が出力する HTML と Markdown 記法の両方をサポートしており、Strapi のライフサイクルと `web/src/lib/richtext.ts` が同じ `marked` + HTML 正規化ロジックで改行・装飾・相対パス画像を補正します。そのため SSR/CSR の差異によるハイドレーション警告や Markdown 記号の露出が発生しません。
 - Strapi 管理画面のテキスト入力では `cms/patches/@strapi+design-system+2.0.0-rc.30.patch` を適用し、`unique` 属性が DOM に出力されて React が警告を出す現象を防いでいます。パッチを削除した場合は管理画面を再ビルドすると警告が再発するため注意してください。
 
@@ -156,13 +156,16 @@ cd cms
 npm run build
 cd ..
 
-# Web のビルド
+# Web のビルド（SSR 用サーバーバンドル + クライアント資産を生成）
 cd web
 npm run build
+# 成果物: dist/server/entry.mjs（Node スタンドアロン）、dist/client（静的アセット）
 cd ..
 ```
 
 `/web` 側のビルドは Node.js 20 で完走することを確認しています。`/cms` の `npm run build` も `scripts/run-strapi.mjs` により Node 20 / Windows / WSL で安定して動作するようになりました。極端にメモリが少ない環境 (2GB 未満) では Vite がクラッシュする可能性があるため、その場合は公式 `strapi/strapi:5`（Node 18 ベース）コンテナでビルドするか、ホストでビルド済みの管理画面をコピーする運用を検討してください。
+
+> **ハイブリッド出力の起動方法**: `/web/dist` には `server/entry.mjs`（Node スタンドアロン）と `client/`（静的資産）が生成されます。本番で SSR を提供する場合は `node dist/server/entry.mjs` を systemd や PM2 などで常駐させ、Caddy/Nginx で 0.0.0.0:4321 へリバースプロキシしてください。静的 CDN へ配信したい場合は `dist/client` をアップロードしつつ、同じオリジンで SSR サーバーを公開する必要があります。
 
 > **補足ログ (2025-10-11 JST)**: 依存パッケージ未インストール環境で `cd cms && npm run develop -- --help` を実行すると `Error: Cannot find module '@strapi/strapi/package.json'` が発生します。ドキュメント更新時点では CI 環境に依存がないため、ローカルで検証するときは先に `npm install` を実行してください。
 
@@ -187,7 +190,7 @@ npm run dev
 ```
 
 - Strapi がまだ起動していなくてもコマンドが自動で待機し、CMS が利用可能になり次第サーバーが立ち上がります（既定ではタイムアウトなし。必要に応じて `STRAPI_WAIT_TIMEOUT_MS` で上限ミリ秒を指定できます）。
-- ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。
+- ブラウザで `http://localhost:4321` を開き、トップページ・記事ページ・タグページが表示されることを確認します。SSR で都度 Strapi に問い合わせるため、記事を公開した直後でも `/posts/<slug>/` が 404 になりません。
 - コメント欄は Strapi に導入した **VirtusLab Comments プラグイン**の REST API を通じて読み込まれ、React UI がフォームとスレッドを描画します。表示されない場合は以下を確認してください。
   - `/cms/.env` の `COMMENTS_ENABLED_COLLECTIONS` に `api::post.post` が含まれているか、管理画面の **Settings → Comments** で Posts コレクションが有効化されているか。
   - `/web/.env` の `PUBLIC_COMMENTS_ENABLED` が `true` で、`STRAPI_API_URL` をブラウザから開いたときに `GET /api/comments/api::post.post:<entryId>` が 200 を返すか（CORS エラーが出る場合は Strapi の `config/middlewares.js` やリバースプロキシの許可ドメインを調整してください）。

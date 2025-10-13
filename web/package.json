@@ -12,6 +12,7 @@
     "test:a11y": "axe --dir dist"
   },
   "dependencies": {
+    "@astrojs/node": "9.4.6",
     "@astrojs/react": "3.0.4",
     "@astrojs/rss": "4.0.2",
     "@astrojs/sitemap": "3.0.3",

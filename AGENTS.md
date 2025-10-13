@@ -12,6 +12,9 @@
 ## 0. リポジトリ全体像
 
 ### 最新更新ハイライト（2025-10-27）
+- `/web` を `@astrojs/node` アダプター採用のハイブリッド SSR へ切り替え。記事詳細ルート `/posts/[slug]` を完全に SSR 化し、Strapi 公開直後でも再ビルドなしでアクセスできるようにした。ビルド成果物は `dist/server/entry.mjs`（Node スタンドアロン）と `dist/client/`（静的資産）の 2 系統になる。
+- `web/src/pages/posts/[slug].astro` の `getStaticPaths` を撤去して `prerender = false` を明示。404 の原因だった静的スラッグ不足を根本的に解消。
+- `web/astro.config.mjs` へ `output: 'hybrid'` と `adapter: node({ mode: 'standalone' })` を追加。`web/package.json` に `@astrojs/node@9.4.6` を依存追加し、ドキュメント（README/SETUP）へ新しい配信手順と Cloudflare Pages がレガシー化した旨を追記。
 - `/web` の `astro.config.mjs` は `output: 'static'` を採用しつつ、`/posts/[slug].astro` 側で本番ビルド時のみ静的プリレンダーを行う構成へ調整。開発サーバーでは SSR フォールバックで最新スラッグを都度取得でき、`astro build` に追加アダプターは不要。
 - RichText レンダラー（Strapi ライフサイクル + `web/src/lib/richtext.ts`）を再設計。CKEditor 由来の HTML と Markdown を自動判定し、`marked` + HTML 正規化ロジックで改行・リンク・画像を統一的に整形、相対 URL は Strapi メディア URL へ補完する。
 - Comments プラグインの管理 API を拡張し、`authorUser.lastname` が空欄でも一覧が読み込めるようレスポンス側で氏名を補完する正規化を追加。Strapi 登録時に Last Name を省略してもプラグイン UI が空白にならない。
@@ -19,7 +22,7 @@
 
 - モノレポ構成
   - `/cms`: Strapi v5 (5.26.0) をベースとしたヘッドレス CMS。VirtusLab Comments、Color Picker、Review Workflows、Content Releases などを同梱。
-- `/web`: Astro 4.4 + React Islands。Cloudflare Pages へ静的デプロイしつつ、開発時は `prerender` 切り替えで最新記事スラッグをオンデマンド取得する静的 + SSR フォールバック構成。
+- `/web`: Astro 4.4 + React Islands。`@astrojs/node` のハイブリッド SSR として OCI 上の Node サーバーで配信し、記事詳細は常にリクエスト時に Strapi を叩いて描画する構成。
   - `/infrastructure`: Docker Compose（PostgreSQL/Strapi/Caddy）、Caddyfile、systemd unit（`strapi.service`）など本番運用用アセット。
   - ルート直下: プロジェクト README、日本語セットアップガイド、現在の AGENTS.md。
 - フロントエンドと CMS は `.env` を分離。Strapi 側 `.env` は `cms/scripts/ensure-env.mjs` が自動生成・補完する。
@@ -28,7 +31,7 @@
   - npm ワークスペースは未採用。ディレクトリごとに `npm install` を実行する。
   - コメント基盤は `strapi-plugin-comments@3.1.0`。匿名投稿・モデレーション機能を提供。
 - CI/CD
-  - Strapi publish → GitHub Actions → Cloudflare Pages ビルド → 公開サイト更新。
+  - Strapi publish → GitHub Actions → Astro (`@astrojs/node`) ビルド → OCI Node サーバーへデプロイ（必要に応じて Cloudflare Pages に静的資産をアップロード）。
   - `cms/src/index.js` 内の `afterCreate/afterUpdate` などで GitHub Actions をトリガするユーティリティが存在。
 - コメント/UGC の正規化
   - 起動時に `cms/src/index.js` が comments プラグインの `related` を `api::post.post:<entryId>` へ補正し、旧 slug / documentId フォーマットとも整合性を取る。
@@ -55,7 +58,7 @@
   - `postinstall-fix-typescript.mjs`: Strapi 5 の型定義解決バグに対処。
 - `src/index.js`
   - Strapi 起動時 (`bootstrap`) にコメント関連データを正規化し、`plugin::comments.client.*` を `public/authenticated` ロールへ自動付与。
-  - `afterCreate/afterUpdate/afterDelete` で GitHub Actions をトリガし、Cloudflare Pages ビルドを促す。
+  - `afterCreate/afterUpdate/afterDelete` で GitHub Actions をトリガし、ハイブリッド SSR サーバーの再ビルド/再デプロイ（必要なら Cloudflare Pages 静的キャッシュの更新）を促す。
   - フォントスケールのマイグレーションやコメントメタ付与なども実装。
 - `src/api`
   - `post`: カスタムコントローラで slug 重複チェック、公開記事一覧/詳細取得、Dynamic Zone の populate 設定、インライン広告スロット補完などを行う。
@@ -75,7 +78,7 @@
   - `@strapi+design-system+2.0.0-rc.30.patch` で `TextInput` へ渡される `unique` プロップを除去し、ブラウザコンソールに `Warning: Received 'false' for a non-boolean attribute 'unique'.` が出続ける問題を抑止しています。パッチを削除すると管理画面のビルド時に警告が復活するため注意してください。
 
 ### 1-2. `/web`
-- Astro 4.4 ベース。`astro.config.mjs` で React、Sitemap、RSS、画像処理を設定。
+- Astro 4.4 ベース。`astro.config.mjs` で React、Sitemap、RSS、画像処理に加え、`output: 'hybrid'` と `adapter: node({ mode: 'standalone' })` を設定。
 - `src/config`
   - `site.ts`: サイト名・説明・SEO メタのデフォルト。
   - `ads.ts`: Prebid.js と Google Ad Manager のスロット設定。`InlineAdSlot` コンポーネントと対応。

@@ -6,7 +6,7 @@
 - **Google 広告**と **SEO/ニュース露出**を意識した情報設計で、**収益化の地力**を作る。
 
 ## 成果物（Deliverables）
-- **公開サイト**：Cloudflare Pages で配信される**静的サイト**（Astro + React Islands）
+- **公開サイト**：Astro + React Islands を Node アダプター経由で配信する **ハイブリッド SSR サイト**（開発時/本番時ともに最新スラッグをオンデマンド解決）
 - **管理システム**：OCI 無料枠上の **Strapi v5**（GUI で記事・画像・ブロックを管理）
 - **コメント基盤**：Strapi 向け **VirtusLab – Comments** プラグイン（管理画面と統合されたモデレーション UI・メール通知・承認フロー）
 - **自動公開ライン**：Strapi Publish → Webhook → GitHub Actions → Pages 反映
@@ -18,8 +18,8 @@
 - 運営側（あなた）：**GUI で書く→プレビュー→公開**までの摩擦を最小化したい
 
 ## アーキテクチャ（High Level）
-- **フロント（/web）**：Astro 静的サイト（本番は完全静的、開発時は `prerender` を切り替えて SSR フォールバック）
-  - 本番ビルドでは **Strapi の published のみ**を取得して静的化。開発サーバでは SSR をオンデマンドで利用して新規スラッグを解決するため、CMS で記事を公開しても `npm run dev` を再起動する必要がありません。
+- **フロント（/web）**：Astro ハイブリッド SSR（`@astrojs/node` アダプター + React Islands）
+  - 本番/開発ともに Node スタンドアロン実行で SSR を提供し、記事詳細 (`/posts/[slug]`) は常に **リクエスト時に Strapi へ問い合わせ**て描画します。これにより Strapi で記事を公開した直後でも、サイトを再ビルドせずに `/posts/<slug>/` へアクセスできます。
   - **Dynamic Zone**を React コンポーネントにマップ（RichText / ColoredText / Figure / Gallery / Columns / Callout / Separator / Twitch / YouTube / Inline Ad Slot）
 - **コメント**は Strapi Comments API（VirtusLab プラグイン）を REST で取得・投稿し、記事のエントリー ID をスレッドキーとして利用（Document ID や slug で保存されていた既存レコードも起動時にエントリー ID へ自動補正）。React 島がフォームとツリー UI を提供。
 - **CMS（/cms）**：Strapi v5
@@ -79,13 +79,13 @@
 ## ワークフロー
 1. **編集**：Strapi GUI で記事作成 → 画像アップ → ブロック配置 → 下書き保存  
 2. **公開**：Publish → Strapi Webhook が **GitHub Actions** をトリガ  
-3. **配信**：Astro が API（published のみ）を取得 → Pages へ静的出力  
+3. **配信**：Astro が API（published のみ）を取得 → Node スタンドアロン（`@astrojs/node`）としてビルド → Caddy/OCI で公開
 4. **UGC**：読者が匿名コメント → Comments プラグインが即時反映（承認フローを有効にした場合は保留） → Strapi 管理画面で公開/削除
 5. **保守**：Actions の定期実行（予約公開・ランキング更新）／ログ/アナリティクス確認
 
 ## 非機能要件（SLO/品質）
 - **パフォーマンス**：トップ LCP < 2.0s、記事 LCP < 2.5s（デスクトップ目安）  
-- **可用性**：CMS 落ちても**公開サイトは静的で継続**  
+- **可用性**：CMS が一時停止しても**SSR サーバーはキャッシュ済みコンテンツを継続配信**（Strapi 復旧後に最新内容へ追従）
 - **スケール**：Strapi Comments プラグイン（SQLite / PostgreSQL）で 10 万件規模のスレッドも安定表示
 - **セキュリティ**：CSP/Referrer-Policy/XCTO、最小 CORS、管理画面は OAuth + IP 制限可  
 - **ログ/監査**：モデ操作・BAN/通報・失敗レートを構造化ログで保存
@@ -107,7 +107,7 @@
 
 # セットアップガイド
 
-本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成、および Cloudflare Pages への静的デプロイに対応しています。
+本リポジトリは Strapi v5 を用いた CMS(`/cms`) と Astro + React Islands を用いたフロントエンド(`/web`) のモノレポです。OCI Always Free 上で稼働する Docker Compose 構成と、同じホスト上で Node スタンドアロン（`@astrojs/node`）としてフロントを提供する構成を標準としています。Cloudflare Pages への静的デプロイ手順はレガシー構成として残しており、CDN キャッシュ用途で活用する場合は SSR サーバーとの併用が必要です。
 
 > **最終検証 (2025-10-02 JST)**: Node.js 20.19.4 + npm 10.8 系 (Debian/WSL 相当) で `/cms`・`/web` の `npm install` / `npm run build` を実行し、さらに `/cms` の `npm run develop` も起動確認しました。`scripts/run-strapi.mjs` により Node 20 + Windows/WSL 環境でも `ERR_UNSUPPORTED_DIR_IMPORT` が発生せず、管理画面ビルドも完走することを再検証済みです。ログには `admin.auth.options.expiresIn` の非推奨警告が表示されますが動作に影響はありません。
 >
@@ -348,7 +348,8 @@ npm run preview
 
 # 運用ランブック
 
-## Webhook → Cloudflare Pages 自動デプロイ
+## Webhook → Cloudflare Pages 自動デプロイ（レガシー静的配信手順）
+> ⚠️ 現在の標準構成は OCI 上で `@astrojs/node` を常駐させるハイブリッド SSR です。以下の Cloudflare Pages 手順は静的 CDN を併用したい場合の参考情報として残しています。SSR サーバーを併設しないと `/posts/[slug]` のような動的ルートは機能しません。
 1. Strapi で記事を Publish / Unpublish
 2. Strapi Webhook が GitHub Actions の `workflow_dispatch` を呼び出し
 3. Actions が Astro をビルドし、Cloudflare Pages へデプロイ
@@ -391,7 +392,7 @@ npm run preview
 - Strapi の Post コンテンツタイプは `beforeCreate` / `beforeUpdate` で slug を自動正規化します。既存記事と同じ slug を保存しようとすると末尾に `-2` などが付与されますが、同じ記事を再編集しただけの場合は付与されません。
 - 仕組みとしては Document モードの `documentId` と数値 ID を同時に参照し、同一記事を `$ne` 条件から除外してから重複チェックを行います。Strapi の Document API が利用できない環境でも Entity Service の `slug[$eqi]` で二重に確認するため、ケース違いでも衝突を確実に検知します。【F:cms/src/api/post/content-types/post/lifecycles.js†L248-L328】
 - 手動で slug を指定する際は、記事を Publish する前に一覧画面で重複がないか確認してください。実際に衝突している場合のみ `-2` 以降が付与されるため、意図せずリダイレクトが発生したり、Astro の静的ページ生成で 404 が出るといった問題が解消されます。
-- フロントエンドは Strapi の `/api/posts/slugs` エンドポイントを基に静的パスを生成します。本番ビルドでは再ビルドが必要ですが、開発モード（`npm run dev`）では SSR で毎回最新の slug を取得するため、Strapi 側で記事を追加・更新してもサーバーを再起動せずに `/posts/<slug>/` を確認できます。
+- フロントエンドはリクエストごとに Strapi の `/api/posts/by-slug/:slug` を参照するため、記事を再公開しても URL が変わらない限り 404 になりません。SSR サーバーが落ちた場合は systemd/PM2 の自動再起動を設定し、Strapi 側で slug を変更した際は `/posts/<旧slug>/` へのリダイレクトを Caddy 等で設定してください。
 
 ## セキュリティ
 - 管理画面は OAuth / SSO 連携や IP 制限の併用を推奨
@@ -432,7 +433,8 @@ npm run preview
 3. 独自ドメインを利用する場合は次節の手順で DNS / CNAME を設定
 4. Strapi Webhook の Secrets を登録し、Publish → Cloudflare Pages 更新が自動化されることを確認
 
-## Cloudflare Pages の独自ドメイン設定
+## Cloudflare Pages の独自ドメイン設定（オプション）
+> Node ベースの本番配信を維持しつつ、Cloudflare Pages を CDN として利用する場合の手順です。Pages 単体では `/posts/[slug]` の SSR が提供されないため、必ず OCI 側の Node サーバーと組み合わせてください。
 
 Cloudflare Pages ではプロジェクト設定から独自ドメインを追加し、DNS に `project.pages.dev` への CNAME（または APEX 用の CNAME 記法）を登録します。以下はサブドメイン（例: `news.example.com`）を設定するケースです。
 
