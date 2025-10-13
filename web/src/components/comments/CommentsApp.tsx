@@ -65,6 +65,42 @@ const countComments = (items: CommentNode[]): number =>
     return total + visibleSelf + childrenCount;
   }, 0);
 
+const pruneHiddenComments = (nodes: CommentNode[]): CommentNode[] => {
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    return [];
+  }
+
+  const result: CommentNode[] = [];
+
+  nodes.forEach((node) => {
+    if (!node) {
+      return;
+    }
+
+    const children = pruneHiddenComments(node.children ?? []);
+    const hasChildren = children.length > 0;
+    const isHidden = Boolean(node.removed || node.blocked);
+
+    if (isHidden && !hasChildren) {
+      return;
+    }
+
+    if (hasChildren) {
+      result.push({ ...node, children });
+      return;
+    }
+
+    const nextNode: CommentNode = { ...node };
+    if (nextNode.children && nextNode.children.length === 0) {
+      delete (nextNode as { children?: CommentNode[] }).children;
+    }
+
+    result.push(nextNode);
+  });
+
+  return result;
+};
+
 const buildAuthorId = (name: string, email?: string) => {
   if (email && email.trim().length > 0) {
     return email.trim().toLowerCase();
@@ -411,7 +447,8 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
 
   const applyComments = useCallback(
     (data: CommentNode[], options?: { goToLastPage?: boolean }) => {
-      setComments(data);
+      const sanitized = pruneHiddenComments(data);
+      setComments(sanitized);
 
       if (!mergedConfig.pageSize || mergedConfig.pageSize <= 0) {
         setPage(1);
@@ -420,7 +457,7 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
         return;
       }
 
-      const nextPageCount = Math.max(1, Math.ceil(data.length / mergedConfig.pageSize));
+      const nextPageCount = Math.max(1, Math.ceil(sanitized.length / mergedConfig.pageSize));
 
       setPage((previous) => {
         const nextPage = options?.goToLastPage ? nextPageCount : Math.min(previous, nextPageCount);
@@ -1016,6 +1053,12 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
     (comment: CommentNode) => {
       const isHidden = Boolean(comment.removed || comment.blocked);
       const isPending = Boolean(comment.approvalStatus && comment.approvalStatus !== 'APPROVED');
+      const hasVisibleChildren = Boolean(comment.children && comment.children.length > 0);
+
+      if (isHidden && !hasVisibleChildren) {
+        return null;
+      }
+
       const canReply =
         isEnabled &&
         !submitting &&
@@ -1079,7 +1122,9 @@ const CommentsApp = ({ headingId, documentId, entryId, slug, config, defaultAuth
             </div>
           </div>
           {isHidden ? (
-            <p className="comment-content">このコメントは管理者によって非表示になりました。</p>
+            hasVisibleChildren ? (
+              <p className="comment-content">このコメントは管理者によって非表示になりました。</p>
+            ) : null
           ) : isPending ? (
             <p className="comment-content">このコメントは承認待ちです。</p>
           ) : (

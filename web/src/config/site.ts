@@ -113,7 +113,7 @@ export const GA = {
 export const DELETE_REQUEST = {
   formUrl:
     import.meta.env.DELETE_REQUEST_FORM_URL ??
-    'https://docs.google.com/forms/d/REPLACE_WITH_FORM_ID/viewform',
+    'https://forms.gle/ooWTJMdJAPiaBDNe6',
 };
 
 const twitchHosts = (import.meta.env.PUBLIC_TWITCH_PARENT_HOSTS ?? '')
