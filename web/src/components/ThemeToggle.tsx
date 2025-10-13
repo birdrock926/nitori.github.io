@@ -20,19 +20,52 @@ const MoonIcon = () => (
   </svg>
 );
 
+const resolveInitialTheme = (): 'light' | 'dark' => {
+  if (typeof window === 'undefined') {
+    return 'light';
+  }
+
+  try {
+    const stored = window.localStorage.getItem('theme');
+    if (stored === 'light' || stored === 'dark') {
+      return stored;
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch (error) {
+    console.warn('[theme] Failed to resolve stored theme', error);
+    return 'light';
+  }
+};
+
 const ThemeToggle = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'light';
-    return (document.documentElement.dataset.theme as 'light' | 'dark') || 'light';
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const preferred = resolveInitialTheme();
+    const current = (document.documentElement.dataset.theme as 'light' | 'dark') || preferred;
+    document.documentElement.dataset.theme = current;
+    window.localStorage.setItem('theme', current);
+    setTheme(current);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('theme', theme);
+    window.localStorage.setItem('theme', theme);
     document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
-  }, [theme]);
+  }, [theme, hydrated]);
 
   const isDark = theme === 'dark';
+  const icon = hydrated ? (isDark ? <SunIcon /> : <MoonIcon />) : <MoonIcon />;
+  const label = hydrated ? (isDark ? 'ライト' : 'ダーク') : 'ダーク';
 
   return (
     <button
@@ -42,10 +75,12 @@ const ThemeToggle = () => {
       className="ghost-button ghost-button--icon theme-toggle"
       onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
     >
-      <span className="ghost-button__icon" aria-hidden="true">
-        {isDark ? <SunIcon /> : <MoonIcon />}
+      <span className="ghost-button__icon" aria-hidden="true" suppressHydrationWarning>
+        {icon}
       </span>
-      <span className="ghost-button__label">{isDark ? 'ライト' : 'ダーク'}</span>
+      <span className="ghost-button__label" suppressHydrationWarning>
+        {label}
+      </span>
     </button>
   );
 };
