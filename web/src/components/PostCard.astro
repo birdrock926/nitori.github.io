@@ -3,6 +3,20 @@ import type { Post } from '@lib/strapi';
 import { formatDateTime, relative, toMultilineHtml } from '@lib/format';
 
 const { post } = Astro.props as { post: Post };
+const cover = post.cover;
+const coverSrc = cover?.formats?.medium?.url ?? cover?.formats?.small?.url ?? cover?.url;
+const coverSrcset = cover
+  ? [
+      cover.formats?.thumbnail?.url ? `${cover.formats.thumbnail.url} 150w` : null,
+      cover.formats?.small?.url ? `${cover.formats.small.url} 320w` : null,
+      cover.formats?.medium?.url ? `${cover.formats.medium.url} 640w` : null,
+      cover.url ? `${cover.url} ${cover.width ?? 960}w` : null,
+    ]
+      .filter(Boolean)
+      .join(', ')
+  : undefined;
+const coverSizes = '(max-width: 600px) 90vw, 240px';
+const coverAlt = cover?.alternativeText ?? cover?.caption ?? `${post.title} のカバー`;
 ---
 <article class="post-card card hover-lift">
   <header class="post-card-meta">
@@ -17,9 +31,62 @@ const { post } = Astro.props as { post: Post };
       ))}
     </div>
   </header>
+  {coverSrc && (
+    <a class="post-card-cover" href={`/posts/${post.slug}/`} aria-label={`${post.title} の詳細`}>
+      <img
+        src={coverSrc}
+        srcset={coverSrcset}
+        sizes={coverSizes}
+        alt={coverAlt}
+        loading="lazy"
+        decoding="async"
+      />
+    </a>
+  )}
   <h3 class="post-card-title"><a href={`/posts/${post.slug}/`}>{post.title}</a></h3>
   <p class="post-card-summary muted" set:html={toMultilineHtml(post.summary)}></p>
   <a class="post-card-link" href={`/posts/${post.slug}/`}>
     続きを読む<span aria-hidden="true">→</span>
   </a>
 </article>
+
+<style>
+  .post-card {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .post-card-cover {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.85rem;
+    aspect-ratio: 4 / 3;
+    background: var(--layer-muted);
+    max-width: 14rem;
+    margin: 0 auto;
+  }
+
+  .post-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform var(--transition-default);
+  }
+
+  .post-card-cover:hover img,
+  .post-card-cover:focus-visible img {
+    transform: scale(1.03);
+  }
+
+  @media (min-width: 960px) {
+    .post-card {
+      gap: 1.1rem;
+    }
+
+    .post-card-cover {
+      margin: 0;
+    }
+  }
+</style>
