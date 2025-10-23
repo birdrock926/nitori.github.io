@@ -14,25 +14,12 @@ import InlineAdBlock from '@components/blocks/InlineAdBlock.astro';
 import CommentsSection from '@components/comments/CommentsSection.astro';
 import PostCard from '@components/PostCard.astro';
 import ShareMenu from '@components/ShareMenu.tsx';
-import { getPostBySlug, getPostsByTag, getPostSlugs } from '@lib/strapi';
+import { getPostBySlug, getPostsByTag } from '@lib/strapi';
 import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
 import { ADSENSE, DELETE_REQUEST } from '@config/site';
 
-export const prerender = true;
-
-export async function getStaticPaths() {
-  const slugs = await getPostSlugs();
-
-  if (!slugs.length) {
-    console.warn(
-      '[strapi] 投稿スラッグが見つからなかったため、記事詳細ページの静的生成をスキップします。CMS が起動中か、公開記事が存在するかを確認してください。'
-    );
-    return [];
-  }
-
-  return slugs.map((slug) => ({ params: { slug } }));
-}
+export const prerender = false;
 
 const { slug } = Astro.params;
 if (!slug) throw new Error('slug not provided');
@@ -158,7 +145,7 @@ const articleFontClass = `card article-body article-body--${post.bodyFontScale ?
     <div style="display: grid; gap: 2rem;">
       {post.blocks.map((block, index) => {
         if (block.__component === 'content.rich-text') {
-          return <RichText body={block.body} fontScale={block.fontScale} />;
+          return <RichText body={block.body} fontScale={block.fontScale} alignment={block.alignment} />;
         }
         if (block.__component === 'content.colored-text') {
           return (
