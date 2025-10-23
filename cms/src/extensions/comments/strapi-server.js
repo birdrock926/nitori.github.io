@@ -1,3 +1,5 @@
+import qs from 'qs';
+
 const RELATION_PREFIX = 'api::post.post:';
 const POST_UID = 'api::post.post';
 const NUMERIC_PATTERN = /^\d+$/;
@@ -119,6 +121,53 @@ const sanitizeCommentsLimit = (query, { fallback = DEFAULT_COMMENT_LIMIT, maximu
   return null;
 };
 
+const stringifyQuery = (query) =>
+  qs.stringify(query, {
+    encodeValuesOnly: true,
+    arrayFormat: 'indices',
+    skipNulls: true,
+  });
+
+const syncQueryContext = (ctx) => {
+  if (!ctx || typeof ctx !== 'object') {
+    return;
+  }
+
+  if (!ctx.query || typeof ctx.query !== 'object') {
+    ctx.query = {};
+  }
+
+  if (ctx.state && typeof ctx.state === 'object') {
+    ctx.state.query = { ...(ctx.state.query || {}), ...ctx.query };
+  }
+
+  if (ctx.request && typeof ctx.request === 'object') {
+    ctx.request.query = ctx.query;
+  }
+
+  const nextQuerystring = stringifyQuery(ctx.query);
+
+  ctx.querystring = nextQuerystring;
+
+  if (ctx.request && typeof ctx.request === 'object') {
+    ctx.request.querystring = nextQuerystring;
+
+    if (typeof ctx.request.url === 'string') {
+      const baseUrl = ctx.request.url.split('?')[0];
+      ctx.request.url = nextQuerystring ? `${baseUrl}?${nextQuerystring}` : baseUrl;
+    }
+  }
+
+  if (typeof ctx.originalUrl === 'string') {
+    const baseOriginal = ctx.originalUrl.split('?')[0];
+    ctx.originalUrl = nextQuerystring ? `${baseOriginal}?${nextQuerystring}` : baseOriginal;
+  }
+
+  if (ctx.req && typeof ctx.req === 'object' && typeof ctx.request?.url === 'string') {
+    ctx.req.url = ctx.request.url;
+  }
+};
+
 const withSanitizedLimit = (controller) => {
   if (typeof controller !== 'function') {
     return controller;
@@ -131,10 +180,7 @@ const withSanitizedLimit = (controller) => {
       }
 
       sanitizeCommentsLimit(ctx.query);
-
-      if (ctx.request && ctx.request.query && ctx.request.query !== ctx.query) {
-        ctx.request.query = { ...ctx.request.query, ...ctx.query };
-      }
+      syncQueryContext(ctx);
     }
 
     return controller.call(this, ctx, next);

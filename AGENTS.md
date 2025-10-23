@@ -579,6 +579,7 @@
   1. `cms/src/extensions/comments/strapi-server.js` に `sanitizeCommentsLimit()` と `withSanitizedLimit()` を追加し、`admin.findAll` と `client.findAll` / `findAllFlat` / `findAllInHierarchy` / `findAllPerAuthor` を全てラップ。`limit` / `_limit` / `pageSize` / `pagination[pageSize]` などの候補値を収集し、正の整数なら 1〜200 にクランプ、無効値しか見つからない場合は 50 件へフォールバックするよう統一した。不要なエイリアスキーは削除し、Knex へ渡る前に必ず整数へ正規化する。【F:cms/src/extensions/comments/strapi-server.js†L1-L238】
   2. フロントエンドのコメント取得関数（`web/src/lib/comments.ts`）でもページサイズを 1〜200 件に丸め込み、バックエンドと上限値を共有するよう調整した。【F:web/src/lib/comments.ts†L209-L214】
   3. README / SETUP_BEGINNER_GUIDE / 本書へ limit 正規化と上限調整の手順を追記し、同エラーが再発した場合の確認ポイントを明文化した。【F:README.md†L214-L219】【F:SETUP_BEGINNER_GUIDE.md†L206-L212】
+  4. 2025-11-27 追記: Windows 環境で `ctx.request.querystring` が再計算されず Knex 警告が再発していたため、`qs` を導入してサニタイズ後のクエリを `ctx.querystring` / `ctx.request.querystring` / `ctx.originalUrl` へ再反映する `syncQueryContext()` を追加。`cms/package.json` に `qs@6.12.3` を明記し、Strapi 管理画面で limit ループが再び停止することを確認した。【F:cms/src/extensions/comments/strapi-server.js†L1-L164】【F:cms/package.json†L34-L55】
 - **検証**:
   - `cd cms && npm install --no-progress --no-fund --no-audit`
   - `cd cms && CI=1 npm run build`
