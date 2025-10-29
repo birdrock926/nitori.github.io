@@ -1,8 +1,206 @@
+import {
+  sanitizeCommentsLimit,
+  normalizePaginationMeta,
+  syncQueryContext,
+} from './utils/limit.js';
+
 const RELATION_PREFIX = 'api::post.post:';
 const POST_UID = 'api::post.post';
 const NUMERIC_PATTERN = /^\d+$/;
 
 const relationCache = new Map();
+const FALLBACK_EMAIL_DOMAIN = 'comments.local';
+const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
+const FALLBACK_AUTHOR_NAME = '名無しのユーザーさん';
+const withSanitizedLimit = (controller) => {
+  if (typeof controller !== 'function') {
+    return controller;
+  }
+
+  return async function controllerWithSanitizedLimit(ctx, next) {
+    let appliedLimit = null;
+    if (ctx) {
+      if (!ctx.query || typeof ctx.query !== 'object') {
+        ctx.query = {};
+      }
+
+      appliedLimit = sanitizeCommentsLimit(ctx.query);
+      if (!ctx.state || typeof ctx.state !== 'object') {
+        ctx.state = {};
+      }
+      ctx.state.commentsLimit = appliedLimit;
+      syncQueryContext(ctx);
+    }
+
+    const result = await controller.call(this, ctx, next);
+
+    if (ctx?.body) {
+      normalizePaginationMeta(ctx.body, appliedLimit ?? ctx?.state?.commentsLimit);
+    }
+
+    return result;
+  };
+};
+
+const coerceNameString = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : '';
+};
+
+const fallbackFirstName = (entity) => {
+  const authorName = coerceNameString(entity?.author?.name);
+  if (authorName) {
+    return authorName;
+  }
+  const username = coerceNameString(entity?.authorUser?.username);
+  if (username) {
+    return username;
+  }
+  const email = coerceString(entity?.author?.email) || coerceString(entity?.authorUser?.email);
+  if (email && email.includes('@')) {
+    return email.split('@')[0] || email;
+  }
+  return FALLBACK_AUTHOR_NAME;
+};
+
+const normalizeAuthorUser = (entity) => {
+  if (!entity || typeof entity !== 'object') {
+    return;
+  }
+
+  if (!entity.authorUser || typeof entity.authorUser !== 'object') {
+    return;
+  }
+
+  const current = entity.authorUser;
+  const next = { ...current };
+
+  const first = coerceNameString(current.firstname);
+  const last = coerceNameString(current.lastname);
+  const username = coerceNameString(current.username);
+
+  next.firstname = first || fallbackFirstName(entity) || username || FALLBACK_AUTHOR_NAME;
+  next.lastname = last;
+
+  if (!next.username && username) {
+    next.username = username;
+  }
+
+  if (!next.email && current.email) {
+    next.email = current.email;
+  }
+
+  entity.authorUser = next;
+};
+
+const normalizeCommentNode = (node) => {
+  if (!node || typeof node !== 'object') {
+    return;
+  }
+
+  normalizeAuthorUser(node);
+
+  if (node.children && Array.isArray(node.children)) {
+    node.children.forEach((child) => normalizeCommentNode(child));
+  }
+
+  if (node.threadOf && typeof node.threadOf === 'object') {
+    normalizeCommentNode(node.threadOf);
+  }
+};
+
+const normalizeAdminPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  const seen = new WeakSet();
+
+  const visit = (value) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    if (seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item));
+      return;
+    }
+
+    normalizeCommentNode(value);
+
+    Object.keys(value).forEach((key) => {
+      const child = value[key];
+      if (child && typeof child === 'object') {
+        visit(child);
+      }
+    });
+  };
+
+  visit(payload);
+};
+
+const coerceString = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+
+  return null;
+};
+
+const isLikelyEmail = (value) => /.+@.+\..+/.test(value);
+const isFallbackEmail = (value) =>
+  typeof value === 'string' && value.trim().toLowerCase().endsWith(`@${FALLBACK_EMAIL_DOMAIN}`);
+
+const buildFallbackEmail = (author, content) => {
+  const source =
+    coerceString(author?.id) || coerceString(author?.name) || coerceString(content) || 'anonymous';
+
+  const encoded = Buffer.from(source, 'utf8')
+    .toString('base64url')
+    .replace(/[^a-zA-Z0-9._-]+/g, '')
+    .replace(/_{2,}/g, '_')
+    .replace(/\.{2,}/g, '.')
+    .replace(/^-+|-+$/g, '');
+
+  const localPart = (encoded || 'anonymous').slice(0, MAX_EMAIL_LOCAL_PART_LENGTH);
+  return `${localPart}@${FALLBACK_EMAIL_DOMAIN}`;
+};
+
+const ensureAuthorEmail = (ctx) => {
+  const body = ctx?.request?.body;
+  if (!body || typeof body !== 'object') {
+    return;
+  }
+
+  const { author } = body;
+  if (!author || typeof author !== 'object') {
+    return;
+  }
+
+  if (typeof author.email === 'string') {
+    const trimmed = author.email.trim();
+    if (trimmed && isLikelyEmail(trimmed)) {
+      author.email = trimmed;
+      return;
+    }
+  }
+
+  author.email = buildFallbackEmail(author, body.content);
+};
 
 const coerceDocumentId = (post) => {
   if (!post) {
@@ -162,6 +360,32 @@ const annotateContent = (content, original) => {
 };
 
 export default (plugin) => {
+  if (plugin?.controllers?.admin?.findAll) {
+    const baseAdminFindAll = withSanitizedLimit(plugin.controllers.admin.findAll);
+
+    plugin.controllers.admin.findAll = async function adminFindAllWithNormalization(ctx, next) {
+      if (ctx?.state?.user && (ctx.state.user.lastname === null || ctx.state.user.lastname === undefined)) {
+        ctx.state.user.lastname = '';
+      }
+
+      const result = await baseAdminFindAll.call(this, ctx, next);
+
+      if (ctx?.body) {
+        normalizeAdminPayload(ctx.body);
+      }
+
+      return result;
+    };
+  }
+
+  if (plugin?.controllers?.client) {
+    ['findAll', 'findAllFlat', 'findAllInHierarchy', 'findAllPerAuthor'].forEach((key) => {
+      if (typeof plugin.controllers.client[key] === 'function') {
+        plugin.controllers.client[key] = withSanitizedLimit(plugin.controllers.client[key]);
+      }
+    });
+  }
+
   if (plugin?.controllers?.client?.post) {
     const basePost = plugin.controllers.client.post;
 
@@ -169,6 +393,8 @@ export default (plugin) => {
       if (ctx?.params?.relation) {
         ctx.params.relation = await normalizeRelation(ctx.params.relation);
       }
+
+      ensureAuthorEmail(ctx);
 
       return basePost(ctx, next);
     };
@@ -198,6 +424,95 @@ export default (plugin) => {
       }
 
       return baseReportAbuse.call(this, normalizedParams, user);
+    };
+  }
+
+  if (plugin?.services?.client?.sendResponseNotification) {
+    const baseService = plugin.services.client;
+
+    baseService.sendResponseNotification = async function sendResponseNotificationWithoutFallback(entity) {
+      if (!entity?.threadOf) {
+        return null;
+      }
+
+      const commonService = this?.getCommonService?.();
+      const thread =
+        typeof entity.threadOf === 'object'
+          ? entity.threadOf
+          : await commonService?.findOne({
+              id: entity.threadOf,
+              related: entity.related,
+              locale: entity.locale || null,
+            });
+
+      if (!thread) {
+        return null;
+      }
+
+      const normalizeRecipient = (value) => {
+        if (typeof value !== 'string') {
+          return null;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || isFallbackEmail(trimmed)) {
+          return null;
+        }
+        return trimmed;
+      };
+
+      let emailRecipient = normalizeRecipient(thread?.author?.email);
+
+      if (!emailRecipient && thread?.authorUser) {
+        const authorUser =
+          typeof thread.authorUser === 'object'
+            ? thread.authorUser
+            : await strapi
+                .query('plugin::users-permissions.user')
+                .findOne({ where: { id: thread.authorUser } });
+        emailRecipient = normalizeRecipient(authorUser?.email);
+      }
+
+      if (!emailRecipient) {
+        return null;
+      }
+
+      const superAdmin = await strapi
+        .query('admin::user')
+        .findOne({ where: { roles: { code: 'strapi-super-admin' } } });
+
+      const emailSender = await commonService?.getConfig('client.contactEmail', superAdmin?.email);
+      const clientAppUrl = await commonService?.getConfig('client.url', 'our site');
+
+      if (!emailSender) {
+        return null;
+      }
+
+      try {
+        await strapi
+          .plugin('email')
+          .service('email')
+          .send({
+            to: [emailRecipient],
+            from: emailSender,
+            subject: "You've got a new response to your comment",
+            text: `Hello ${thread?.author?.name || emailRecipient}!
+You've got a new response to your comment by ${entity?.author?.name || entity?.author?.email}.
+
+------
+
+"${entity.content}"
+
+------
+
+Visit ${clientAppUrl} and continue the discussion.
+`,
+          });
+      } catch (error) {
+        strapi.log.error(error);
+        throw error;
+      }
+
+      return null;
     };
   }
 
