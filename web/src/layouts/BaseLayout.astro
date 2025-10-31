@@ -3,10 +3,12 @@ import '../styles/global.css';
 import GlobalHeader from '@components/GlobalHeader.astro';
 import GlobalFooter from '@components/GlobalFooter.astro';
 import ConsentManager from '@components/consent/ConsentManager.astro';
-import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI } from '@config/site';
+import { SITE_TITLE, SITE_DESCRIPTION, GA, ADSENSE, STRAPI, SITE_URL } from '@config/site';
 
 const { title = SITE_TITLE, description = SITE_DESCRIPTION, image, canonical, region = 'JP' } = Astro.props;
 const pageTitle = title === SITE_TITLE ? title : `${title} | ${SITE_TITLE}`;
+const canonicalUrl = canonical ?? Astro.url.href;
+const normalizedSiteUrl = SITE_URL.replace(/\/$/, '');
 
 const parseOrigin = (value?: string) => {
   if (!value) return undefined;
@@ -66,6 +68,29 @@ const csp = `default-src 'self'; img-src ${imgSrc}; script-src ${scriptSrc}; sty
 const regionJSON = JSON.stringify(region);
 const measurementId = GA.measurementId;
 const measurementJSON = JSON.stringify(measurementId);
+const siteJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': `${normalizedSiteUrl}#website`,
+  name: SITE_TITLE,
+  url: normalizedSiteUrl,
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: `${normalizedSiteUrl}/search/?q={search_term_string}`,
+    'query-input': 'required name=search_term_string',
+  },
+};
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  '@id': `${normalizedSiteUrl}#organization`,
+  name: SITE_TITLE,
+  url: normalizedSiteUrl,
+  logo: {
+    '@type': 'ImageObject',
+    url: `${normalizedSiteUrl}/logo.svg`,
+  },
+};
 ---
 <html lang="ja" data-theme="light">
   <head>
@@ -73,7 +98,7 @@ const measurementJSON = JSON.stringify(measurementId);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <title>{pageTitle}</title>
-    <link rel="canonical" href={canonical ?? Astro.url.href} />
+    <link rel="canonical" href={canonicalUrl} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -83,7 +108,7 @@ const measurementJSON = JSON.stringify(measurementId);
     <meta property="og:type" content="website" />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical ?? Astro.url.href} />
+    <meta property="og:url" content={canonicalUrl} />
     <meta property="og:site_name" content={SITE_TITLE} />
     {image ? <meta property="og:image" content={image} /> : null}
     <meta name="twitter:card" content="summary_large_image" />
@@ -93,6 +118,8 @@ const measurementJSON = JSON.stringify(measurementId);
     <meta http-equiv="Content-Security-Policy" content={csp} />
     <meta name="referrer" content="no-referrer-when-downgrade" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <script type="application/ld+json" is:inline>{JSON.stringify(siteJsonLd)}</script>
+    <script type="application/ld+json" is:inline>{JSON.stringify(organizationJsonLd)}</script>
     <script is:inline>
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme) {
