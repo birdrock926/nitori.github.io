@@ -14,25 +14,15 @@ import InlineAdBlock from '@components/blocks/InlineAdBlock.astro';
 import CommentsSection from '@components/comments/CommentsSection.astro';
 import PostCard from '@components/PostCard.astro';
 import ShareMenu from '@components/ShareMenu.tsx';
-import { getPostBySlug, getPostsByTag, getPostSlugs } from '@lib/strapi';
+import { getPostBySlug, getPostsByTag } from '@lib/strapi';
 import type { DynamicZoneBlock } from '@lib/strapi';
 import { formatDateTime } from '@lib/format';
-import { ADSENSE, DELETE_REQUEST } from '@config/site';
+import { ADSENSE, DELETE_REQUEST, SITE_TITLE, SITE_URL } from '@config/site';
+import type { CommentNode } from '@lib/comments';
+import { fetchComments } from '@lib/comments';
+import { renderRichTextPlain } from '@lib/richtext';
 
-export const prerender = true;
-
-export async function getStaticPaths() {
-  const slugs = await getPostSlugs();
-
-  if (!slugs.length) {
-    console.warn(
-      '[strapi] 投稿スラッグが見つからなかったため、記事詳細ページの静的生成をスキップします。CMS が起動中か、公開記事が存在するかを確認してください。'
-    );
-    return [];
-  }
-
-  return slugs.map((slug) => ({ params: { slug } }));
-}
+export const prerender = false;
 
 const { slug } = Astro.params;
 if (!slug) throw new Error('slug not provided');
@@ -78,29 +68,230 @@ const toc = post.blocks
     }));
   });
 
-const jsonLd = {
+const normalizedSiteUrl = SITE_URL.replace(/\/$/, '');
+const articleUrl = Astro.url.href;
+const coverImage = post.cover;
+const coverFormat = coverImage?.formats?.large ?? coverImage?.formats?.medium ?? coverImage;
+const coverWidth = coverFormat?.width ?? coverImage?.width;
+const coverHeight = coverFormat?.height ?? coverImage?.height;
+const coverImageObject = coverImage?.url
+  ? {
+      '@type': 'ImageObject',
+      url: coverImage.url,
+      width: coverWidth,
+      height: coverHeight,
+    }
+  : undefined;
+const tagNames = post.tags
+  .map((tag) => tag.name)
+  .filter((name): name is string => Boolean(name && name.trim().length > 0));
+const keywords = tagNames.length ? tagNames.join(', ') : undefined;
+const articleSections = tagNames.length ? tagNames : undefined;
+const primaryBodyBlock = post.blocks.find((block): block is Extract<DynamicZoneBlock, { __component: 'content.rich-text' }> =>
+  block.__component === 'content.rich-text' && typeof block.body === 'string' && block.body.trim().length > 0
+);
+const articleBodyForDiscussion = primaryBodyBlock
+  ? renderRichTextPlain(primaryBodyBlock.body)
+  : renderRichTextPlain(post.summary ?? '');
+
+const relationIdentifier = post.documentId ?? (post.id ? String(post.id) : undefined);
+
+const isVisibleComment = (node: CommentNode) => {
+  if (!node || typeof node !== 'object') {
+    return false;
+  }
+  if (node.blocked || node.blockedThread || node.removed) {
+    return false;
+  }
+  return typeof node.content === 'string' && node.content.trim().length > 0;
+};
+
+type StructuredComment = {
+  id: number;
+  text: string;
+  author: string;
+  date: string;
+  url: string;
+  replies: StructuredComment[];
+};
+
+const mapComment = (node: CommentNode, depth = 0): StructuredComment | null => {
+  if (!isVisibleComment(node)) {
+    return null;
+  }
+
+  const plain = renderRichTextPlain(node.content ?? '');
+  const normalizedText = plain.replace(/\s+/g, ' ').trim();
+  if (!normalizedText) {
+    return null;
+  }
+
+  const authorName =
+    (node.author?.name && node.author.name.trim()) ||
+    (node.author?.badge && node.author.badge.trim()) ||
+    post.commentDefaultAuthor ||
+    'ゲスト';
+  const timestamp = node.createdAt ?? node.updatedAt ?? post.updatedAt ?? post.publishedAt;
+  const replies = Array.isArray(node.children)
+    ? node.children
+        .map((child) => mapComment(child, depth + 1))
+        .filter((child): child is StructuredComment => Boolean(child))
+        .slice(0, depth === 0 ? 3 : 2)
+    : [];
+
+  return {
+    id: node.id,
+    text: normalizedText.length > 600 ? `${normalizedText.slice(0, 597).trimEnd()}…` : normalizedText,
+    author: authorName,
+    date: timestamp,
+    url: `${articleUrl}#comment-${node.id}`,
+    replies,
+  } satisfies StructuredComment;
+};
+
+const collectCommentCount = (items: StructuredComment[]): number =>
+  items.reduce((total, item) => total + 1 + collectCommentCount(item.replies), 0);
+
+let structuredComments: StructuredComment[] = [];
+
+if (relationIdentifier) {
+  try {
+    const fetched = await fetchComments(relationIdentifier, 100);
+    const topLevel = fetched.filter((comment) => !comment.threadOf);
+    structuredComments = topLevel
+      .map((comment) => mapComment(comment))
+      .filter((comment): comment is StructuredComment => Boolean(comment))
+      .slice(0, 5);
+  } catch (error) {
+    console.warn('[structured-data] failed to fetch comments for schema', error);
+  }
+}
+
+const structuredCommentCount = collectCommentCount(structuredComments);
+
+const commentJsonLd = structuredComments.map((comment) => {
+  const toJsonLd = (item: StructuredComment): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      '@type': 'Comment',
+      '@id': item.url,
+      url: item.url,
+      text: item.text,
+      dateCreated: item.date,
+      author: {
+        '@type': 'Person',
+        name: item.author,
+      },
+    };
+
+    if (item.replies.length) {
+      payload.comment = item.replies.map((child) => toJsonLd(child));
+    }
+
+    return payload;
+  };
+
+  return toJsonLd(comment);
+});
+
+const articleJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'NewsArticle',
+  '@id': `${articleUrl}#article`,
   headline: post.title,
+  description: post.summary,
+  inLanguage: 'ja-JP',
   datePublished: post.publishedAt,
-  author: post.author ? { '@type': 'Person', name: post.author } : undefined,
-  image: post.cover?.url ? [post.cover.url] : undefined,
-  mainEntityOfPage: Astro.url.href,
+  dateModified: post.updatedAt || post.publishedAt,
+  mainEntityOfPage: articleUrl,
+  isAccessibleForFree: true,
+  author: post.author
+    ? { '@type': 'Person', name: post.author }
+    : { '@type': 'Organization', name: SITE_TITLE, url: normalizedSiteUrl },
   publisher: {
     '@type': 'Organization',
-    name: '気になったニュースまとめブログ',
+    name: SITE_TITLE,
+    url: normalizedSiteUrl,
     logo: {
       '@type': 'ImageObject',
-      url: `${Astro.url.origin}/logo.svg`,
+      url: `${normalizedSiteUrl}/logo.svg`,
     },
   },
+  image: coverImageObject ? [coverImageObject] : undefined,
+  articleSection: articleSections,
+  keywords,
 };
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: SITE_TITLE,
+      item: normalizedSiteUrl,
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: post.title,
+      item: articleUrl,
+    },
+  ],
+};
+const discussionJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'DiscussionForumPosting',
+  '@id': `${articleUrl}#discussion`,
+  url: articleUrl,
+  headline: post.title,
+  articleBody: articleBodyForDiscussion || post.summary || post.title,
+  datePublished: post.publishedAt,
+  dateModified: post.updatedAt || post.publishedAt,
+  mainEntityOfPage: articleUrl,
+  author: post.author
+    ? { '@type': 'Person', name: post.author }
+    : { '@type': 'Organization', name: SITE_TITLE, url: normalizedSiteUrl },
+  publisher: {
+    '@type': 'Organization',
+    name: SITE_TITLE,
+    url: normalizedSiteUrl,
+    logo: {
+      '@type': 'ImageObject',
+      url: `${normalizedSiteUrl}/logo.svg`,
+    },
+  },
+  image: coverImageObject ? [coverImageObject] : undefined,
+  isPartOf: {
+    '@id': `${normalizedSiteUrl}#website`,
+  },
+  commentCount: structuredCommentCount,
+  interactionStatistic:
+    structuredCommentCount > 0
+      ? {
+          '@type': 'InteractionCounter',
+          interactionType: 'https://schema.org/CommentAction',
+          userInteractionCount: structuredCommentCount,
+        }
+      : undefined,
+  about:
+    tagNames.length > 0
+      ? tagNames.map((name) => ({
+          '@type': 'Thing',
+          name,
+        }))
+      : undefined,
+  comment: commentJsonLd.length ? commentJsonLd : undefined,
+};
+
+const structuredData = [articleJsonLd, breadcrumbJsonLd, discussionJsonLd];
 
 const articleFontClass = `card article-body article-body--${post.bodyFontScale ?? 'default'}`;
 
 ---
-<BaseLayout title={post.title} description={post.summary} canonical={Astro.url.href} image={post.cover?.url}>
-  <script type="application/ld+json" is:inline>{JSON.stringify(jsonLd)}</script>
+<BaseLayout title={post.title} description={post.summary} canonical={articleUrl} image={post.cover?.url}>
+  {structuredData.map((schema) => (
+    <script type="application/ld+json" is:inline>{JSON.stringify(schema)}</script>
+  ))}
   <article class={articleFontClass} style="gap: 2rem;">
     <header class="article-header">
       <div class="article-header__top">
@@ -158,7 +349,7 @@ const articleFontClass = `card article-body article-body--${post.bodyFontScale ?
     <div style="display: grid; gap: 2rem;">
       {post.blocks.map((block, index) => {
         if (block.__component === 'content.rich-text') {
-          return <RichText body={block.body} fontScale={block.fontScale} />;
+          return <RichText body={block.body} fontScale={block.fontScale} alignment={block.alignment} />;
         }
         if (block.__component === 'content.colored-text') {
           return (

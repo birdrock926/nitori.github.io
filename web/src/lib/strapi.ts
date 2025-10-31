@@ -1,4 +1,5 @@
 import { STRAPI, TWITCH } from '@config/site';
+import { renderRichText } from './richtext';
 
 export type MediaFormat = {
   url: string;
@@ -32,6 +33,7 @@ export type DynamicZoneBlock =
       __component: 'content.rich-text';
       body: string;
       fontScale?: number;
+      alignment?: 'left' | 'center' | 'right' | 'justify';
     }
   | {
       __component: 'content.colored-text';
@@ -109,6 +111,7 @@ export type Post = {
   author?: string;
   source?: string;
   publishedAt: string;
+  updatedAt: string;
   commentDefaultAuthor: string;
   bodyFontScale: 'default' | 'large' | 'xlarge';
 };
@@ -123,6 +126,7 @@ export type RankingItem = {
 const BODY_FONT_SCALE_VALUES = new Set(['default', 'large', 'xlarge']);
 const RICH_TEXT_FONT_SCALE_MIN = 0.7;
 const RICH_TEXT_FONT_SCALE_MAX = 1.8;
+const RICH_TEXT_ALIGNMENTS = new Set(['left', 'center', 'right', 'justify']);
 
 const apiUrl = STRAPI.url?.replace(/\/$/, '');
 
@@ -136,108 +140,7 @@ const ensureAbsoluteUrl = (input?: string | null) => {
   return `${base}${input.startsWith('/') ? '' : '/'}${input}`;
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-const escapeAttribute = (value: string) =>
-  escapeHtml(value).replace(/`/g, '&#96;');
-
-const renderMarkdownInline = (value: string) => {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/gu;
-  let cursor = 0;
-  let output = '';
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(value)) !== null) {
-    const [full] = match;
-    const start = match.index;
-    if (start > cursor) {
-      output += escapeHtml(value.slice(cursor, start));
-    }
-
-    if (match[1] !== undefined) {
-      const alt = match[1] ?? '';
-      const url = match[2] ?? '';
-      const title = match[3] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const altAttr = escapeAttribute(alt);
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<img src="${escapeAttribute(resolvedUrl)}" alt="${altAttr}" loading="lazy" decoding="async"${titleAttr} />`;
-      }
-    } else {
-      const label = match[4] ?? '';
-      const url = match[5] ?? '';
-      const title = match[6] ?? '';
-      const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-      if (!resolvedUrl) {
-        output += escapeHtml(full);
-      } else {
-        const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-        output += `<a href="${escapeAttribute(resolvedUrl)}" rel="noopener" target="_blank"${titleAttr}>${escapeHtml(label)}</a>`;
-      }
-    }
-
-    cursor = start + full.length;
-  }
-
-  if (cursor < value.length) {
-    output += escapeHtml(value.slice(cursor));
-  }
-
-  return output;
-};
-
-const convertPlainTextToHtml = (value: string) => {
-  const normalized = value.replace(/\r\n?/g, '\n').trim();
-  if (!normalized) return '';
-
-  const paragraphs = normalized.split(/\n{2,}/);
-  const rendered = paragraphs
-    .map((paragraph) => {
-      const trimmed = paragraph.trim();
-      if (!trimmed) return '';
-
-      const figureMatch = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/u.exec(trimmed);
-      if (figureMatch) {
-        const alt = figureMatch[1] ?? '';
-        const url = figureMatch[2] ?? '';
-        const title = figureMatch[3] ?? '';
-        const resolvedUrl = ensureAbsoluteUrl(url.trim()) ?? url.trim();
-        if (!resolvedUrl) {
-          return `<p>${escapeHtml(trimmed)}</p>`;
-        }
-        const caption = title?.trim() ? escapeHtml(title.trim()) : '';
-        const altAttr = escapeAttribute(alt);
-        const urlAttr = escapeAttribute(resolvedUrl);
-        const captionHtml = caption ? `<figcaption>${caption}</figcaption>` : '';
-        return `<figure class="richtext-figure"><img src="${urlAttr}" alt="${altAttr}" loading="lazy" decoding="async" />${captionHtml}</figure>`;
-      }
-
-      const lines = trimmed.split(/\n/).map((line) => renderMarkdownInline(line));
-      return `<p>${lines.join('<br />')}</p>`;
-    })
-    .filter((paragraph) => paragraph.length > 0);
-
-  return rendered.join('\n');
-};
-
-const normalizeRichMarkup = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (/<[a-z][^>]*>/i.test(trimmed)) {
-    return trimmed;
-  }
-  return convertPlainTextToHtml(trimmed);
-};
+const normalizeRichMarkup = (value: string) => renderRichText(value);
 
 const parseMedia = (value: any): Media | undefined => {
   if (!value) return undefined;
@@ -371,6 +274,11 @@ const normalizeBlock = (block: any): DynamicZoneBlock => {
     };
     if (fontScale !== null) {
       normalized.fontScale = fontScale;
+    }
+    const alignmentValue =
+      typeof block.alignment === 'string' ? block.alignment.trim().toLowerCase() : undefined;
+    if (alignmentValue && RICH_TEXT_ALIGNMENTS.has(alignmentValue)) {
+      normalized.alignment = alignmentValue as DynamicZoneBlock['alignment'];
     }
     return normalized;
   }
@@ -636,6 +544,7 @@ const fallbackPost = (): Post => ({
   slug: '',
   summary: '',
   publishedAt: '',
+  updatedAt: '',
   tags: [],
   blocks: [],
   commentDefaultAuthor: '名無しのユーザーさん',
@@ -693,6 +602,10 @@ const mapPost = (apiPost: PostListResponse['data'][number]) => {
       slug: typeof attr.slug === 'string' ? attr.slug : '',
       summary: typeof attr.summary === 'string' ? attr.summary : '',
       publishedAt: typeof attr.publishedAt === 'string' ? attr.publishedAt : '',
+      updatedAt:
+        (typeof attr.updatedAt === 'string' && attr.updatedAt) ||
+        (typeof base.updatedAt === 'string' && base.updatedAt) ||
+        '',
       author: typeof attr.author === 'string' ? attr.author : undefined,
       source: typeof attr.source === 'string' ? attr.source : undefined,
       cover,

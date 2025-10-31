@@ -27,20 +27,6 @@ const coerceDocumentId = (post) => {
   return null;
 };
 
-const coerceRelationId = (post) => {
-  if (!post) {
-    return null;
-  }
-
-  const idValue = post.id ?? post.entryId ?? post.entry_id;
-  const parsed = Number(idValue);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return Math.trunc(parsed);
-  }
-
-  return null;
-};
-
 const fetchPostByWhere = async (strapi, where) => {
   try {
     return await strapi.db
@@ -52,7 +38,7 @@ const fetchPostByWhere = async (strapi, where) => {
   }
 };
 
-const resolvePostRelationId = async (strapi, identifier, cache) => {
+const resolvePostDocumentId = async (strapi, identifier, cache) => {
   if (!identifier) {
     return null;
   }
@@ -61,18 +47,18 @@ const resolvePostRelationId = async (strapi, identifier, cache) => {
     return cache.get(identifier);
   }
 
-  let relationId = null;
+  let relationDocumentId = null;
 
   if (NUMERIC_PATTERN.test(identifier)) {
     const post = await fetchPostByWhere(strapi, { id: Math.trunc(Number(identifier)) });
-    relationId = coerceRelationId(post);
-    if (relationId) {
-      cache.set(identifier, relationId);
-      return relationId;
+    relationDocumentId = coerceDocumentId(post);
+    if (relationDocumentId) {
+      cache.set(identifier, relationDocumentId);
+      return relationDocumentId;
     }
   }
 
-  if (!relationId) {
+  if (!relationDocumentId) {
     const direct = await fetchPostByWhere(strapi, {
       $or: [
         { documentId: identifier },
@@ -81,24 +67,18 @@ const resolvePostRelationId = async (strapi, identifier, cache) => {
     });
 
     if (direct) {
-      relationId = coerceRelationId(direct);
-      if (!relationId) {
-        const fallbackDocumentId = coerceDocumentId(direct) || identifier;
-        if (NUMERIC_PATTERN.test(fallbackDocumentId)) {
-          relationId = Math.trunc(Number(fallbackDocumentId));
-        }
-      }
+      relationDocumentId = coerceDocumentId(direct);
     }
   }
 
-  if (!relationId) {
+  if (!relationDocumentId) {
     const bySlug = await fetchPostByWhere(strapi, { slug: identifier });
-    relationId = coerceRelationId(bySlug);
+    relationDocumentId = coerceDocumentId(bySlug);
   }
 
-  if (relationId) {
-    cache.set(identifier, relationId);
-    return relationId;
+  if (relationDocumentId) {
+    cache.set(identifier, relationDocumentId);
+    return relationDocumentId;
   }
 
   cache.set(identifier, null);
@@ -133,12 +113,12 @@ const normalizeCommentRelations = async (strapi) => {
         continue;
       }
 
-      const resolvedRelationId = await resolvePostRelationId(strapi, identifier, cache);
-      if (!resolvedRelationId) {
+      const resolvedDocumentId = await resolvePostDocumentId(strapi, identifier, cache);
+      if (!resolvedDocumentId) {
         continue;
       }
 
-      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedRelationId}`;
+      const normalizedRelation = `${COMMENT_RELATION_PREFIX}${resolvedDocumentId}`;
       if (normalizedRelation === comment.related) {
         continue;
       }
@@ -151,7 +131,7 @@ const normalizeCommentRelations = async (strapi) => {
     }
 
     if (normalizedCount > 0) {
-      strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to entry IDs.`);
+      strapi.log.info(`[comments] Normalized ${normalizedCount} comment relations to document IDs.`);
     }
   } catch (error) {
     strapi.log.error('[comments] Failed to normalize comment relations.', error);

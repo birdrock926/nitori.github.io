@@ -5,8 +5,8 @@ const { items = [] } = Astro.props as {
 };
 ---
 {items.length > 0 && (
-  <section class="card" style="gap: 0.75rem;">
-    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem;">
+  <section class="card gallery-card">
+    <div class="grid gallery-grid">
       {items.map((item, index) => {
         const mode = item.displayMode ?? 'auto';
         const mime = item.image?.mime?.toLowerCase() ?? '';
@@ -24,6 +24,9 @@ const { items = [] } = Astro.props as {
               .filter(Boolean)
               .join(', ');
         const alt = item.alt ?? item.image.alternativeText ?? '';
+        const dimensionSource = item.image.formats?.medium ?? item.image.formats?.small ?? item.image;
+        const width = dimensionSource?.width ?? item.image?.width;
+        const height = dimensionSource?.height ?? item.image?.height;
         return (
           <figure class="gallery-item" key={item.image?.url ?? `gallery-${index}`}>
             <img
@@ -34,6 +37,8 @@ const { items = [] } = Astro.props as {
               loading="lazy"
               decoding="async"
               data-animated={isGif ? 'true' : 'false'}
+              width={width}
+              height={height}
             />
           </figure>
         );
@@ -43,6 +48,17 @@ const { items = [] } = Astro.props as {
 )}
 
 <style>
+  .gallery-card {
+    gap: 0.75rem;
+  }
+
+  .gallery-grid {
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    max-width: min(100%, 30rem);
+    margin: 0 auto;
+  }
+
   :global(.gallery-item) {
     margin: 0;
     display: grid;
@@ -55,6 +71,9 @@ const { items = [] } = Astro.props as {
     border-radius: 0.75rem;
     object-fit: cover;
     display: block;
+    aspect-ratio: 4 / 3;
+    max-width: 14rem;
+    margin: 0 auto;
   }
 
 </style>
