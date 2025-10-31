@@ -22,11 +22,25 @@ const SearchIsland = ({ posts }: Props) => {
       this.ref('slug');
       this.field('title');
       this.field('summary');
+      this.field('tags');
+      this.field('slug');
       posts.forEach((post) => {
-        this.add({ slug: post.slug, title: post.title, summary: post.summary });
+        this.add({
+          slug: post.slug,
+          title: post.title,
+          summary: post.summary,
+          tags: post.tags.map((tag) => `${tag.name} ${tag.slug}`).join(' '),
+        });
       });
     });
   }, [posts]);
+
+  const buildTokens = (raw: string) =>
+    raw
+      .trim()
+      .split(/\s+/)
+      .map((token) => token.replace(/[!^~*:+\-]/g, '').toLowerCase())
+      .filter((token) => token.length > 0);
 
   const tagFacets = useMemo<TagFacet[]>(() => {
     const map = new Map<string, TagFacet>();
@@ -44,16 +58,59 @@ const SearchIsland = ({ posts }: Props) => {
   }, [posts]);
 
   const searched = useMemo(() => {
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       return posts;
     }
     try {
-      const hits = index.search(query);
-      return hits
+      const tokens = buildTokens(trimmed);
+      if (tokens.length === 0) {
+        return posts;
+      }
+
+      const hits = index.query((builder) => {
+        tokens.forEach((token) => {
+          builder.term(token, {
+            wildcard: lunr.Query.wildcard.LEADING | lunr.Query.wildcard.TRAILING,
+            presence: lunr.Query.presence.OPTIONAL,
+          });
+        });
+      });
+
+      const matchedSlugs = new Set<string>();
+      const lunrMatches = hits
         .map((hit) => posts.find((post) => post.slug === hit.ref))
-        .filter((post): post is Post => Boolean(post));
+        .filter((post): post is Post => Boolean(post))
+        .filter((post) => {
+          if (matchedSlugs.has(post.slug)) {
+            return false;
+          }
+          matchedSlugs.add(post.slug);
+          return true;
+        });
+
+      if (lunrMatches.length > 0) {
+        return lunrMatches;
+      }
+
+      const lowerTokens = tokens.map((token) => token.toLowerCase());
+      return posts.filter((post) => {
+        const haystacks = [post.title, post.summary, post.slug, ...post.tags.map((tag) => `${tag.name} ${tag.slug}`)]
+          .filter(Boolean)
+          .map((value) => value.toLowerCase());
+        return lowerTokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
+      });
     } catch (error) {
-      return [];
+      const tokens = buildTokens(trimmed);
+      if (tokens.length === 0) {
+        return posts;
+      }
+      return posts.filter((post) => {
+        const haystacks = [post.title, post.summary, post.slug, ...post.tags.map((tag) => `${tag.name} ${tag.slug}`)]
+          .filter(Boolean)
+          .map((value) => value.toLowerCase());
+        return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
+      });
     }
   }, [index, posts, query]);
 
