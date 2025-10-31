@@ -1,32 +1,42 @@
 ---
 import RichTextContent from './RichTextContent';
 
-const { body, fontScale } = Astro.props as { body: string; fontScale?: number };
+const { body, fontScale, alignment } = Astro.props as {
+  body: string;
+  fontScale?: number;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+};
 ---
-<RichTextContent body={body} fontScale={fontScale} />
+<RichTextContent body={body} fontScale={fontScale} alignment={alignment} />
 <style>
-.richtext {
-  --richtext-scale: 1;
-  font-size: calc(var(--article-font-size) * var(--richtext-scale));
-  line-height: calc(var(--article-line-height) * clamp(0.9, var(--richtext-scale), 1.35));
-}
+  .richtext {
+    --richtext-scale: 1;
+    font-size: calc(var(--article-font-size) * var(--richtext-scale));
+    line-height: calc(var(--article-line-height) * clamp(0.9, var(--richtext-scale), 1.35));
+  }
 .richtext :global(p) {
   margin: 0 0 1rem;
 }
 .richtext :global(figure.richtext-figure) {
-  margin: 0 0 1.5rem;
+  margin: 0 auto 1.25rem;
   display: grid;
   gap: 0.5rem;
+  max-width: min(100%, 24rem);
 }
 .richtext :global(figure.richtext-figure img) {
   width: 100%;
+  max-width: min(100%, 24rem);
   height: auto;
   border-radius: 0.75rem;
   display: block;
+  margin: 0 auto;
 }
 .richtext :global(img) {
-  max-width: 100%;
+  display: block;
+  margin: 0 auto 1rem;
+  max-width: min(100%, 20rem);
   height: auto;
+  border-radius: 0.75rem;
 }
 .richtext :global(figure.richtext-figure figcaption) {
   font-size: 0.85rem;
@@ -46,5 +56,17 @@ const { body, fontScale } = Astro.props as { body: string; fontScale?: number };
 .richtext :global(a) {
   color: var(--color-accent);
   text-decoration: underline;
+}
+.richtext.richtext-align-left {
+  text-align: left;
+}
+.richtext.richtext-align-center {
+  text-align: center;
+}
+.richtext.richtext-align-right {
+  text-align: right;
+}
+.richtext.richtext-align-justify {
+  text-align: justify;
 }
 </style>

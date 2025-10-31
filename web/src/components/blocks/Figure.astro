@@ -25,6 +25,9 @@ const srcset = isGif
     ]
         .filter(Boolean)
         .join(', ');
+const dimensionSource = image?.formats?.large ?? image?.formats?.medium ?? image;
+const width = dimensionSource?.width ?? image?.width;
+const height = dimensionSource?.height ?? image?.height;
 ---
 <figure style="margin: 2rem 0; text-align: center;">
   <img
@@ -36,6 +39,8 @@ const srcset = isGif
     decoding="async"
     data-animated={isGif ? 'true' : 'false'}
     style="max-width: 100%; border-radius: 1rem;"
+    width={width}
+    height={height}
   />
   {(caption || credit) && (
     <figcaption class="muted" style="font-size: 0.85rem; margin-top: 0.5rem;">
